@@ -1,0 +1,114 @@
+import Link from "next/link";
+import { notFound, redirect } from "next/navigation";
+import { ErrorState } from "@/components/system/states";
+import { MissionRunner } from "@/components/mission/mission-runner";
+import { resolveActiveChild } from "@/features/children/active-child";
+import { getMissionStage } from "@/features/mission-engine/persistence";
+import { AccessError } from "@/lib/permissions";
+
+/**
+ * ACTIVE MISSION — Architecture §9, UI/UX §33–§35.
+ *
+ * The quietest surface in the product. Narrow measure, minimal chrome, cream +
+ * charcoal with olive reserved for the primary action.
+ *
+ * STAGED INFORMATION: this page receives exactly one screen — the child's
+ * current position — because `mission_screens` has no client read policy and
+ * `get_current_mission_screen` returns nothing else (migration 0007). Future
+ * content is never sent to the browser, so the sequence is enforced by the
+ * database rather than by this interface.
+ *
+ * RESUME: the position comes from the server on every render, so refresh
+ * recovery and leave-and-return recovery are the same code path.
+ *
+ * This route MUST NEVER branch on mission identity (Tech Spec §31).
+ */
+export default async function ActiveMissionPage({
+  params,
+}: {
+  params: Promise<{ missionId: string }>;
+}) {
+  const { missionId } = await params;
+
+  const active = await resolveActiveChild().catch(() => null);
+  if (!active || active.status !== "ok") notFound();
+
+  let stage;
+  try {
+    stage = await getMissionStage(active.childId, missionId);
+  } catch (error) {
+    if (error instanceof AccessError) notFound();
+    return (
+      <main className="wla-container-narrow py-[var(--space-2xl)]">
+        <ErrorState
+          title="We couldn't load this mission."
+          body="Your mission progress is safe. Please try again."
+        />
+      </main>
+    );
+  }
+
+  const { mission, progress, screen, state } = stage;
+  const base = `/academy/missions/${mission.slug}`;
+
+  // Mission Home owns the Start action, so progress is never created by a GET.
+  if (!progress || progress.status === "not_started") redirect(base);
+
+  // Architecture §17 — a completed mission does not re-enter the doing
+  // environment.
+  if (progress.status === "complete") redirect(`${base}/complete`);
+
+  return (
+    <main className="wla-container-narrow py-[var(--space-2xl)]">
+      {/* Always reachable; leaving never destroys state (Architecture §9) */}
+      <nav
+        aria-label="Mission"
+        className="flex flex-wrap items-center gap-[var(--space-l)] text-[length:var(--text-label)]"
+      >
+        <Link
+          href={base}
+          className="underline decoration-[var(--color-border-strong)] underline-offset-4"
+        >
+          Mission Home
+        </Link>
+        <Link
+          href={`${base}/kit`}
+          className="underline decoration-[var(--color-border-strong)] underline-offset-4"
+        >
+          Mission Kit
+        </Link>
+      </nav>
+
+      <div className="mt-[var(--space-xl)]">
+        {screen ? (
+          <MissionRunner
+            missionSlug={mission.slug}
+            screen={screen}
+            state={state}
+          />
+        ) : (
+          <NotReady title={mission.title} homeHref={base} />
+        )}
+      </div>
+    </main>
+  );
+}
+
+/** Shown when a mission has no screens for this version. */
+function NotReady({ title, homeHref }: { title: string; homeHref: string }) {
+  return (
+    <div>
+      <h1 className="text-[length:var(--text-h1)]">{title}</h1>
+      <p className="wla-measure mt-[var(--space-m)] text-[var(--color-text-muted)]">
+        This mission isn&rsquo;t ready to start yet. Its Mission Kit and parent
+        note are already available.
+      </p>
+      <Link
+        href={homeHref}
+        className="mt-[var(--space-l)] inline-flex min-h-[var(--target-min)] items-center text-[length:var(--text-label)] font-medium underline decoration-[var(--color-border-strong)] underline-offset-4 hover:decoration-[var(--color-primary)]"
+      >
+        ← Back to Mission Home
+      </Link>
+    </div>
+  );
+}

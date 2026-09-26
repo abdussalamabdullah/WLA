@@ -1,0 +1,147 @@
+/*
+ * WLA Design Tokens
+ * Source of authority: UI/UX Design Specification §6 (colour), §11 (spacing),
+ * §12 (shape), §13 (borders/shadows), §71 (token inventory).
+ *
+ * The five brand colours are LOCKED by the Designer Brief and Handover
+ * Reflections. Semantic tokens derived from them are marked DERIVED and need
+ * design sign-off — no document specifies them.
+ */
+
+:root {
+  /* ---- Brand palette (LOCKED — Designer Brief / Handover §6) ---- */
+  --wla-cream: #f5efe3; /* Warm Cream   — primary canvas */
+  --wla-charcoal: #3a2f2a; /* Charcoal Brown — primary text */
+  --wla-olive: #5f6a4f; /* Deep Olive   — primary interaction/CTA */
+  --wla-sage: #a3b18a; /* Soft Sage    — supporting surfaces */
+  --wla-clay: #b87c5a; /* Clay         — small accents only */
+
+  /* ---- Semantic colour (UI/UX §71) ---- */
+  --color-background: var(--wla-cream);
+  --color-surface: #fbf8f2; /* DERIVED — lifted paper, not a floating panel */
+  --color-surface-sage: #eceee2; /* DERIVED — sage wash for section variation */
+  --color-text: var(--wla-charcoal);
+  --color-text-muted: #6b5d55; /* DERIVED — Handover §4: readability is weight
+                                  + colour + size, never a lighter grey alone */
+  --color-border: #ded2c2; /* DERIVED — low contrast, per §13 */
+  --color-border-strong: #c4b5a2; /* DERIVED */
+  /*
+   * COLOUR APPLICATION RULE (client instruction, 2026-09-25):
+   *
+   *   Deep Olive  → larger UI emphasis, buttons, active states.
+   *   Charcoal    → small body and supporting text on Warm Cream.
+   *
+   * Do NOT set small text in olive. Olive on cream measures 5.0:1 — adequate
+   * for a button or a heading, marginal for 14px supporting copy. Use
+   * --color-text-action for small text links instead.
+   */
+  --color-primary: var(--wla-olive);
+  --color-primary-hover: #4f5941; /* DERIVED */
+  --color-primary-text: var(--wla-cream);
+  --color-focus: var(
+    --wla-clay
+  ); /* DERIVED — clay reads clearly against both
+                                     cream and olive; §64 requires focus be
+                                     visible without breaking character */
+  --color-accent: var(--wla-clay);
+  /* Small text actions ("View Mission →"). Charcoal, not olive — see the
+     colour application rule above. Emphasis comes from the underline. */
+  --color-text-action: var(--color-text);
+
+  /* Status colours. DERIVED and warm-shifted to stay inside the palette.
+     Per Architecture §20 these must NEVER be the sole carrier of meaning —
+     always pair with text and/or icon. */
+  --color-success: #4f6a4f;
+  --color-error: #9c4a33;
+  --color-warning: #b87c5a;
+
+  /* ---- Typography ----
+     APPROVED FACES (D-33): Fraunces for display/headings, Karla for body,
+     interface, labels, navigation and buttons. Do not substitute.
+
+     The scale below was MEASURED from the approved Lovable screenshots
+     (Home, Missions, Labs) at an assumed 2× device pixel ratio. Values are
+     rounded to the nearest sensible step. See docs/TYPOGRAPHY.md for the
+     measurement method, confidence level per value, and the list of things
+     the screenshots could not establish. */
+  --font-serif: var(--font-wla-serif), Georgia, "Times New Roman", serif;
+  --font-sans:
+    var(--font-wla-sans), -apple-system, BlinkMacSystemFont, sans-serif;
+
+  /* Desktop scale. MEASURED unless marked. */
+  --text-display: 3rem; /* 48px — hero only. LOW confidence: hero was not
+                           legible at native resolution. */
+  --text-h1: 2.5rem; /* 40px — page titles ("Choose a mission.") */
+  --text-h2: 1.875rem; /* 30px — section headings and mission card titles */
+  --text-h3: 1.375rem; /* 22px — pull quotes, editorial statements */
+  --text-body-lg: 1.25rem; /* 20px — introductory copy */
+  --text-body: 1.125rem; /* 18px — MEASURED from body line spacing */
+  --text-small: 0.9375rem; /* 15px — metadata, supporting text */
+  --text-label: 0.875rem; /* 14px — buttons, navigation, labels */
+  --text-eyebrow: 0.75rem; /* 12px — "TRY WLA", footer group headings */
+
+  /* Weights. Headings in the approved design are REGULAR, not bold — the
+     editorial quality comes from Fraunces itself, not from weight. */
+  --weight-regular: 400; /* headings, body */
+  --weight-medium: 500; /* labels, navigation, links */
+  --weight-semibold: 600; /* editorial statements, emphasis */
+
+  /* ESTIMATED, not measured — see docs/TYPOGRAPHY.md. */
+  --tracking-eyebrow: 0.08em;
+
+  --leading-tight: 1.15; /* headings — §9 */
+  --leading-normal: 1.4;
+  --leading-relaxed: 1.6; /* body — MEASURED from line spacing */
+  --measure: 68ch; /* comfortable reading width — §9 */
+
+  /* ---- Spacing: 4px base scale (UI/UX §11) ---- */
+  --space-xs: 4px;
+  --space-s: 8px;
+  --space-sm: 12px;
+  --space-m: 16px;
+  --space-l: 24px;
+  --space-xl: 32px;
+  --space-2xl: 48px;
+  --space-3xl: 64px;
+  --space-4xl: 80px;
+  --space-5xl: 96px;
+  --space-section: 120px;
+
+  /* ---- Shape (UI/UX §12) ---- */
+  --radius-button: 999px;
+  --radius-card: 8px;
+  --radius-input: 6px;
+  --radius-panel: 10px;
+  --radius-dialog: 12px;
+
+  /* ---- Elevation (UI/UX §13) — "paper lifted from a surface" ---- */
+  --shadow-none: none;
+  --shadow-raised:
+    0 1px 2px rgb(58 47 42 / 0.06), 0 2px 8px rgb(58 47 42 / 0.04);
+  --shadow-overlay: 0 8px 32px rgb(58 47 42 / 0.14);
+
+  /* ---- Layout (UI/UX §10) ---- */
+  --content-max: 1280px;
+  --content-narrow: 720px; /* Active Mission — §34/§60 keep it focused */
+  --gutter-mobile: 20px;
+  --gutter-tablet: 32px;
+  --gutter-desktop: 48px;
+
+  /* ---- Motion (UI/UX §65) — calm, short, never decorative ---- */
+  --duration-fast: 120ms;
+  --duration-base: 200ms;
+  --duration-slow: 320ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0.2, 1);
+
+  /* ---- Touch targets (UI/UX §63) ---- */
+  --target-min: 44px;
+}
+
+/* UI/UX §62 / Architecture §20 — reduced motion is a requirement, not a nicety */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --duration-fast: 0ms;
+    --duration-base: 0ms;
+    --duration-slow: 0ms;
+  }
+}
