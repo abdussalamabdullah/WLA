@@ -1,4 +1,31 @@
 -- ============================================================================
+-- ⚠️  SEEDS ARE APPLY-ONCE. EDITING THIS FILE DOES NOT RE-APPLY IT.
+--
+-- Observed on 2026-09-26 against the hosted staging project: after adding the
+-- price to this file, `supabase db push --include-seed` printed
+--
+--     Updating seed hash to supabase/seed/six_names.sql...
+--
+-- and recorded the NEW hash WITHOUT executing the changed contents. The price
+-- remained NULL. The CLI tracks applied seeds by hash in
+-- supabase_migrations.seed_files; once a file is recorded, a later push can
+-- refresh that record rather than re-run the SQL.
+--
+-- CONSEQUENCE — do not assume a content change has taken effect just because
+-- `db push --include-seed` exited successfully. Verify the data.
+--
+-- For an intentional revision to already-applied content, use one of:
+--   * an explicit, auditable UPDATE applied deliberately (as below), or
+--   * a NEW seed file added to [db.seed].sql_paths in config.toml, which has
+--     no recorded hash and therefore runs, or
+--   * a migration, where the change is genuinely schema or is important enough
+--     to belong in the ordered migration history.
+--
+-- This is a CLI behaviour to work around, not an architectural problem. Do not
+-- restructure seeding, add tooling, or change the application to solve it.
+-- ============================================================================
+
+-- ============================================================================
 -- Six Names — mission record, Mission Kit and Parent Note
 --
 -- Source: "Six Names Mission Note for Parents" (approved) and the four
@@ -15,7 +42,7 @@
 
 insert into missions (
   slug, title, description, lab, min_age, max_age,
-  duration, delivery_type, is_free, published, version
+  duration, delivery_type, is_free, price_minor, currency, published, version
 ) values (
   'six-names',
   'Six Names',
@@ -25,10 +52,29 @@ insert into missions (
   '60–75 mins',
   'hybrid',
   false,
-  false,   -- unpublished until the Build Brief lands and screens exist
+  -- £12.00. Commercial data lives on the mission so no UI hard-codes it (D-09).
+  1200,
+  'GBP',
+  false,   -- unpublished until the full Mission Kit is available and QA passes
   1
 )
 on conflict (slug) do nothing;
+
+/*
+ * The insert above does nothing when the mission already exists, so price
+ * changes are applied explicitly — the same pattern six_names_screens.sql uses
+ * for completion_rule. This is what makes re-seeding a live mission safe AND
+ * effective: identity is created once, commercial data is kept current.
+ *
+ * `published` is deliberately NOT touched here. It is an operational decision
+ * (the Child Mission asset is still outstanding, OPEN-13) and must not be
+ * flipped by re-running a seed.
+ */
+update missions
+set price_minor = 1200,
+    currency    = 'GBP',
+    updated_at  = now()
+where slug = 'six-names';
 
 -- ---- Mission Kit (Architecture §7) --------------------------------------
 -- storage_path convention: mission-resources/<mission_id>/<file>

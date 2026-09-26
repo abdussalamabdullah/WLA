@@ -212,3 +212,96 @@ describe("Academy chrome renders once, and quietly in Active Mission", () => {
     }
   });
 });
+
+// ────────────────────────────────── Six Names Mission Kit assets & price ────
+describe("Six Names Mission Kit assets", () => {
+  const seed = read("supabase/seed/six_names.sql");
+  const assetDir = join(repo, "supabase/seed/assets/six-names");
+
+  const SUPPLIED = [
+    "six-names-mission-board.pdf",
+    "six-names-whats-changing-tracker.pdf",
+    "six-names-concern-cards.pdf",
+    "six-names-judgement-cards.pdf",
+  ];
+
+  it("the four supplied PDFs are version-controlled under the seeded filenames", () => {
+    for (const file of SUPPLIED) {
+      const bytes = readFileSync(join(assetDir, file));
+      // A real PDF, not a placeholder.
+      expect(bytes.subarray(0, 5).toString(), file).toBe("%PDF-");
+      expect(bytes.length, file).toBeGreaterThan(10_000);
+      // And the seed points at exactly this name.
+      expect(seed, file).toContain(`'${file}'`);
+    }
+  });
+
+  it("the Child Mission PDF is NOT fabricated", () => {
+    /*
+     * OPEN-13 — the Child Mission document has never been supplied. Its
+     * resource row stays, its file stays absent, and the Kit renders that one
+     * entry as unavailable. Substituting generated content would misrepresent
+     * approved mission material.
+     */
+    expect(() => readFileSync(join(assetDir, "six-names-child-mission.pdf"))).toThrow();
+    // The row is still seeded, so the Kit lists it honestly.
+    expect(seed).toContain("'six-names-child-mission.pdf'");
+    expect(seed).toContain("'Child Mission'");
+  });
+
+  it("storage paths stay mission-scoped, matching the bucket policy", () => {
+    // The policy matches (storage.foldername(name))[1] against mission_id, so
+    // the first path segment must be the mission UUID.
+    expect(seed).toContain("m.id || '/' || r.file");
+    expect(read("supabase/migrations/20260925220000_init.sql")).toContain(
+      "e.mission_id::text = (storage.foldername(name))[1]",
+    );
+  });
+});
+
+describe("Six Names commercial configuration", () => {
+  const seed = read("supabase/seed/six_names.sql");
+
+  it("is priced at £12.00 in GBP minor units", () => {
+    expect(seed).toContain("1200");
+    expect(seed).toContain("'GBP'");
+    expect(seed).toContain("set price_minor = 1200");
+  });
+
+  it("price is applied explicitly, because the insert cannot update", () => {
+    // `on conflict (slug) do nothing` means an existing mission keeps its row,
+    // so commercial data is set by a following UPDATE — the same pattern
+    // six_names_screens.sql uses for completion_rule.
+    expect(seed).toContain("on conflict (slug) do nothing");
+    expect(seed).toContain("update missions");
+    expect(seed).toContain("where slug = 'six-names'");
+  });
+
+  it("the apply-once seed caveat is documented where it will be seen", () => {
+    /*
+     * D-37. `db push --include-seed` recorded this file's new hash without
+     * executing it, leaving the price NULL. The warning lives at the top of
+     * the seed itself because that is what the next person edits.
+     */
+    const header = seed.slice(0, seed.indexOf("insert into missions"));
+    expect(header).toContain("SEEDS ARE APPLY-ONCE");
+    expect(header).toContain("Updating seed hash");
+    expect(header).toContain("Verify the data.");
+    // And it must not propose re-architecting seeding to dodge the problem.
+    expect(header).toContain("not an architectural problem");
+  });
+
+  it("re-seeding never publishes the mission", () => {
+    // published is an operational decision, not seed data (OPEN-13).
+    const updateBlock = seed.slice(seed.indexOf("update missions"));
+    expect(updateBlock).not.toContain("published");
+  });
+
+  it("the mission is not free, so it must travel through Stripe", () => {
+    // is_free is the value immediately after delivery_type ('hybrid').
+    expect(seed).toMatch(/'hybrid',\s*\n\s*false,/);
+    const checkout = read("src/features/commerce/checkout.ts");
+    expect(checkout).toContain("unit_amount: mission.price_minor");
+    expect(checkout).toContain("currency: mission.currency.toLowerCase()");
+  });
+});

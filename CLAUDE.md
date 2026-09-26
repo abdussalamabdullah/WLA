@@ -98,6 +98,17 @@ Use tokens from `src/styles/tokens.css`. Never hard-code a hex value.
 - Every interactive element needs a visible focus state and a 44px touch target.
 - No hover-dependent core interaction.
 
+## Seeds are apply-once
+
+`supabase db push --include-seed` may record a changed seed's new hash
+**without executing it** — observed on staging, where an edited price silently
+stayed NULL. Never treat a successful push as proof that content changed.
+
+To revise already-applied content: an explicit UPDATE (see
+`supabase/seed/six_names.sql`), a NEW seed file added to `[db.seed].sql_paths`,
+or a migration. **Verify the data afterwards.** Do not restructure seeding or
+the application to work around this.
+
 ## Before adding a database table
 
 Answer, in `docs/DATA-MODEL.md`: which numbered requirement does it serve; is
