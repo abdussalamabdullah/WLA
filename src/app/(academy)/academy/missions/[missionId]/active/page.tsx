@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { AcademyChrome } from "@/components/academy/academy-chrome";
 import { notFound, redirect } from "next/navigation";
 import { ErrorState } from "@/components/system/states";
 import { MissionRunner } from "@/components/mission/mission-runner";
@@ -60,7 +61,9 @@ export default async function ActiveMissionPage({
   if (progress.status === "complete") redirect(`${base}/complete`);
 
   return (
-    <main className="wla-container-narrow py-[var(--space-2xl)]">
+    <>
+      <AcademyChrome variant="quiet" />
+      <main className="wla-container-narrow py-[var(--space-2xl)]">
       {/* Always reachable; leaving never destroys state (Architecture §9) */}
       <nav
         aria-label="Mission"
@@ -91,7 +94,8 @@ export default async function ActiveMissionPage({
           <NotReady title={mission.title} homeHref={base} />
         )}
       </div>
-    </main>
+      </main>
+    </>
   );
 }
 

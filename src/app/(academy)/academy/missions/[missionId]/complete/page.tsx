@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { AcademyChrome } from "@/components/academy/academy-chrome";
 import { notFound } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { resolveActiveChild } from "@/features/children/active-child";
@@ -41,7 +42,9 @@ export default async function MissionCompletePage({
   const base = `/academy/missions/${home.mission.slug}`;
 
   return (
-    <main className="wla-container-narrow py-[var(--space-3xl)]">
+    <>
+      <AcademyChrome />
+      <main className="wla-container-narrow py-[var(--space-3xl)]">
       <p className="text-[length:var(--text-label)] tracking-wide text-[var(--color-text-muted)] uppercase">
         Complete
       </p>
@@ -73,6 +76,7 @@ export default async function MissionCompletePage({
         </Link>{" "}
         — your Mission Kit and parent note stay there.
       </p>
-    </main>
+      </main>
+    </>
   );
 }

@@ -4,6 +4,7 @@ import { MissionCard } from "@/components/mission/mission-card";
 import { ChildSelection } from "@/components/profile/child-selection";
 import { resolveActiveChild } from "@/features/children/active-child";
 import { getMissionCollection } from "@/features/missions/queries";
+import { AcademyChrome } from "@/components/academy/academy-chrome";
 
 export const metadata = { title: "My Missions" };
 
@@ -77,7 +78,9 @@ export default async function MyMissionsPage({
   }
 
   return (
-    <main className="wla-container py-[var(--space-2xl)]">
+    <>
+      <AcademyChrome />
+      <main className="wla-container py-[var(--space-2xl)]">
       <Header />
 
       {/*
@@ -114,7 +117,8 @@ export default async function MyMissionsPage({
           ))}
         </ul>
       )}
-    </main>
+      </main>
+    </>
   );
 }
 

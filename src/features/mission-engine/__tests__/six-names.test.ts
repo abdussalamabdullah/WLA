@@ -494,6 +494,41 @@ describe("Mission Trail", () => {
     );
   });
 
+  it("Trail entries are derived server-side, not read from the current screen", () => {
+    /*
+     * REGRESSION GUARD — the derive_trail_entries migration.
+     *
+     * FOUND BY HOSTED VALIDATION: completion succeeded and mission_evidence
+     * stayed empty.
+     *
+     * Completion is evaluated AFTER an interaction, so the current screen is
+     * whatever the child just acted on — for Six Names, `final_judgement`.
+     * The `complete` screen is a configuration carrier and is never itself
+     * rendered, so reading trailEntries from `screen.configuration` always
+     * produced nothing and every mission completed with an empty Trail.
+     *
+     * Every behavioural test passed trailEntries in explicitly, which is why
+     * none of them caught it.
+     */
+    const derive = readFileSync(
+      join(repo, "supabase/migrations/20260925221000_derive_trail_entries.sql"),
+      "utf8",
+    );
+
+    // The function resolves entries from the mission's own completion screen...
+    expect(derive).toContain("select s.configuration->'trailEntries' into v_trail");
+    expect(derive).toContain("and s.type       = 'completion'");
+    // ...at the version this run is pinned to (D-17)...
+    expect(derive).toContain("and s.version    = v_progress.mission_version");
+    // ...which means it must be a definer, per D-36.
+    expect(derive).toContain("security definer");
+    expect(derive).toContain("owns_progress(p_progress_id)");
+
+    // And the engine must NOT try to read them from the rendered screen.
+    expect(persistence).not.toContain('screen?.type === "completion"');
+    expect(persistence).not.toContain("extractTrailEntries");
+  });
+
   it("Trail creation is atomic with completion", () => {
     const fn = access.slice(access.indexOf("function complete_mission"));
     expect(fn).toContain("insert into mission_evidence");
@@ -771,6 +806,37 @@ describe("seed integrity", () => {
   it("asks for no real names, school details or identifying information", () => {
     expect(seed).toContain("You do not need to enter any real names");
     expect(seed).not.toMatch(/your school|real name of|classmate's name/i);
+  });
+
+  it("ENGINE-04: conditional reveal is implemented and registered", () => {
+    /*
+     * PRD §36 lists ENGINE-04 as a Must. The engine already had revealConfig,
+     * the `reveal` interaction and isRevealed() covering all three conditions;
+     * only the renderer was missing.
+     *
+     * Six Names does not use it — it stages information by sequence position,
+     * which the screen_access migration enforces in the database. In-screen
+     * concealment is presentational and must not be relied on for secrets.
+     */
+    const renderer = readFileSync(
+      join(repo, "src/features/mission-engine/renderer.tsx"),
+      "utf8",
+    );
+    const screens = readFileSync(
+      join(repo, "src/components/mission/screens/index.tsx"),
+      "utf8",
+    );
+
+    expect(renderer).toContain("reveal: RevealScreen");
+    expect(screens).toContain("export function RevealScreen");
+    // It asks the engine, rather than re-deriving the condition itself.
+    expect(screens).toContain("isRevealed(screen, state)");
+    // A revealed screen stays revealed across sessions (Architecture §13).
+    expect(screens).toContain('kind: "reveal"');
+    // And it carries the caveat, so nobody mistakes it for staged security.
+    // Strip comment markers before matching prose that wraps across lines.
+    const prose = screens.replace(/^\s*\*\s?/gm, "").replace(/\s+/g, " ");
+    expect(prose).toContain("NOT the mechanism that protects staged information");
   });
 
   it("every screen in the graph has a registered component type", () => {

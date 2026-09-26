@@ -8,7 +8,6 @@ import {
   type MissionScreen,
 } from "./navigation";
 import {
-  completionConfig as completionConfigSchema,
   completionRule,
   isMissionComplete,
   missionInteraction,
@@ -257,16 +256,26 @@ export async function recordInteraction(
     rule?.success === true && isMissionComplete(rule.data, nextState);
 
   if (reachedCompletion) {
-    // Mission Trail entries come from the mission's completion config, so a
-    // content revision never requires an engine change.
-    const completionScreenConfig =
-      screen?.type === "completion" ? screen.configuration : null;
-    const trail = extractTrailEntries(completionScreenConfig);
-
+    /*
+     * Mission Trail entries are resolved inside complete_mission, from the
+     * mission's completion screen at this run's pinned version.
+     *
+     * They deliberately are NOT read here. Completion is evaluated after an
+     * interaction, so the current screen is whatever the child just acted on
+     * — for Six Names, the `final_judgement` response. The completion screen
+     * is a configuration carrier that is never itself rendered, and the
+     * engine cannot see it: mission_screens has no client read policy.
+     *
+     * An earlier version read `screen.configuration` when the screen happened
+     * to be of type `completion`, which was never true, so every mission
+     * completed with an empty Trail. Hosted validation caught it.
+     *
+     * `[]` means "derive them"; a non-empty array would override.
+     */
     const { data, error } = await supabase.rpc("complete_mission", {
       p_progress_id: progress.id,
       p_state: nextState as unknown as Json,
-      p_trail: trail as unknown as Json,
+      p_trail: [] as unknown as Json,
     });
     if (error || !data) {
       throw new MissionPersistenceError(
@@ -312,10 +321,4 @@ export async function recordInteraction(
     status: data.status,
     completed: false,
   };
-}
-
-/** Pull Trail entries out of a completion screen's configuration. */
-function extractTrailEntries(configuration: unknown): unknown[] {
-  const parsed = completionConfigSchema.safeParse(configuration ?? {});
-  return parsed.success ? parsed.data.trailEntries : [];
 }

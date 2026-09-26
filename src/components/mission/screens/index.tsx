@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Field, Input } from "@/components/ui/field";
 import { PrimaryAction, ScreenFrame, SelectableOption } from "./shared";
 import {
+  isRevealed,
   parseScreenConfig,
   type ScreenComponentProps,
 } from "@/features/mission-engine";
@@ -391,6 +392,74 @@ export function ResponseScreen({
         {answered && (
           <p className="mt-[var(--space-s)] text-[length:var(--text-small)] text-[var(--color-text-muted)]">
             You&rsquo;ve already answered this. Writing again replaces it.
+          </p>
+        )}
+      </div>
+    </ScreenFrame>
+  );
+}
+
+/**
+ * ENGINE-04 — conditional reveal.
+ *
+ * Content stays concealed until the mission's configured condition is met
+ * (Brief §21). The three conditions are evaluated by `isRevealed`:
+ *   child_action    — the child asks
+ *   choice_equals   — an earlier choice unlocks it
+ *   response_exists — an earlier answer unlocks it
+ *
+ * Once revealed it stays revealed (Architecture §13), so returning later shows
+ * the content without asking again.
+ *
+ * NOTE: the concealed body is sent to the browser, so this is presentational
+ * concealment within a screen the child has already reached. It is NOT the
+ * mechanism that protects staged information across screens — that is the
+ * screen_access migration, which never sends a future screen at all. A mission
+ * whose secret must be cryptographically withheld should stage it as a
+ * separate screen, as Six Names does.
+ */
+export function RevealScreen({ screen, state, onAdvance, isPending, error }: ScreenComponentProps) {
+  const config = parseScreenConfig("reveal", screen.configuration);
+  const revealed = isRevealed(screen, state);
+
+  return (
+    <ScreenFrame
+      title={screen.title}
+      body={screen.body}
+      missionControl={config.missionControl}
+      error={error}
+      action={
+        revealed ? (
+          <PrimaryAction
+            label="Continue"
+            isPending={isPending}
+            onClick={() => onAdvance({ kind: "visit", screenKey: screen.screenKey })}
+          />
+        ) : (
+          <PrimaryAction
+            label={config.revealLabel}
+            isPending={isPending}
+            onClick={() => onAdvance({ kind: "reveal", screenKey: screen.screenKey })}
+          />
+        )
+      }
+    >
+      <div className="wla-measure">
+        {revealed ? (
+          <>
+            {config.revealedTitle && (
+              <h2 className="text-[length:var(--text-h3)]">{config.revealedTitle}</h2>
+            )}
+            {/* Announced, so the change is not conveyed visually alone (§62) */}
+            <div aria-live="polite" className="mt-[var(--space-s)] flex flex-col gap-[var(--space-m)]">
+              {config.revealedBody.split("\n\n").map((para, i) => (
+                <p key={i}>{para}</p>
+              ))}
+            </div>
+          </>
+        ) : (
+          <p className="font-[family-name:var(--font-serif)] text-[length:var(--text-h3)]">
+            {config.concealedPrompt}
           </p>
         )}
       </div>

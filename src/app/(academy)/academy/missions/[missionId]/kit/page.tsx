@@ -1,9 +1,15 @@
 import Link from "next/link";
+import { AcademyChrome } from "@/components/academy/academy-chrome";
 import { notFound } from "next/navigation";
-import { EmptyState, ErrorState } from "@/components/system/states";
+import {
+  EmptyState,
+  ErrorState,
+  UnavailableState,
+} from "@/components/system/states";
 import { ResourceItem } from "@/components/mission/resource-item";
 import { resolveActiveChild } from "@/features/children/active-child";
 import { getMissionHome } from "@/features/missions/queries";
+import { getMissionKit } from "@/features/missions/resources";
 import { AccessError } from "@/lib/permissions";
 
 export const metadata = { title: "Mission Kit" };
@@ -30,8 +36,14 @@ export default async function MissionKitPage({
   if (!active || active.status !== "ok") notFound();
 
   let home;
+  let kit;
   try {
-    home = await getMissionHome(active.childId, missionId);
+    // Kit access is entitlement-gated and mints a short-lived signed URL per
+    // resource; a missing file degrades to its unavailable state (UI/UX §56).
+    [home, kit] = await Promise.all([
+      getMissionHome(active.childId, missionId),
+      getMissionKit(active.childId, missionId),
+    ]);
   } catch (error) {
     if (error instanceof AccessError) notFound();
     return (
@@ -41,10 +53,12 @@ export default async function MissionKitPage({
     );
   }
 
-  const { mission, resources } = home;
+  const { mission } = home;
 
   return (
-    <main className="wla-container py-[var(--space-2xl)]">
+    <>
+      <AcademyChrome />
+      <main className="wla-container py-[var(--space-2xl)]">
       <Link
         href={`/academy/missions/${mission.slug}`}
         className="text-[length:var(--text-label)] underline decoration-[var(--color-border-strong)] underline-offset-4"
@@ -60,19 +74,27 @@ export default async function MissionKitPage({
         and after.
       </p>
 
-      {resources.length === 0 ? (
+      {kit.length === 0 ? (
         <EmptyState
           title="No materials for this mission"
           body="This mission doesn't need anything printed."
         />
+      ) : kit.every((item) => item.url === null) ? (
+        /*
+         * Every file failed to produce a signed URL — the assets are missing
+         * from Storage. UI/UX §56: say it is unavailable, do NOT imply the
+         * child's progress is lost, and offer a way to retry. Distinct from
+         * "no materials", which is a mission that needs none.
+         */
+        <UnavailableState title="These materials aren't available right now." />
       ) : (
         <ul className="mt-[var(--space-xl)] border-t border-[var(--color-border)]">
-          {resources.map((resource) => (
-            // url is null until signed-URL issuance lands in Sprint 4.
-            <ResourceItem key={resource.id} resource={resource} url={null} />
+          {kit.map(({ resource, url }) => (
+            <ResourceItem key={resource.id} resource={resource} url={url} />
           ))}
         </ul>
       )}
-    </main>
+      </main>
+    </>
   );
 }

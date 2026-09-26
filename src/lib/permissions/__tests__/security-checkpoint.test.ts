@@ -185,14 +185,16 @@ describe("4. Active-child context", () => {
   it("the cookie carries no authority — every query re-verifies", () => {
     // No route may read the cookie and query on it without going through
     // lib/permissions. getActiveChildId is only consumed by resolveActiveChild
-    // and the Academy layout (display only).
+    // and the Academy chrome (display only).
     const consumers = sourceFiles(root).filter((f) =>
       readFileSync(f, "utf8").includes("getActiveChildId("),
     );
     const allowed = [
       "features/children/active-child.ts",
-      "app/(academy)/layout.tsx",
       "features/children/actions.ts",
+      // Display only: reads the id to show which child is selected. It never
+      // queries on it — every child-scoped query re-verifies ownership.
+      "components/academy/academy-chrome.tsx",
     ];
     for (const file of consumers) {
       const rel = file.replace(root + "/", "");

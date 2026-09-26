@@ -3,6 +3,7 @@ import type Stripe from "stripe";
 import { serverEnv } from "@/lib/env";
 import { stripe } from "@/features/commerce/checkout";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { sendMissionAccessEmail } from "@/lib/email/send";
 
 /**
  * THE ENTITLEMENT BOUNDARY — Tech Spec §40.
@@ -138,5 +139,59 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Entitlement failed" }, { status: 500 });
   }
 
+  /*
+   * Confirm access by email (D-27).
+   *
+   * Strictly after the entitlement exists, and deliberately not awaited into
+   * the success path: sendMissionAccessEmail never throws, and a send failure
+   * must not turn a completed purchase into a 500 that Stripe retries. The
+   * entitlement is the thing that matters; the email is a courtesy.
+   */
+  await notifyAccessGranted(admin, intent.child_id, intent.mission_id);
+
   return NextResponse.json({ received: true });
+}
+
+/**
+ * Look up the details the confirmation email needs and send it.
+ *
+ * Service-role, because the purchaser has no active session at this moment.
+ * Any failure is logged and swallowed — see the call site.
+ */
+async function notifyAccessGranted(
+  admin: ReturnType<typeof createAdminClient>,
+  childId: string,
+  missionId: string,
+): Promise<void> {
+  try {
+    const [{ data: child }, { data: mission }] = await Promise.all([
+      admin
+        .from("child_profiles")
+        .select("display_name, parent_id")
+        .eq("id", childId)
+        .maybeSingle(),
+      admin.from("missions").select("title, slug").eq("id", missionId).maybeSingle(),
+    ]);
+
+    if (!child || !mission) return;
+
+    const { data: parent } = await admin
+      .from("profiles")
+      .select("email")
+      .eq("id", child.parent_id)
+      .maybeSingle();
+
+    if (!parent?.email) return;
+
+    const origin = process.env.NEXT_PUBLIC_SITE_URL ?? "";
+
+    await sendMissionAccessEmail({
+      to: parent.email,
+      childName: child.display_name,
+      missionTitle: mission.title,
+      missionUrl: `${origin}/academy/missions/${mission.slug}`,
+    });
+  } catch (err) {
+    console.error("[stripe] access email failed", err);
+  }
 }

@@ -8,6 +8,7 @@ import {
   MultiChoiceScreen,
   PrepareScreen,
   ResponseScreen,
+  RevealScreen,
   TrackerScreen,
 } from "@/components/mission/screens";
 import type { MissionScreen } from "./navigation";
@@ -16,10 +17,7 @@ import type { MissionInteraction, MissionStateData } from "./schemas";
 /**
  * The screen-type → component map.
  *
- * Every entry is a TYPE of interaction. None is a mission. `reveal` has no
- * component yet because no approved mission uses in-screen concealment —
- * Six Names stages information by sequence position instead, enforced in the
- * database (the screen_access migration).
+ * Every entry is a TYPE of interaction. None is a mission.
  */
 registerScreens({
   content: ContentScreen,
@@ -28,6 +26,7 @@ registerScreens({
   multi_choice: MultiChoiceScreen,
   tracker: TrackerScreen,
   response: ResponseScreen,
+  reveal: RevealScreen,
   handoff: HandoffScreen,
   completion: CompletionScreen,
 });

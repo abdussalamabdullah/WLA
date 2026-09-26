@@ -91,8 +91,11 @@ export const responseConfig = z.object({
 
 /** Brief §21 — content concealed until a condition is met. */
 export const revealConfig = z.object({
+  missionControl,
   /** Shown before the reveal unlocks. */
   concealedPrompt: z.string().min(1),
+  /** Label for the action that opens a `child_action` reveal. */
+  revealLabel: z.string().default("Show me"),
   revealedTitle: z.string().optional(),
   revealedBody: z.string().min(1),
   condition: z.discriminatedUnion("type", [

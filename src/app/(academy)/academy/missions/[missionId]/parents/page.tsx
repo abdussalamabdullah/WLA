@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { AcademyChrome } from "@/components/academy/academy-chrome";
 import { notFound } from "next/navigation";
 import { ErrorState } from "@/components/system/states";
 import { ParentNote } from "@/components/academy/parent-note";
@@ -38,7 +39,9 @@ export default async function ForParentsPage({
   }
 
   return (
-    <main className="wla-container-narrow py-[var(--space-2xl)]">
+    <>
+      <AcademyChrome />
+      <main className="wla-container-narrow py-[var(--space-2xl)]">
       <Link
         href={`/academy/missions/${home.mission.slug}`}
         className="text-[length:var(--text-label)] underline decoration-[var(--color-border-strong)] underline-offset-4"
@@ -53,6 +56,7 @@ export default async function ForParentsPage({
       <div className="mt-[var(--space-l)]">
         <ParentNote content={home.parentNote} />
       </div>
-    </main>
+      </main>
+    </>
   );
 }

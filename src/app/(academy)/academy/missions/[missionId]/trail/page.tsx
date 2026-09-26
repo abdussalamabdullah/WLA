@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { AcademyChrome } from "@/components/academy/academy-chrome";
 import { notFound } from "next/navigation";
 import { EmptyState, ErrorState } from "@/components/system/states";
 import { EvidenceItem } from "@/components/mission/evidence-item";
@@ -40,7 +41,9 @@ export default async function MissionTrailPage({
   }
 
   return (
-    <main className="wla-container-narrow py-[var(--space-2xl)]">
+    <>
+      <AcademyChrome />
+      <main className="wla-container-narrow py-[var(--space-2xl)]">
       <Link
         href={`/academy/missions/${missionId}`}
         className="text-[length:var(--text-label)] underline decoration-[var(--color-border-strong)] underline-offset-4"
@@ -62,11 +65,12 @@ export default async function MissionTrailPage({
         />
       ) : (
         <ul className="mt-[var(--space-xl)] border-t border-[var(--color-border)]">
-          {trail.evidence.map((evidence) => (
-            <EvidenceItem key={evidence.id} evidence={evidence} url={null} />
+          {trail.evidence.map(({ evidence, url }) => (
+            <EvidenceItem key={evidence.id} evidence={evidence} url={url} />
           ))}
         </ul>
       )}
-    </main>
+      </main>
+    </>
   );
 }

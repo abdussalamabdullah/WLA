@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { AcademyChrome } from "@/components/academy/academy-chrome";
 import { notFound } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { StartMissionButton } from "@/components/mission/start-mission-button";
@@ -72,7 +73,9 @@ export default async function MissionHomePage({
     status === "not_started" ? "Start Mission →" : "Continue Mission →";
 
   return (
-    <main className="wla-container py-[var(--space-2xl)]">
+    <>
+      <AcademyChrome />
+      <main className="wla-container py-[var(--space-2xl)]">
       <MissionIdentity mission={mission} status={status} />
 
       {/* 2. The strongest action. Nothing below may compete with it. */}
@@ -128,6 +131,7 @@ export default async function MissionHomePage({
           </Link>
         </section>
       </div>
-    </main>
+      </main>
+    </>
   );
 }
