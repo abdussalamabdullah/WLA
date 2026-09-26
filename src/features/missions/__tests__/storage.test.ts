@@ -305,3 +305,68 @@ describe("Six Names commercial configuration", () => {
     expect(checkout).toContain("currency: mission.currency.toLowerCase()");
   });
 });
+
+// ──────────────────────────────────────────────── design system craft ──────
+describe("design refinements hold", () => {
+  const tokens = read("src/styles/tokens.css");
+  const globals = read("src/app/globals.css");
+
+  it("the locked palette and typefaces are unchanged", () => {
+    // Designer Brief locks these five; D-33 locks the pairing. A design pass
+    // refines within them, it does not reopen them (Handover §12).
+    for (const hex of ["#f5efe3", "#3a2f2a", "#5f6a4f", "#a3b18a", "#b87c5a"]) {
+      expect(tokens.toLowerCase()).toContain(hex);
+    }
+    const layout = read("src/app/layout.tsx");
+    expect(layout).toContain("Fraunces");
+    expect(layout).toContain("Karla");
+  });
+
+  it("the type scale stays pinned to the two measured values", () => {
+    // Everything else follows a ratio; these two came off the approved design.
+    expect(tokens).toContain("--text-body: 1.125rem"); // 18px
+    expect(tokens).toContain("--text-h2: 1.875rem"); // 30px
+  });
+
+  it("capitals are not used to manufacture hierarchy", () => {
+    /*
+     * All-caps is harder to read at small sizes and is a generic UI tell. The
+     * only remaining use is the mission status badge, which UI/UX §23 itself
+     * shows in caps as its example of not relying on colour alone.
+     */
+    const offenders: string[] = [];
+    for (const file of [
+      "src/components/mission/evidence-item.tsx",
+      "src/components/mission/screens/index.tsx",
+      "src/app/(academy)/academy/missions/[missionId]/complete/page.tsx",
+    ]) {
+      if (read(file).includes("uppercase")) offenders.push(file);
+    }
+    expect(offenders).toEqual([]);
+    // The spec-anchored one stays.
+    expect(read("src/components/mission/mission-status.tsx")).toContain("uppercase");
+  });
+
+  it("the focus indicator clears 3:1 on every surface it lands on", () => {
+    /*
+     * Clay on cream is 3.02:1 and fails outright on an olive button. A single
+     * colour cannot work everywhere, so the ring is drawn twice: a
+     * background-coloured halo, then charcoal outside it.
+     */
+    expect(tokens).toContain("--focus-ring:");
+    expect(tokens).toContain("0 0 0 2px var(--color-background)");
+    expect(tokens).toContain("0 0 0 4px var(--color-text)");
+    expect(globals).toContain("box-shadow: var(--focus-ring)");
+    // `outline: none` is only acceptable because a box-shadow replaces it.
+    // Assert the focus block actually carries a visible indicator.
+    const focusBlock = globals.slice(
+      globals.indexOf(":focus-visible {"),
+      globals.indexOf("}", globals.indexOf(":focus-visible {")),
+    );
+    expect(focusBlock).toContain("box-shadow: var(--focus-ring)");
+  });
+
+  it("reduced motion is still respected", () => {
+    expect(tokens).toContain("prefers-reduced-motion: reduce");
+  });
+});

@@ -23,7 +23,8 @@ export function EvidenceItem({
 
   return (
     <li className="border-b border-[var(--color-border)] py-[var(--space-l)] last:border-b-0">
-      <p className="text-[length:var(--text-label)] tracking-wide text-[var(--color-text-muted)] uppercase">
+      {/* Sentence case: weight and colour carry this, not capitals. */}
+      <p className="text-[length:var(--text-label)] font-medium text-[var(--color-text-muted)]">
         {isPhysical ? "You keep this" : "Saved here"}
       </p>
 

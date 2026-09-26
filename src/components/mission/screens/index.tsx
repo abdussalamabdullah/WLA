@@ -283,7 +283,8 @@ export function TrackerScreen({
 
         {config.dimensions.map((dimension) => (
           <fieldset key={dimension.id}>
-            <legend className="text-[length:var(--text-label)] font-medium tracking-[var(--tracking-eyebrow)] uppercase">
+            {/* The dimension name is content, not a label. Set as such. */}
+            <legend className="text-[length:var(--text-label)] font-semibold">
               {dimension.label}
             </legend>
             {/* Single column on phone — §58 forbids dense rows of tiny controls */}

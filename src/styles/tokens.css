@@ -48,6 +48,20 @@
      colour application rule above. Emphasis comes from the underline. */
   --color-text-action: var(--color-text);
 
+  /*
+   * Focus indicator.
+   *
+   * Clay on cream measures 3.02:1 — it scrapes WCAG 2.2's 3:1 floor for
+   * non-text contrast and fails outright on an olive button. Charcoal on
+   * cream is 11.3:1, but charcoal on olive is only 2.26:1, so no single
+   * colour works on every surface this ring lands on.
+   *
+   * The ring is therefore drawn twice: a background-coloured halo separates
+   * it from whatever is underneath, then a charcoal ring sits outside that.
+   * The result is legible on cream, on sage, and on an olive button alike.
+   */
+  --focus-ring: 0 0 0 2px var(--color-background), 0 0 0 4px var(--color-text);
+
   /* Status colours. DERIVED and warm-shifted to stay inside the palette.
      Per Architecture §20 these must NEVER be the sole carrier of meaning —
      always pair with text and/or icon. */
@@ -68,17 +82,25 @@
   --font-sans:
     var(--font-wla-sans), -apple-system, BlinkMacSystemFont, sans-serif;
 
-  /* Desktop scale. MEASURED unless marked. */
-  --text-display: 3rem; /* 48px — hero only. LOW confidence: hero was not
-                           legible at native resolution. */
-  --text-h1: 2.5rem; /* 40px — page titles ("Choose a mission.") */
-  --text-h2: 1.875rem; /* 30px — section headings and mission card titles */
-  --text-h3: 1.375rem; /* 22px — pull quotes, editorial statements */
-  --text-body-lg: 1.25rem; /* 20px — introductory copy */
+  /*
+   * Desktop scale — a ~1.25 major-third progression, pinned to the two values
+   * actually measured from the approved design rather than derived from a
+   * formula: body 18px and section heading 30px. Sizes between and around
+   * them follow the ratio and are rounded to whole pixels, so the scale is
+   * consistent without drifting off the measured anchors.
+   *
+   *   14 · 15 · 18* · 22 · 24 · 30* · 38 · 46      (* = measured)
+   */
+  --text-display: 2.875rem; /* 46px — hero only */
+  --text-h1: 2.375rem; /* 38px — page titles */
+  --text-h2: 1.875rem; /* 30px — MEASURED. Sections, mission card titles */
+  --text-h3: 1.5rem; /* 24px — editorial statements, pull quotes */
+  --text-body-lg: 1.375rem; /* 22px — introductory copy */
   --text-body: 1.125rem; /* 18px — MEASURED from body line spacing */
   --text-small: 0.9375rem; /* 15px — metadata, supporting text */
   --text-label: 0.875rem; /* 14px — buttons, navigation, labels */
-  --text-eyebrow: 0.75rem; /* 12px — "TRY WLA", footer group headings */
+  --text-eyebrow: 0.875rem; /* 14px — matches label; caps are not used to
+                               create hierarchy (see tracking note below) */
 
   /* Weights. Headings in the approved design are REGULAR, not bold — the
      editorial quality comes from Fraunces itself, not from weight. */
@@ -86,7 +108,21 @@
   --weight-medium: 500; /* labels, navigation, links */
   --weight-semibold: 600; /* editorial statements, emphasis */
 
-  /* ESTIMATED, not measured — see docs/TYPOGRAPHY.md. */
+  /*
+   * Fraunces sets loose at display sizes, as most editorial serifs do. A small
+   * negative track at 38px and above closes the gaps without altering the
+   * letterforms. Standard optical correction, not a change of brand voice.
+   */
+  --tracking-display: -0.012em;
+
+  /*
+   * ESTIMATED, not measured — see docs/TYPOGRAPHY.md.
+   *
+   * Used ONLY for the eyebrows the approved public design actually sets in
+   * caps ("TRY WLA", footer group headings). It is deliberately not applied
+   * to Academy labels: uppercase is harder to read at small sizes, and weight
+   * and colour carry that hierarchy instead.
+   */
   --tracking-eyebrow: 0.08em;
 
   --leading-tight: 1.15; /* headings — §9 */

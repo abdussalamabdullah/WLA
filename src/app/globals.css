@@ -49,14 +49,27 @@
     /* Regular, not bold — matches the approved design, where heading presence
        comes from Fraunces' own character rather than from weight. */
     font-weight: var(--weight-regular);
+    /* Optical correction: editorial serifs set loose at size. */
+    letter-spacing: var(--tracking-display);
   }
 
-  /* UI/UX §64 — every interactive element needs a visible focus state.
-     Applied globally so it cannot be forgotten per-component. */
+  /* Small headings don't need the correction — it only helps above ~30px. */
+  h3 {
+    letter-spacing: 0;
+  }
+
+  /*
+   * UI/UX §64 — every interactive element needs a visible focus state.
+   * Applied globally so it cannot be forgotten per-component.
+   *
+   * Two rings rather than one: a background-coloured halo then a charcoal
+   * ring, so focus stays legible on cream, on sage, and on an olive button.
+   * A single colour cannot clear 3:1 against all three.
+   */
   :focus-visible {
-    outline: 2px solid var(--color-focus);
-    outline-offset: 2px;
-    border-radius: 2px;
+    outline: none;
+    box-shadow: var(--focus-ring);
+    border-radius: 3px;
   }
 
   /* Only suppress the ring for genuine pointer interaction, never for keyboard */

@@ -45,7 +45,7 @@ export default async function MissionCompletePage({
     <>
       <AcademyChrome />
       <main className="wla-container-narrow py-[var(--space-3xl)]">
-      <p className="text-[length:var(--text-label)] tracking-wide text-[var(--color-text-muted)] uppercase">
+      <p className="text-[length:var(--text-label)] font-medium text-[var(--color-text-muted)]">
         Complete
       </p>
       <h1 className="mt-[var(--space-s)] text-[length:var(--text-h1)]">
