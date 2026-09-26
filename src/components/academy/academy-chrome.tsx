@@ -16,8 +16,11 @@ import type { ChildOption } from "@/components/profile/profile-switcher";
  */
 export async function AcademyChrome({
   variant = "default",
+  mission,
 }: {
   variant?: "default" | "quiet";
+  /** Compact mission identity for the Active Mission header (UI/UX §35). */
+  mission?: { title: string; slug: string };
 }) {
   let childProfiles: ChildOption[] = [];
   let activeChildId: string | null = null;
@@ -37,6 +40,7 @@ export async function AcademyChrome({
       childProfiles={childProfiles}
       activeChildId={activeChildId}
       variant={variant}
+      mission={mission}
     />
   );
 }

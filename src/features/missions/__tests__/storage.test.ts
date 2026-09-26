@@ -370,3 +370,81 @@ describe("design refinements hold", () => {
     expect(tokens).toContain("prefers-reduced-motion: reduce");
   });
 });
+
+// ─────────────────────────────────────── Academy design: state & structure ──
+describe("the mission card encodes state structurally", () => {
+  const card = read("src/components/mission/mission-card.tsx");
+
+  it("in progress is the only card on a sage surface", () => {
+    /*
+     * Architecture §4 — My Missions must answer "where do I continue?".
+     * Three identical cards leave that to be read; the surface answers it.
+     * UI/UX §7's "occasional Sage surfaces" is spent here and nowhere else.
+     */
+    expect(card).toContain("in_progress: \"border-[var(--color-primary)] bg-[var(--color-surface-sage)]\"");
+    expect(card).toContain("not_started: \"border-[var(--color-border-strong)] bg-[var(--color-surface)]\"");
+    expect(card).toContain("complete: \"border-[var(--color-border)] bg-[var(--color-surface)]\"");
+  });
+
+  it("surface is never the ONLY carrier of status", () => {
+    // Architecture §20 — status must not depend on colour alone.
+    expect(card).toContain("MissionStatusBadge");
+    expect(card).toContain("STATUS_ACTION[status]");
+  });
+
+  it("a completed mission is not dimmed or archived-looking", () => {
+    // UI/UX §22.
+    expect(card).not.toMatch(/complete[\s\S]{0,120}(opacity|grayscale|line-through)/);
+  });
+
+  it("shows delivery type in the meta, as §21 requires", () => {
+    expect(card).toContain("mission.delivery_type");
+    // Joined into the existing dot-separated meta, not added as a new line.
+    expect(card).toContain('.join(" · ")');
+  });
+
+  it("mission imagery is left out rather than faked", () => {
+    // cover_image is null everywhere; no placeholder stands in for it.
+    expect(card).not.toContain("<img");
+    expect(card).not.toMatch(/placeholder|fallbackImage|defaultCover/i);
+  });
+});
+
+describe("Active Mission orientation", () => {
+  const header = read("src/components/academy/academy-header.tsx");
+  const active = read("src/app/(academy)/academy/missions/[missionId]/active/page.tsx");
+
+  it("the header carries mission identity and both ways out (§35)", () => {
+    expect(header).toContain("mission.title");
+    expect(header).toContain("Mission Home");
+    expect(header).toContain("Mission Kit");
+    expect(active).toContain("mission={{ title: mission.title, slug: mission.slug }}");
+  });
+
+  it("that nav is not duplicated in the content area", () => {
+    const body = active.slice(active.indexOf("<main"));
+    expect(body).not.toContain('aria-label="Mission"');
+  });
+
+  it("identity appears only in the quiet variant", () => {
+    // The standard header keeps the profile control instead.
+    expect(header).toContain("{quiet && mission && (");
+  });
+});
+
+describe("My Missions ordering", () => {
+  const queries = read("src/features/missions/queries.ts");
+
+  it("puts a mission already underway first", () => {
+    expect(queries).toContain("in_progress: 0");
+    expect(queries).toContain("not_started: 1");
+    expect(queries).toContain("complete: 2");
+  });
+
+  it("is ordering only — no search or filter was introduced", () => {
+    // Architecture §22 defers both until mission volume creates the need.
+    for (const forbidden of ["searchTerm", "filterBy", "query:", "ilike"]) {
+      expect(queries).not.toContain(forbidden);
+    }
+  });
+});

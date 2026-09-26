@@ -62,28 +62,18 @@ export default async function ActiveMissionPage({
 
   return (
     <>
-      <AcademyChrome variant="quiet" />
+      {/*
+        §35 — the header carries mission identity plus Mission Home and
+        Mission Kit, so they sit in one consistent place and the screen itself
+        stays free for the task. Leaving for either never destroys state
+        (Architecture §9).
+      */}
+      <AcademyChrome
+        variant="quiet"
+        mission={{ title: mission.title, slug: mission.slug }}
+      />
       <main className="wla-container-narrow py-[var(--space-2xl)]">
-      {/* Always reachable; leaving never destroys state (Architecture §9) */}
-      <nav
-        aria-label="Mission"
-        className="flex flex-wrap items-center gap-[var(--space-l)] text-[length:var(--text-label)]"
-      >
-        <Link
-          href={base}
-          className="underline decoration-[var(--color-border-strong)] underline-offset-4"
-        >
-          Mission Home
-        </Link>
-        <Link
-          href={`${base}/kit`}
-          className="underline decoration-[var(--color-border-strong)] underline-offset-4"
-        >
-          Mission Kit
-        </Link>
-      </nav>
-
-      <div className="mt-[var(--space-xl)]">
+      <div>
         {screen ? (
           <MissionRunner
             missionSlug={mission.slug}

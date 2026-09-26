@@ -111,7 +111,7 @@ export default async function MyMissionsPage({
           action={{ label: "Explore Missions →", href: "/missions" }}
         />
       ) : (
-        <ul className="mt-[var(--space-xl)] grid gap-[var(--space-m)] sm:grid-cols-2 lg:grid-cols-3">
+        <ul className="mt-[var(--space-xl)] grid gap-[var(--space-l)] sm:grid-cols-2 lg:grid-cols-3">
           {collection.map(({ mission, status }) => (
             <MissionCard key={mission.id} mission={mission} status={status} />
           ))}
@@ -122,11 +122,18 @@ export default async function MyMissionsPage({
   );
 }
 
+/**
+ * §21 — heading plus a short explanation of the page.
+ *
+ * The child's name is deliberately NOT repeated here. The profile control in
+ * the header already answers §18's "which child's missions am I looking at?",
+ * and saying it twice on one screen is duplication, not emphasis.
+ */
 function Header() {
   return (
     <>
       <h1 className="text-[length:var(--text-h1)]">My Missions</h1>
-      <p className="mt-[var(--space-s)] text-[var(--color-text-muted)]">
+      <p className="mt-[var(--space-s)] wla-measure text-[var(--color-text-muted)]">
         Your WLA missions, in one place.
       </p>
     </>

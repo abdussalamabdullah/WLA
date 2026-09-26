@@ -45,7 +45,7 @@ export async function getMissionCollection(
     (progressRows ?? []).map((p) => [p.mission_id, p]),
   );
 
-  return entitlements
+  const collection = entitlements
     .map((e) => {
       const mission = e.missions as unknown as MissionRow | null;
       if (!mission) return null;
@@ -58,6 +58,28 @@ export async function getMissionCollection(
       };
     })
     .filter((x): x is MissionCollectionItem => x !== null);
+
+  /*
+   * In progress first, then not started, then complete.
+   *
+   * Architecture §4 asks My Missions to answer "where do I continue?" — a
+   * mission already underway is the likeliest answer, so it is not left to be
+   * found among the others. Within a group, most recent activity first.
+   *
+   * This is ordering, not search or filtering, both of which Architecture §22
+   * defers until mission volume creates the need.
+   */
+  const RANK: Record<MissionStatus, number> = {
+    in_progress: 0,
+    not_started: 1,
+    complete: 2,
+  };
+
+  return collection.sort(
+    (a, b) =>
+      RANK[a.status] - RANK[b.status] ||
+      (b.lastActivityAt ?? "").localeCompare(a.lastActivityAt ?? ""),
+  );
 }
 
 export type MissionHomeData = {

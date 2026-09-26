@@ -19,10 +19,20 @@ export function AcademyHeader({
   childProfiles,
   activeChildId,
   variant = "default",
+  mission,
 }: {
   childProfiles: ChildOption[];
   activeChildId: string | null;
   variant?: "default" | "quiet";
+  /**
+   * Compact mission identity, shown only in the quiet variant.
+   *
+   * UI/UX §35 puts the mission title and the Mission Home / Mission Kit links
+   * in the Active Mission header rather than the content area, which answers
+   * §36's "Where am I?" in a consistent place and leaves the screen itself
+   * free for the task.
+   */
+  mission?: { title: string; slug: string };
 }) {
   const quiet = variant === "quiet";
 
@@ -36,10 +46,39 @@ export function AcademyHeader({
       >
         <Link
           href="/academy/my-missions"
-          className="font-[family-name:var(--font-serif)] text-[length:var(--text-h3)]"
+          className={cn(
+            "font-[family-name:var(--font-serif)]",
+            quiet
+              ? "text-[length:var(--text-label)] text-[var(--color-text-muted)]"
+              : "text-[length:var(--text-h3)]",
+          )}
         >
           Within Lab Academy
         </Link>
+
+        {/* §35 — mission identity and the two ways out, in the header. */}
+        {quiet && mission && (
+          <nav
+            aria-label="Mission"
+            className="flex flex-wrap items-baseline gap-[var(--space-l)]"
+          >
+            <span className="font-[family-name:var(--font-serif)] text-[length:var(--text-h3)]">
+              {mission.title}
+            </span>
+            <Link
+              href={`/academy/missions/${mission.slug}`}
+              className="text-[length:var(--text-label)] underline decoration-[var(--color-border-strong)] underline-offset-4"
+            >
+              Mission Home
+            </Link>
+            <Link
+              href={`/academy/missions/${mission.slug}/kit`}
+              className="text-[length:var(--text-label)] underline decoration-[var(--color-border-strong)] underline-offset-4"
+            >
+              Mission Kit
+            </Link>
+          </nav>
+        )}
 
         {!quiet && (
           <div className="flex items-center gap-[var(--space-l)]">
