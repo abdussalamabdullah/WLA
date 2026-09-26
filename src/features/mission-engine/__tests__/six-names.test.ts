@@ -27,7 +27,7 @@ const seed = readFileSync(
   "utf8",
 );
 const access = readFileSync(
-  join(repo, "supabase/migrations/0007_screen_access.sql"),
+  join(repo, "supabase/migrations/20260925220600_screen_access.sql"),
   "utf8",
 );
 const persistence = readFileSync(
@@ -499,6 +499,43 @@ describe("Mission Trail", () => {
     expect(fn).toContain("insert into mission_evidence");
     expect(fn).toContain("set status           = 'complete'");
   });
+
+  it("only one complete_mission signature survives the migrations", () => {
+    /*
+     * REGRESSION GUARD — the drop_stale_complete_mission migration.
+     *
+     * FOUND BY HOSTED SCHEMA VERIFICATION, not by behavioural tests.
+     *
+     * The persistence migration created complete_mission(uuid, jsonb). The
+     * screen_access migration used CREATE OR REPLACE to add p_trail — but a
+     * different signature is not a replacement, so Postgres created a SECOND
+     * function and kept the original. The stale two-argument version predates
+     * Mission Trail creation and writes no evidence, so any two-argument call
+     * completed a mission with no Trail, silently.
+     *
+     * Behavioural tests could not see this: they only ever exercised the
+     * three-argument call, which bound to the correct function.
+     *
+     * RULE: changing a function's argument list means dropping the old
+     * signature explicitly. CREATE OR REPLACE will not do it for you.
+     */
+    const drop = readFileSync(
+      join(repo, "supabase/migrations/20260925220800_drop_stale_complete_mission.sql"),
+      "utf8",
+    );
+
+    // The stale two-argument overload is dropped by exact signature...
+    expect(drop).toContain("drop function public.complete_mission(uuid, jsonb);");
+    // ...and the three-argument version is neither dropped nor redefined here.
+    expect(drop).not.toContain("complete_mission(uuid, jsonb, jsonb)");
+    expect(drop).not.toMatch(/create\s+(or replace\s+)?function/i);
+
+    // The surviving definition still carries p_trail and writes the Trail.
+    const surviving = access.slice(access.indexOf("function complete_mission"));
+    expect(surviving).toContain("p_trail       jsonb default");
+    expect(surviving).toContain("insert into mission_evidence");
+    expect(surviving).toContain("security invoker");
+  });
 });
 
 // ════════════════════════════════════ staged information (C9-1 / Q4) ═══════
@@ -582,18 +619,19 @@ describe("staged information is server-authoritative", () => {
 
   it("every function that reads mission_screens is security definer", () => {
     /*
-     * REGRESSION GUARD — migration 0008.
+     * REGRESSION GUARD — the start_mission_access migration.
      *
-     * 0007 removed all client read access to mission_screens. start_mission
-     * was security INVOKER, so it silently lost its ability to find a
-     * mission's first screen and every new run opened with a null position.
+     * The screen_access migration removed all client read access to
+     * mission_screens. start_mission was security INVOKER, so it silently lost
+     * its ability to find a mission's first screen, and every new run opened
+     * with a null position.
      * Source-level tests could not see this; live execution found it.
      *
      * Any function that reads mission_screens must therefore be definer, and
      * must re-establish ownership and entitlement itself.
      */
     const startFix = readFileSync(
-      join(repo, "supabase/migrations/0008_start_mission_access.sql"),
+      join(repo, "supabase/migrations/20260925220700_start_mission_access.sql"),
       "utf8",
     );
     for (const [sql, fn] of [

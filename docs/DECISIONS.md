@@ -151,7 +151,7 @@ pressure that would otherwise push toward a real CMS.
 | Journal articles/categories | `journal_articles`, `journal_categories` | Admin form                                                                                                                         |
 | Mission screens             | `mission_screens`                        | **SQL seed files** — authored from an approved Build Brief, version-controlled, reviewable. Not a no-code builder (Tech Spec §18). |
 
-Schema added in `supabase/migrations/0002_editable_content.sql`, gated behind
+Schema added in `supabase/migrations/20260925220100_editable_content.sql`, gated behind
 `profiles.is_admin` (set manually — there is no self-service route to admin).
 **The admin UI itself is not built**: it is public-site scope under D-02.
 

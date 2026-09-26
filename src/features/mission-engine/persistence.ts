@@ -47,7 +47,8 @@ import type {
  * never content.
  *
  * Future screens are not filtered out client-side; they are never fetched.
- * mission_screens has no client read policy at all (migration 0007), so this
+ * mission_screens has no client read policy at all (the screen_access
+ * migration), so this
  * is the only path to screen content and the stage check lives in the
  * database, not in the interface.
  */

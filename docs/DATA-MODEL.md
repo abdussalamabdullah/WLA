@@ -9,7 +9,7 @@ notifications have **no schema** and must not acquire any (Architecture §22).
 
 ---
 
-## Core Academy tables (migration `0001_init.sql`)
+## Core Academy tables (migration `20260925220000_init.sql`)
 
 ### 1. `profiles`
 
@@ -123,7 +123,7 @@ notifications have **no schema** and must not acquire any (Architecture §22).
 
 ---
 
-## Content tables (migration `0002_editable_content.sql`)
+## Content tables (migration `20260925220100_editable_content.sql`)
 
 Added to satisfy **CMS-01**, which is a Must. Decision D-08 / conflict C3.
 

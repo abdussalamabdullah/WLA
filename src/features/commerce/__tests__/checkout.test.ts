@@ -10,8 +10,8 @@ const read = (p: string) => readFileSync(join(repo, p), "utf8");
 const checkout = read("src/features/commerce/checkout.ts");
 const actions = read("src/features/commerce/actions.ts");
 const webhook = read("src/app/api/webhooks/stripe/route.ts");
-const commerceSql = read("supabase/migrations/0005_commerce.sql");
-const initSql = read("supabase/migrations/0001_init.sql");
+const commerceSql = read("supabase/migrations/20260925220400_commerce.sql");
+const initSql = read("supabase/migrations/20260925220000_init.sql");
 
 // ──────────────────────────────────────────────────── server-side authority ──
 describe("the client cannot influence what is charged", () => {
@@ -384,7 +384,7 @@ describe("deferred commerce scope", () => {
   });
 
   it("no resource versioning was introduced (D-19)", () => {
-    const pinning = read("supabase/migrations/0004_version_pinning.sql");
+    const pinning = read("supabase/migrations/20260925220300_version_pinning.sql");
     expect(pinning).not.toContain("alter table mission_resources");
   });
 });

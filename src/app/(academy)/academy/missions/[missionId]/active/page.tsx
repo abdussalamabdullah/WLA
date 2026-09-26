@@ -14,7 +14,8 @@ import { AccessError } from "@/lib/permissions";
  *
  * STAGED INFORMATION: this page receives exactly one screen — the child's
  * current position — because `mission_screens` has no client read policy and
- * `get_current_mission_screen` returns nothing else (migration 0007). Future
+ * `get_current_mission_screen` returns nothing else (the screen_access
+ * migration). Future
  * content is never sent to the browser, so the sequence is enforced by the
  * database rather than by this interface.
  *

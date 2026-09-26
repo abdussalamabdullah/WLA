@@ -40,7 +40,8 @@ Three sections follow, and they are deliberately separate:
 
 **A real defect that source-level tests could not see.**
 
-Migration 0007 removed every client read policy from `mission_screens`.
+The screen_access migration removed every client read policy from
+`mission_screens`.
 `start_mission` was `security invoker`, so it runs as the calling
 `authenticated` role — and lost its read access along with everyone else. Its
 lookup of the mission's first screen silently returned NULL.
@@ -49,7 +50,7 @@ The observable effect: **every newly started mission would have opened on
 "this mission isn't ready to start yet"**, because `current_screen_key` was
 null and `get_current_mission_screen` then correctly returned nothing.
 
-Fixed in `0008_start_mission_access.sql` by making `start_mission` a
+Fixed in `20260925220700_start_mission_access.sql` by making `start_mission` a
 `security definer`, consistent with `get_current_mission_screen`. It already
 re-established ownership and entitlement itself, so nothing is weakened —
 `auth.uid()` still reflects the caller. A regression guard now asserts that any
@@ -63,7 +64,7 @@ All eight requested checks, plus five more the live environment made cheap.
 
 | #   | Check                                             | Result                                                            |
 | --- | ------------------------------------------------- | ----------------------------------------------------------------- |
-| 1   | Migrations 0001–0008 execute cleanly              | 15 tables, 4 functions, no errors                                 |
+| 1   | All eight migrations execute cleanly              | 15 tables, 4 functions, no errors                                 |
 | 2   | Authenticate as a real parent                     | `auth.uid()` resolves from the JWT claim                          |
 | 3   | **Entitled client cannot read `mission_screens`** | **0 rows** as entitled parent; **0 rows** as anon                 |
 | 3b  | Control — tables that should be readable are      | own children: 2 · published missions: 1                           |

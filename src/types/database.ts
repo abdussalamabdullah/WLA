@@ -1,7 +1,7 @@
 /**
  * Supabase schema types.
  *
- * Hand-written to mirror supabase/migrations/0001_init.sql so the app types
+ * Hand-written to mirror supabase/migrations/20260925220000_init.sql so the app types
  * compile before a Supabase project exists. Once one is provisioned, replace
  * this file wholesale with:
  *
@@ -258,8 +258,8 @@ export type Database = {
     };
     Views: { [_ in never]: never };
     /**
-     * Atomic persistence operations (migration 0003). Each is one transaction —
-     * see supabase/migrations/0003_persistence.sql.
+     * Atomic persistence operations (the persistence migration). Each is one
+     * transaction — see supabase/migrations/20260925220200_persistence.sql.
      */
     Functions: {
       start_mission: {
@@ -282,7 +282,7 @@ export type Database = {
       };
       /**
        * The ONLY path to screen content. mission_screens has no client read
-       * policy — see migration 0007.
+       * policy — see the screen_access migration.
        */
       get_current_mission_screen: {
         Args: { p_child_id: string; p_mission_id: string };

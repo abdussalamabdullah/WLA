@@ -15,7 +15,7 @@ import {
 
 const repo = join(__dirname, "../../../..");
 const migration = readFileSync(
-  join(repo, "supabase/migrations/0003_persistence.sql"),
+  join(repo, "supabase/migrations/20260925220200_persistence.sql"),
   "utf8",
 );
 const persistence = readFileSync(
@@ -189,7 +189,7 @@ describe("pause and resume", () => {
 describe("duplicate-start protection", () => {
   it("one progress row per child and mission, enforced by the database", () => {
     const init = readFileSync(
-      join(repo, "supabase/migrations/0001_init.sql"),
+      join(repo, "supabase/migrations/20260925220000_init.sql"),
       "utf8",
     );
     expect(init).toContain("unique (child_id, mission_id)");
@@ -362,7 +362,7 @@ describe("Supabase holds the authoritative state", () => {
 // ══════════════════════════ D-17 — version pinning, D-18 — no blind advance ══
 describe("D-17 mission version pinning", () => {
   const pinning = readFileSync(
-    join(repo, "supabase/migrations/0004_version_pinning.sql"),
+    join(repo, "supabase/migrations/20260925220300_version_pinning.sql"),
     "utf8",
   );
 
@@ -396,11 +396,11 @@ describe("D-17 mission version pinning", () => {
   });
 
   it("screen loads are filtered to the pinned version", () => {
-    // Moved into the database by migration 0007: the application can no longer
-    // read mission_screens at all, so version filtering happens where the
-    // stage check does.
+    // Moved into the database by the screen_access migration: the application
+    // can no longer read mission_screens at all, so version filtering happens
+    // where the stage check does.
     const access = readFileSync(
-      join(repo, "supabase/migrations/0007_screen_access.sql"),
+      join(repo, "supabase/migrations/20260925220600_screen_access.sql"),
       "utf8",
     );
     expect(access).toContain("and s.version = v_progress.mission_version");

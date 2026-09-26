@@ -20,7 +20,7 @@ const repo = join(root, "..");
 const read = (p: string) => readFileSync(join(root, p), "utf8");
 const sql = (p: string) => readFileSync(join(repo, p), "utf8");
 
-const INIT = "supabase/migrations/0001_init.sql";
+const INIT = "supabase/migrations/20260925220000_init.sql";
 
 // ─────────────────────────────────────────────── 1. parent authentication ──
 describe("1. Parent authentication", () => {

@@ -1,0 +1,34 @@
+-- ============================================================================
+-- Fix: remove the stale two-argument complete_mission overload.
+--
+-- FOUND BY HOSTED SCHEMA VERIFICATION, not by behavioural tests.
+--
+-- The persistence migration created:
+--     complete_mission(p_progress_id uuid, p_state jsonb)
+--
+-- The screen_access migration then used CREATE OR REPLACE to add Mission Trail
+-- creation, with a third argument:
+--     complete_mission(p_progress_id uuid, p_state jsonb, p_trail jsonb
+--                      default '[]'::jsonb)
+--
+-- A different signature is not a replacement. Postgres created a SECOND
+-- function and left the original in place, so both overloads existed.
+--
+-- WHY THIS MATTERS
+-- The two-argument version predates Mission Trail creation and does not write
+-- to mission_evidence. Any call made with two arguments resolves to it and
+-- completes a mission with NO Trail — silently, because the call succeeds.
+--
+-- The application always passes all three arguments, so nothing is broken
+-- today. This removes the trap rather than relying on every future caller
+-- remembering to pass p_trail.
+--
+-- Dropping by exact signature targets only the stale overload: Postgres
+-- matches DROP FUNCTION on declared argument types, and does not consider the
+-- three-argument version's default when doing so.
+--
+-- Migrations 0001–0008 are already applied to staging and are immutable. This
+-- is a forward fix.
+-- ============================================================================
+
+drop function public.complete_mission(uuid, jsonb);

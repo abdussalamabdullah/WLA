@@ -15,7 +15,7 @@ import type { MissionStatus } from "@/types/database";
  * BEHAVIOURAL SESSION TESTS
  *
  * These drive the REAL reducer and REAL navigation through a fake store whose
- * semantics mirror supabase/migrations/0003_persistence.sql — the idempotent
+ * semantics mirror supabase/migrations/20260925220200_persistence.sql — the idempotent
  * upsert, the position coalesce, the complete-is-terminal guard, and the
  * all-or-nothing write.
  *

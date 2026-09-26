@@ -19,7 +19,7 @@ import type { MissionInteraction, MissionStateData } from "./schemas";
  * Every entry is a TYPE of interaction. None is a mission. `reveal` has no
  * component yet because no approved mission uses in-screen concealment —
  * Six Names stages information by sequence position instead, enforced in the
- * database (migration 0007).
+ * database (the screen_access migration).
  */
 registerScreens({
   content: ContentScreen,

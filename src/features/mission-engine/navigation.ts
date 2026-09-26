@@ -35,7 +35,8 @@ export type MissionScreen = {
  * Returning null means the mission has run out of screens.
  *
  * Takes `nextSequenceKey` rather than the whole screen list, because the
- * engine is only ever given the child's current screen (migration 0007).
+ * engine is only ever given the child's current screen (the screen_access
+ * migration).
  * Everything needed to advance is either in the current screen's own
  * configuration or is that single key.
  */
