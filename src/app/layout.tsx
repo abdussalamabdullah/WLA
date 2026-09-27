@@ -39,8 +39,23 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en-GB">
-      <body className={`${serif.variable} ${sans.variable}`}>{children}</body>
+    /*
+     * The font variables go on <html>, NOT <body>.
+     *
+     * tokens.css declares `--font-serif: var(--font-wla-serif), …` on :root,
+     * which IS <html>. With the variable classes on <body> — a child — that
+     * reference was unresolved at the point of substitution, so --font-serif
+     * computed to the guaranteed-invalid value and inherited as invalid to
+     * every descendant. The result: no heading in this application ever
+     * rendered in Fraunces; they all fell back through to the sans stack.
+     *
+     * It was invisible to every check we had. The classes were on the element,
+     * the @font-face rules were in the compiled CSS, and the font files served
+     * 200 — all true, and all beside the point. It took a rendered screenshot
+     * to see it.
+     */
+    <html lang="en-GB" className={`${serif.variable} ${sans.variable}`}>
+      <body>{children}</body>
     </html>
   );
 }

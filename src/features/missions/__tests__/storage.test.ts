@@ -5,11 +5,30 @@ import { join } from "node:path";
 const repo = join(__dirname, "../../../..");
 const read = (p: string) => readFileSync(join(repo, p), "utf8");
 
+/**
+ * Source with comments removed.
+ *
+ * Guards that search for a word must use this, not `read`. Several of these
+ * tests previously passed because the very comment explaining why a pattern
+ * is forbidden CONTAINED that pattern — the capitals guard went green off the
+ * sentence "the site sets uppercase in exactly one place". A guard that can be
+ * satisfied by prose is not a guard.
+ */
+const code = (p: string) =>
+  read(p)
+    .replace(/\/\*[\s\S]*?\*\//g, " ")
+    .replace(/(^|[^:])\/\/.*$/gm, "$1 ")
+    .replace(/\{\/\*[\s\S]*?\*\/\}/g, " ");
+
 const kit = read("src/features/missions/resources.ts");
 const trail = read("src/features/mission-trail/queries.ts");
 const init = read("supabase/migrations/20260925220000_init.sql");
-const kitPage = read("src/app/(academy)/academy/missions/[missionId]/kit/page.tsx");
-const trailPage = read("src/app/(academy)/academy/missions/[missionId]/trail/page.tsx");
+const kitPage = read(
+  "src/app/(academy)/academy/missions/[missionId]/kit/page.tsx",
+);
+const trailPage = read(
+  "src/app/(academy)/academy/missions/[missionId]/trail/page.tsx",
+);
 const evidenceItem = read("src/components/mission/evidence-item.tsx");
 
 // ───────────────────────────────────────── Mission Kit resource access ──────
@@ -49,8 +68,12 @@ describe("Mission Kit storage access", () => {
 
   it("the bucket is private and entitlement-scoped in RLS", () => {
     expect(init).toContain("('mission-resources', 'mission-resources', false)");
-    expect(init).toContain('create policy "entitled families read mission resources"');
-    expect(init).toContain("e.mission_id::text = (storage.foldername(name))[1]");
+    expect(init).toContain(
+      'create policy "entitled families read mission resources"',
+    );
+    expect(init).toContain(
+      "e.mission_id::text = (storage.foldername(name))[1]",
+    );
   });
 });
 
@@ -83,7 +106,9 @@ describe("Mission Trail evidence access", () => {
   });
 
   it("the component still distinguishes physical from stored", () => {
-    expect(evidenceItem).toContain('isPhysical ? "You keep this" : "Saved here"');
+    expect(evidenceItem).toContain(
+      'isPhysical ? "You keep this" : "Saved here"',
+    );
     expect(evidenceItem).toContain("it isn&rsquo;t stored in the Academy");
   });
 
@@ -106,7 +131,10 @@ describe("Mission Trail evidence access", () => {
     // Brief §6 — "No upload is required."
     const seed = read("supabase/seed/six_names_screens.sql");
     expect(seed).not.toMatch(/upload/i);
-    for (const f of ["src/features/missions/resources.ts", "src/features/mission-trail/queries.ts"]) {
+    for (const f of [
+      "src/features/missions/resources.ts",
+      "src/features/mission-trail/queries.ts",
+    ]) {
       expect(read(f)).not.toContain(".upload(");
     }
   });
@@ -123,13 +151,22 @@ describe("system states are reachable", () => {
      * invent. They were all built — three of them were unreachable.
      */
     const wiring: Record<string, string[]> = {
-      LoadingState: ["src/app/(academy)/loading.tsx", "src/app/account/loading.tsx"],
-      RestoringState: ["src/app/(academy)/academy/missions/[missionId]/active/loading.tsx"],
+      LoadingState: [
+        "src/app/(academy)/loading.tsx",
+        "src/app/account/loading.tsx",
+      ],
+      RestoringState: [
+        "src/app/(academy)/academy/missions/[missionId]/active/loading.tsx",
+      ],
       ErrorState: ["src/app/(academy)/error.tsx"],
-      UnavailableState: ["src/app/(academy)/academy/missions/[missionId]/kit/page.tsx"],
+      UnavailableState: [
+        "src/app/(academy)/academy/missions/[missionId]/kit/page.tsx",
+      ],
     };
     for (const [component, files] of Object.entries(wiring)) {
-      expect(states, `${component} must exist`).toContain(`export function ${component}`);
+      expect(states, `${component} must exist`).toContain(
+        `export function ${component}`,
+      );
       for (const file of files) {
         expect(read(file), `${component} in ${file}`).toContain(component);
       }
@@ -154,7 +191,9 @@ describe("system states are reachable", () => {
   });
 
   it("unavailable is distinguished from empty", () => {
-    const kitPage = read("src/app/(academy)/academy/missions/[missionId]/kit/page.tsx");
+    const kitPage = read(
+      "src/app/(academy)/academy/missions/[missionId]/kit/page.tsx",
+    );
     expect(kitPage).toContain("No materials for this mission");
     expect(kitPage).toContain("aren't available right now");
     expect(kitPage).toContain("kit.every((item) => item.url === null)");
@@ -243,7 +282,9 @@ describe("Six Names Mission Kit assets", () => {
      * entry as unavailable. Substituting generated content would misrepresent
      * approved mission material.
      */
-    expect(() => readFileSync(join(assetDir, "six-names-child-mission.pdf"))).toThrow();
+    expect(() =>
+      readFileSync(join(assetDir, "six-names-child-mission.pdf")),
+    ).toThrow();
     // The row is still seeded, so the Kit lists it honestly.
     expect(seed).toContain("'six-names-child-mission.pdf'");
     expect(seed).toContain("'Child Mission'");
@@ -310,6 +351,9 @@ describe("Six Names commercial configuration", () => {
 describe("design refinements hold", () => {
   const tokens = read("src/styles/tokens.css");
   const globals = read("src/app/globals.css");
+  /* Absence assertions must run against stripped source: the comment that
+     explains why a value is forbidden inevitably contains that value. */
+  const globalsCode = code("src/app/globals.css");
 
   it("the locked palette and typefaces are unchanged", () => {
     // Designer Brief locks these five; D-33 locks the pairing. A design pass
@@ -322,29 +366,93 @@ describe("design refinements hold", () => {
     expect(layout).toContain("Karla");
   });
 
-  it("the type scale stays pinned to the two measured values", () => {
-    // Everything else follows a ratio; these two came off the approved design.
+  it("the type scale stays pinned to the measured values", () => {
+    /*
+     * Five steps were measured from the public site by cap height (see
+     * docs/DESIGN-LANGUAGE §3); the rest interpolate. If one of these drifts,
+     * the Academy has stopped matching the site it is supposed to match.
+     */
+    /*
+     * Display and h1 are fluid, with the MEASURED value as the ceiling so
+     * they land exactly on the site's numbers at the 1512px viewport the
+     * captures were taken at. The ceiling is what this guard pins; the floor
+     * is estimated, because the site's own small-screen type was never
+     * captured and so could not be measured.
+     */
+    expect(tokens).toContain("3.75rem)"); // display ceiling, 60px
+    expect(tokens).toContain("2.3125rem)"); // h1 ceiling, 37px
+    expect(tokens).toMatch(/--text-display:\s*clamp\(/);
+    expect(tokens).toMatch(/--text-h1:\s*clamp\(/);
+    expect(tokens).toContain("--text-h3: 1.375rem"); // 22px
     expect(tokens).toContain("--text-body: 1.125rem"); // 18px
-    expect(tokens).toContain("--text-h2: 1.875rem"); // 30px
+    expect(tokens).toContain("--text-small: 0.9375rem"); // 15px
+    // Display leading is measurably tighter than heading leading, not equal.
+    expect(tokens).toContain("--leading-display: 1.08");
+    expect(tokens).toContain("--leading-relaxed: 1.62");
+  });
+
+  it("shape matches the site: one surface radius, pills only for the CTA", () => {
+    /*
+     * MEASURED by scanning corner pixels: cards and images sit at 5–6px and
+     * the primary CTA is a true pill. The Phase 2 scale (10/14/16/18) was
+     * judged rather than measured and was wrong in direction. Aliases keep
+     * the old token names resolving to the one measured value.
+     */
+    expect(tokens).toContain("--radius-surface: 6px");
+    expect(tokens).toContain("--radius-card: var(--radius-surface)");
+    expect(tokens).toContain("--radius-panel: var(--radius-surface)");
+    expect(tokens).toContain("--radius-input: var(--radius-surface)");
+    expect(tokens).toContain("--radius-button: 999px");
+    // The site draws no shadow on any card.
+    expect(tokens).toContain("--shadow-raised: none");
+  });
+
+  it("the layout system carries the site's measured grid", () => {
+    expect(tokens).toContain("--content-max: 1152px");
+    expect(tokens).toContain("--grid-gutter: 32px");
+    expect(tokens).toContain("--grid-columns: 12");
+    expect(globals).toContain(".wla-split");
+    /*
+     * content-box is load-bearing: the site's 1152px is its CONTENT width with
+     * gutters outside it, so a border-box container would render narrow at
+     * every viewport and never line up with the public site.
+     */
+    /*
+     * The container's max-width must include BOTH gutters, so the content
+     * column is the site's 1152px with the gutters outside it. content-box
+     * was the first attempt and overflowed every small screen by exactly two
+     * gutters, so the guard pins the calc form specifically.
+     */
+    expect(globals).toContain(
+      "max-width: calc(var(--content-max) + 2 * var(--gutter-mobile))",
+    );
+    expect(globalsCode).not.toContain("box-sizing: content-box");
   });
 
   it("capitals are not used to manufacture hierarchy", () => {
     /*
-     * All-caps is harder to read at small sizes and is a generic UI tell. The
-     * only remaining use is the mission status badge, which UI/UX §23 itself
-     * shows in caps as its example of not relying on colour alone.
+     * MEASURED: the public site sets uppercase in exactly one place, its 12px
+     * footer group headings, and nowhere in the body of a page. Tracked-out
+     * caps at label size cost legibility for an audience that includes
+     * seven-year-olds.
+     *
+     * The status badge used to be the one exception. It is no longer set in
+     * caps: text, a marker and distinct action wording already carry status
+     * three times over, which is what Architecture §20 actually requires.
+     *
+     * Uses `code`, not `read` — this guard went green once off a comment.
      */
     const offenders: string[] = [];
     for (const file of [
       "src/components/mission/evidence-item.tsx",
+      "src/components/mission/mission-status.tsx",
+      "src/components/mission/mission-card.tsx",
       "src/components/mission/screens/index.tsx",
       "src/app/(academy)/academy/missions/[missionId]/complete/page.tsx",
     ]) {
-      if (read(file).includes("uppercase")) offenders.push(file);
+      if (code(file).includes("uppercase")) offenders.push(file);
     }
     expect(offenders).toEqual([]);
-    // The spec-anchored one stays.
-    expect(read("src/components/mission/mission-status.tsx")).toContain("uppercase");
   });
 
   it("the focus indicator clears 3:1 on every surface it lands on", () => {
@@ -366,59 +474,164 @@ describe("design refinements hold", () => {
     expect(focusBlock).toContain("box-shadow: var(--focus-ring)");
   });
 
+  it("the font variables are declared on the element :root refers to", () => {
+    /*
+     * A REGRESSION GUARD FOR A BUG THAT SHIPPED SILENTLY.
+     *
+     * tokens.css declares `--font-serif: var(--font-wla-serif), …` inside
+     * `:root`, which is <html>. next/font's generated classes were on <body>,
+     * a CHILD — so at the point of substitution --font-wla-serif was undefined,
+     * --font-serif computed to the guaranteed-invalid value, and every
+     * descendant inherited that invalidity. No heading in the application ever
+     * rendered in Fraunces.
+     *
+     * Nothing we had could see it. The classes were on the element, the
+     * @font-face rules were in the compiled CSS, and the font files served
+     * 200 — all true, all beside the point. It took a rendered screenshot.
+     *
+     * This guard is the cheap half of the lesson: it pins the variables to the
+     * element :root selects. It CANNOT prove the type renders, and no source
+     * test can. Only a screenshot closes that gap.
+     */
+    const layout = code("src/app/layout.tsx");
+    expect(layout).toMatch(/<html[^>]*className=\{`\$\{serif\.variable\}/);
+    expect(layout).toMatch(/<body>/);
+    expect(layout).not.toMatch(/<body[^>]*serif\.variable/);
+    // And the reference the fix exists to satisfy is still declared on :root.
+    expect(tokens).toContain("--font-serif: var(--font-wla-serif)");
+    expect(tokens).toContain("--font-sans:");
+  });
+
   it("reduced motion is still respected", () => {
     expect(tokens).toContain("prefers-reduced-motion: reduce");
   });
 });
 
 // ─────────────────────────────────────── Academy design: state & structure ──
-describe("the mission card encodes state structurally", () => {
-  const card = read("src/components/mission/mission-card.tsx");
+describe("the mission card follows the public site's anatomy", () => {
+  const card = code("src/components/mission/mission-card.tsx");
 
-  it("in progress is the only card on a sage surface", () => {
+  it("is not a box", () => {
     /*
-     * Architecture §4 — My Missions must answer "where do I continue?".
-     * Three identical cards leave that to be read; the surface answers it.
-     * UI/UX §7's "occasional Sage surfaces" is spent here and nowhere else.
+     * MEASURED (docs/DESIGN-LANGUAGE §6): on the public site a mission is a
+     * photograph, a title, a meta row and a description, with no border, no
+     * fill, no padding box and no shadow anywhere near it.
+     *
+     * The Academy used to draw a bordered, filled card and encode status in
+     * its SURFACE — in-progress sat on sage. That device went with the box.
+     * This guard exists so it does not quietly come back: reintroducing a
+     * border or fill on the card root is what would make the Academy stop
+     * looking like WLA.
      */
-    expect(card).toContain("in_progress: \"border-[var(--color-primary)] bg-[var(--color-surface-sage)]\"");
-    expect(card).toContain("not_started: \"border-[var(--color-border-strong)] bg-[var(--color-surface)]\"");
-    expect(card).toContain("complete: \"border-[var(--color-border)] bg-[var(--color-surface)]\"");
+    expect(card).not.toMatch(/SURFACE\s*:\s*Record<MissionStatus/);
+    const root = card.slice(card.indexOf("<Link"), card.indexOf("</Link>"));
+    const rootClasses = root.slice(0, root.indexOf(">"));
+    expect(rootClasses).not.toMatch(/\bborder\b|\bbg-\[|shadow/);
   });
 
-  it("surface is never the ONLY carrier of status", () => {
-    // Architecture §20 — status must not depend on colour alone.
+  it("status survives the loss of the surface", () => {
+    /*
+     * Architecture §20 — status must never depend on colour alone, and with
+     * the sage surface gone it now depends on nothing but text: the badge
+     * and the action wording. Both are mandatory.
+     */
     expect(card).toContain("MissionStatusBadge");
     expect(card).toContain("STATUS_ACTION[status]");
   });
 
   it("a completed mission is not dimmed or archived-looking", () => {
     // UI/UX §22.
-    expect(card).not.toMatch(/complete[\s\S]{0,120}(opacity|grayscale|line-through)/);
+    expect(card).not.toMatch(
+      /complete[\s\S]{0,120}(opacity|grayscale|line-through)/,
+    );
   });
 
-  it("shows delivery type in the meta, as §21 requires", () => {
+  it("shows delivery type in the dot-separated meta, as §21 requires", () => {
     expect(card).toContain("mission.delivery_type");
-    // Joined into the existing dot-separated meta, not added as a new line.
-    expect(card).toContain('.join(" · ")');
+    // One line of facts, not a second row. The separator is rendered with
+    // spacing by MetaList so the parts read as separate facts, matching the
+    // site — rather than joined into one run-on string.
+    expect(card).toContain("MetaList");
+    expect(code("src/components/ui/section.tsx")).toContain(
+      "mx-[var(--space-meta)]",
+    );
   });
 
-  it("mission imagery is left out rather than faked", () => {
-    // cover_image is null everywhere; no placeholder stands in for it.
-    expect(card).not.toContain("<img");
-    expect(card).not.toMatch(/placeholder|fallbackImage|defaultCover/i);
+  it("renders the supplied mission photograph", () => {
+    /*
+     * The image IS the card on the public site, so a card without one is a
+     * different component. The Six Names artwork was supplied on 2026-09-27.
+     */
+    expect(card).toContain("resolveMissionCover");
+    expect(card).toContain("next/image");
+    const covers = code("src/features/missions/covers.ts");
+    expect(covers).toContain("mission.cover_image");
+    expect(covers).toContain("/missions/six-names.jpg");
+  });
+
+  it("does not invent artwork for missions that have none", () => {
+    /*
+     * The client's standing instruction: if an asset does not exist, say so
+     * rather than substituting one.
+     *
+     * That includes a tinted stand-in. One was tried — a panel at the image's
+     * aspect ratio, to hold the grid's proportions — and rejected on sight:
+     * beside a real photograph it was the louder of the two, which is what a
+     * placeholder that size always becomes. A mission without a cover is
+     * title-led until its artwork exists.
+     *
+     * The cover block must therefore be a plain conditional with no else.
+     */
+    expect(card).not.toMatch(
+      /placeholder|fallbackImage|defaultCover|unsplash/i,
+    );
+    expect(card).toContain("{cover && (");
+    expect(card).not.toContain(") : (");
+  });
+
+  it("the Lab icons are the supplied assets, not redrawn ones", () => {
+    /*
+     * D-39: absent assets are not substituted. These were outstanding until
+     * the client supplied them on 2026-09-27; the slot was built and left
+     * empty in the meantime rather than filled with a guess.
+     *
+     * A standalone .svg served as image/svg+xml renders nothing without the
+     * namespace, which the supplied files did not carry — so that is asserted
+     * too, since a missing xmlns fails silently in the browser.
+     */
+    const labs = code("src/features/missions/labs.ts");
+    for (const lab of [
+      "challenge",
+      "decision",
+      "curiosity",
+      "wellbeing",
+      "navigation",
+    ]) {
+      expect(labs).toContain(`${lab}: "/labs/${lab}.svg"`);
+      const svg = read(`public/labs/${lab}.svg`);
+      expect(svg).toContain('xmlns="http://www.w3.org/2000/svg"');
+      expect(svg).toContain("<svg");
+      // Drawn in the brand olive, not an arbitrary colour.
+      expect(svg.toUpperCase()).toContain("#5F6A4F");
+    }
+    // The meta row still reads correctly without them.
+    expect(card).toContain("LAB_LABEL[mission.lab]");
   });
 });
 
 describe("Active Mission orientation", () => {
   const header = read("src/components/academy/academy-header.tsx");
-  const active = read("src/app/(academy)/academy/missions/[missionId]/active/page.tsx");
+  const active = read(
+    "src/app/(academy)/academy/missions/[missionId]/active/page.tsx",
+  );
 
   it("the header carries mission identity and both ways out (§35)", () => {
     expect(header).toContain("mission.title");
     expect(header).toContain("Mission Home");
     expect(header).toContain("Mission Kit");
-    expect(active).toContain("mission={{ title: mission.title, slug: mission.slug }}");
+    expect(active).toContain(
+      "mission={{ title: mission.title, slug: mission.slug }}",
+    );
   });
 
   it("that nav is not duplicated in the content area", () => {

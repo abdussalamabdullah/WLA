@@ -26,14 +26,15 @@ export default async function TryFreePage() {
     return (
       <main className="wla-container py-[var(--space-4xl)]">
         <Intro />
-        <div className="mt-[var(--space-xl)] flex flex-wrap gap-[var(--space-m)]">
+        <div className="mt-[var(--space-xl)] flex flex-wrap items-center gap-[var(--space-l)]">
           <Link href="/signup">
-            <Button size="large">Create an account</Button>
+            <Button size="large">Create an account →</Button>
           </Link>
-          <Link href="/login">
-            <Button variant="secondary" size="large">
-              Sign in
-            </Button>
+          <Link
+            href="/login"
+            className="inline-flex min-h-[var(--target-min)] items-center text-[length:var(--text-small)] font-medium underline decoration-[var(--color-border-strong)] underline-offset-4 hover:decoration-[var(--color-primary)]"
+          >
+            Sign in →
           </Link>
         </div>
       </main>

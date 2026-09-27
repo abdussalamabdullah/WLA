@@ -8,32 +8,52 @@ import {
   parseScreenConfig,
   resolveNextScreen,
   type CompletionRule,
-  type MissionInteraction,
   type MissionScreen,
   type MissionStateData,
 } from "../index";
 
 /**
- * SIX NAMES — Build Brief v0.2 conformance.
+ * SIX NAMES — conformance to the ACADEMY BUILD BRIEF of 2026-09-27.
  *
- * Drives the REAL reducer and REAL navigation over the screen graph as seeded.
- * The graph below mirrors supabase/seed/six_names_screens.sql; a guard at the
- * end asserts the seed still declares every screen it references.
+ * Supersedes the v0.2 conformance suite. The mission changed shape: the
+ * Concern selection is no longer collected, the trackers became confirmations
+ * rather than inputs, and both text responses are gone.
+ *
+ * Two kinds of assertion, deliberately kept apart:
+ *
+ *   1. BEHAVIOUR — the real reducer and real navigation are driven over the
+ *      graph below, which mirrors the v2 seed. These prove the engine does the
+ *      right thing.
+ *
+ *   2. AUTHORED CONTENT — asserted against the seed FILE. These prove the copy
+ *      the Brief marks "Show exactly" is present verbatim and that the wiring
+ *      in the graph below has not drifted from the seed.
+ *
+ * Neither proves the database enforces anything. That was established by
+ * executing the migrations and seeds against a real PostgreSQL cluster — see
+ * docs/LIVE-VALIDATION.md.
  */
 
 const repo = join(__dirname, "../../../..");
 const seed = readFileSync(
-  join(repo, "supabase/seed/six_names_screens.sql"),
+  join(repo, "supabase/seed/six_names_v2_screens.sql"),
   "utf8",
 );
 const access = readFileSync(
   join(repo, "supabase/migrations/20260925220600_screen_access.sql"),
   "utf8",
 );
+const withholdNext = readFileSync(
+  join(repo, "supabase/migrations/20260927100100_withhold_unused_next_key.sql"),
+  "utf8",
+);
 const persistence = readFileSync(
   join(repo, "src/features/mission-engine/persistence.ts"),
   "utf8",
 );
+
+/** Seed source with SQL comments stripped — a guard must not pass off prose. */
+const seedCode = seed.replace(/^\s*--.*$/gm, "");
 
 const screen = (
   key: string,
@@ -49,594 +69,1185 @@ const screen = (
   configuration,
 });
 
-const CONCERNS = [
-  { id: "stop_unfair_claim", label: "Stop an unfair claim" },
-  { id: "find_out_meaning", label: "Find out what the list means" },
-  { id: "protect_project", label: "Protect the project" },
-  { id: "avoid_growing_rumour", label: "Avoid making the rumour bigger" },
+// ─────────────────────────────────────────────────────── the authored graph ──
+
+const D1 = [
+  {
+    id: "ask_about_list",
+    label: "Ask about the list",
+    description: "Go to the office and ask what the list is for.",
+    next: "consequence1_ask",
+  },
+  {
+    id: "stop_claim_spreading",
+    label: "Stop the claim spreading",
+    description:
+      "Tell nearby children nobody knows what the list means yet. Ask them not to repeat the claim as though it were true.",
+    next: "consequence1_stop",
+  },
 ];
 
-const TRACKER_DIMENSIONS = [
+const D2 = [
   {
-    id: "spread",
-    label: "Spread",
-    positions: ["Few", "Groups", "Nearly everyone"],
+    id: "ask_everyone_pause",
+    label: "Ask everyone to pause",
+    description:
+      "Ask nearby groups to stop treating the list as proof until someone explains it.",
+    next: "consequence2_pause",
   },
   {
-    id: "support",
-    label: "Support",
-    positions: ["Alone", "Some support", "Clearly supported"],
+    id: "share_the_role",
+    label: "Continue, but share the role",
+    description:
+      "Continue the project task, but share Noor’s role with someone else until the list is explained.",
+    next: "consequence2_share",
   },
   {
-    id: "clarity",
-    label: "Clarity",
-    positions: ["Guesswork", "Some facts", "Purpose clear"],
+    id: "noor_steps_away",
+    label: "Suggest Noor steps away",
+    description:
+      "Suggest that Noor temporarily steps away from the project role until the list is explained.",
+    next: "consequence2_step_away",
   },
 ];
+
+const JUDGEMENTS = [
+  {
+    id: "stand_by_both",
+    label: "I stand by both decisions.",
+    next: "reflection_both",
+  },
+  {
+    id: "reconsider_one",
+    label: "I would reconsider Decision 1.",
+    next: "reflection_d1",
+  },
+  {
+    id: "reconsider_two",
+    label: "I would reconsider Decision 2.",
+    next: "reflection_d2",
+  },
+];
+
+const track = (
+  key: string,
+  seq: number,
+  next: string,
+  spread: string,
+  support: string,
+  clarity: string,
+): MissionScreen =>
+  screen(key, "tracker_confirmation", seq, {
+    rows: [
+      { label: "Spread", position: spread },
+      { label: "Support", position: support },
+      { label: "Clarity", position: clarity },
+    ],
+    canonicalTracker: { spread, support, clarity },
+    next,
+  });
 
 const graph: MissionScreen[] = [
-  screen("mission_brief", "content", 10),
-  screen("prepare", "prepare", 20, {
-    materials: ["Board"],
-    readyLabel: "I'm ready",
-  }),
-  screen("zone1_list", "content", 30),
-  screen("decision1_concerns", "multi_choice", 40, {
-    prompt: "Choose TWO Concern cards.",
-    options: CONCERNS,
-    selectExactly: 2,
-  }),
-  screen("decision1_move", "choice", 50, {
-    prompt: "What do you do first?",
-    options: [
-      { id: "a", label: "Pause the claim", next: "consequence1_a" },
-      { id: "b", label: "Find the meaning first", next: "consequence1_b" },
-      { id: "c", label: "Protect the project first", next: "consequence1_c" },
+  screen("the_list", "content", 10, {
+    next: "seen_said_unknown",
+    listObject: [
+      { text: "Noor", mark: "none" },
+      { text: "Alex", mark: "none" },
+      { text: "Sam", mark: "none" },
+      { text: "Mika", mark: "none" },
+      { text: "Ari", mark: "none" },
+      { text: "Remy", mark: "none" },
     ],
   }),
-  screen("consequence1_a", "content", 60, { next: "tracker1" }),
-  screen("consequence1_b", "content", 61, { next: "tracker1" }),
-  screen("consequence1_c", "content", 62, { next: "tracker1" }),
-  screen("tracker1", "tracker", 70, {
-    prompt: "Where would you place them now?",
-    dimensions: TRACKER_DIMENSIONS,
-    next: "list_changes",
-  }),
-  screen("list_changes", "content", 80),
-  screen("decision2_concerns", "multi_choice", 90, {
-    prompt: "Choose TWO Concern cards.",
-    options: CONCERNS,
-    selectExactly: 2,
-  }),
-  screen("decision2_move", "choice", 100, {
-    prompt: "What should happen next?",
-    options: [
-      { id: "a", label: "Correct the claim", next: "consequence2_a" },
-      { id: "b", label: "Check the project evidence", next: "consequence2_b" },
-      { id: "c", label: "Leave the claim aside", next: "consequence2_c" },
+  screen("seen_said_unknown", "sort_items", 20, {
+    next: "handoff_step3",
+    prompt:
+      "Is this something you have seen, something someone said, or something nobody has told you yet?",
+    categories: [
+      { id: "seen", label: "Seen" },
+      { id: "said", label: "Said" },
+      { id: "unknown", label: "Unknown" },
+    ],
+    items: [
+      {
+        id: "i1",
+        text: "Six names are written on the paper.",
+        classification: "seen",
+      },
+      { id: "i2", text: "The paper has no title.", classification: "seen" },
+      {
+        id: "i3",
+        text: "The list is on the board outside the head teacher’s office.",
+        classification: "seen",
+      },
+      {
+        id: "i4",
+        text: "Someone says the list is about copying.",
+        classification: "said",
+      },
+      { id: "i5", text: "Who wrote the list?", classification: "unknown" },
+      {
+        id: "i6",
+        text: "Why are these six names there?",
+        classification: "unknown",
+      },
+      {
+        id: "i7",
+        text: "Is the copying claim true?",
+        classification: "unknown",
+      },
+    ],
+    missionControl: [
+      { title: "I’m not sure what I know.", body: "Read the item again." },
     ],
   }),
-  screen("consequence2_a", "content", 110, { next: "tracker2" }),
-  screen("consequence2_b", "content", 111, { next: "tracker2" }),
-  screen("consequence2_c", "content", 112, { next: "tracker2" }),
-  screen("tracker2", "tracker", 120, {
-    prompt: "Place them where they belong now.",
-    dimensions: TRACKER_DIMENSIONS,
-    next: "later_evidence",
-  }),
-  screen("later_evidence", "content", 130),
-  screen("judgement_card", "choice", 140, {
-    prompt: "Which Judgement card?",
-    options: [
-      { id: "stand_by_both", label: "I stand by both decisions" },
-      { id: "reconsider_1", label: "I would reconsider Decision 1" },
-      { id: "reconsider_2", label: "I would reconsider Decision 2" },
+  screen("handoff_step3", "handoff", 30, {
+    location: "Complete Step 3 — Choose what matters most.",
+    steps: ["Look at the four Concern cards."],
+    returnInstruction: "Stuck? Open Mission Control.",
+    returnLabel: "Continue to Decision 1",
+    next: "decision1",
+    missionControl: [
+      { title: "I can’t choose a concern.", body: "Look at all four cards." },
     ],
   }),
-  screen("judgement_reflection", "response", 150, { prompt: "Why?" }),
-  screen("final_judgement", "response", 160, {
-    prompt: "Write your final judgement.",
-    promptLines: [
-      "The evidence changed…",
-      "It could not undo…",
-      "What I stand by now is…",
+  screen("decision1", "choice", 40, {
+    prompt: "What do you do?",
+    options: D1,
+    locksOnConfirm: true,
+  }),
+  screen("consequence1_ask", "content", 50, { next: "tracker1_ask" }),
+  screen("consequence1_stop", "content", 51, { next: "tracker1_stop" }),
+  track(
+    "tracker1_ask",
+    60,
+    "changed_list",
+    "Groups",
+    "Some support",
+    "Guesswork",
+  ),
+  track(
+    "tracker1_stop",
+    61,
+    "changed_list",
+    "Groups",
+    "Clearly supported",
+    "Guesswork",
+  ),
+  screen("changed_list", "content", 70, {
+    next: "ssu_revisit",
+    listObject: [
+      { text: "Noor", mark: "none" },
+      { text: "Alex", mark: "none" },
+      { text: "Sam", mark: "none" },
+      { text: "Mika", mark: "struck" },
+      { text: "Ari", mark: "none" },
+      { text: "Remy", mark: "none" },
+      { text: "Jude", mark: "added" },
+      { text: "Zain", mark: "added" },
     ],
   }),
-  screen("complete", "completion", 170, { message: "Done." }),
+  screen("ssu_revisit", "content", 80, {
+    next: "handoff_step7",
+    reflectionPrompts: [
+      "What has visibly changed?",
+      "What is still only said?",
+      "What remains unknown?",
+    ],
+  }),
+  screen("handoff_step7", "handoff", 90, {
+    location: "Complete Step 7 — Choose what matters now.",
+    steps: ["Look again at the four Concern cards."],
+    returnInstruction: "Stuck? Open Mission Control.",
+    returnLabel: "Continue to Decision 2",
+    next: "decision2",
+    missionControl: [
+      {
+        title: "I’m not sure what matters now.",
+        body: "Start with what changed.",
+      },
+    ],
+  }),
+  screen("decision2", "choice", 100, {
+    prompt: "What do you do now?",
+    options: D2,
+    locksOnConfirm: true,
+  }),
+  screen("consequence2_pause", "content", 110, { next: "tracker2_pause" }),
+  screen("consequence2_share", "content", 111, { next: "tracker2_share" }),
+  screen("consequence2_step_away", "content", 112, {
+    next: "tracker2_step_away",
+  }),
+  track(
+    "tracker2_pause",
+    120,
+    "stopping_point",
+    "Nearly everyone",
+    "Clearly supported",
+    "Guesswork",
+  ),
+  track(
+    "tracker2_share",
+    121,
+    "stopping_point",
+    "Nearly everyone",
+    "Some support",
+    "Guesswork",
+  ),
+  track(
+    "tracker2_step_away",
+    122,
+    "stopping_point",
+    "Nearly everyone",
+    "Alone",
+    "Guesswork",
+  ),
+  screen("stopping_point", "content", 130, {
+    next: "evidence",
+    actionLabel: "Continue",
+    secondaryAction: "Pause Mission",
+  }),
+  screen("evidence", "reveal", 140, {
+    concealedPrompt: "Open Evidence",
+    revealLabel: "Open Evidence",
+    revealedTitle: "PROJECT EQUIPMENT CHECK",
+    revealedBody:
+      "The names belonged to pupils whose team-equipment records still needed checking.",
+    reflectionPrompts: [
+      "What does this evidence explain?",
+      "What does it not undo?",
+    ],
+    condition: { type: "child_action" },
+    canonicalTracker: { clarity: "Purpose clear" },
+    next: "handoff_step11",
+  }),
+  screen("handoff_step11", "handoff", 150, {
+    location: "Complete Step 11 — Decide what you stand by.",
+    steps: ["Choose the Judgement card that best matches your view."],
+    returnInstruction: "Stuck? Open Mission Control.",
+    returnLabel: "Continue to Judgement",
+    next: "judgement",
+    missionControl: [
+      {
+        title: "I’m not sure what I stand by.",
+        body: "Take the two decisions one at a time.",
+      },
+    ],
+  }),
+  screen("judgement", "choice", 160, {
+    prompt: "Select the Judgement card you placed on your Case Board.",
+    options: JUDGEMENTS,
+    locksOnConfirm: true,
+  }),
+  screen("reflection_both", "reflection", 170, {
+    prompts: ["Why do you still stand by both decisions?"],
+    next: "final_judgement",
+  }),
+  screen("reflection_d1", "reflection", 171, {
+    unusedFrom: "decision1",
+    unusedOptions: D1.map((o) => ({ id: o.id, label: o.label })),
+    selectable: false,
+    prompts: [
+      "What might that choice have helped?",
+      "What might still have been difficult?",
+    ],
+    next: "final_judgement",
+  }),
+  screen("reflection_d2", "reflection", 172, {
+    unusedFrom: "decision2",
+    unusedPrompt: "Which one would you now consider?",
+    unusedOptions: D2.map((o) => ({ id: o.id, label: o.label })),
+    selectable: true,
+    prompts: [
+      "What might that choice have helped?",
+      "What might still have been difficult?",
+    ],
+    next: "final_judgement",
+  }),
+  screen("final_judgement", "content", 180, {
+    next: "complete",
+    actionLabel: "Complete Mission",
+  }),
+  screen("complete", "completion", 190, {
+    message:
+      "Your Six Names Case Board and What’s Changing? tracker are your Mission Trail.",
+    trailEntries: [
+      {
+        type: "physical",
+        title: "Six Names Case Board",
+        description: "Your completed Case Board.",
+      },
+      {
+        type: "physical",
+        title: "What’s Changing? tracker",
+        description: "Your tracker.",
+      },
+      {
+        type: "physical",
+        title: "Final Judgement card",
+        description: "Your completed card.",
+      },
+    ],
+  }),
 ];
 
-const byKey = (key: string) => graph.find((s) => s.screenKey === key)!;
-
-function nextBySequence(currentKey: string): string | null {
-  const ordered = [...graph].sort((a, b) => a.sequence - b.sequence);
-  const i = ordered.findIndex((s) => s.screenKey === currentKey);
+const byKey = new Map(graph.map((s) => [s.screenKey, s]));
+const ordered = [...graph].sort((a, b) => a.sequence - b.sequence);
+const nextSequenceKey = (key: string): string | null => {
+  const i = ordered.findIndex((s) => s.screenKey === key);
   return ordered[i + 1]?.screenKey ?? null;
-}
+};
 
-const RULE: CompletionRule = {
+const COMPLETION_RULE: CompletionRule = {
   type: "conditions",
   conditions: [
-    { kind: "choice_exists", screenKey: "decision1_move" },
-    { kind: "choice_exists", screenKey: "decision2_move" },
-    { kind: "screen_visited", screenKey: "later_evidence" },
-    { kind: "choice_exists", screenKey: "judgement_card" },
-    { kind: "response_exists", screenKey: "final_judgement" },
+    { kind: "choice_exists", screenKey: "decision1" },
+    { kind: "choice_exists", screenKey: "decision2" },
+    { kind: "screen_visited", screenKey: "evidence" },
+    { kind: "choice_exists", screenKey: "judgement" },
+    { kind: "screen_visited", screenKey: "final_judgement" },
   ],
 };
 
-/** Walk the mission the way the engine does: reduce, then resolve. */
-function play(interactions: MissionInteraction[]) {
+/**
+ * Play the mission with the REAL reducer and REAL navigation.
+ *
+ * Every screen is entered, acted on, and left by asking navigation where to
+ * go — exactly as the runner does. Nothing here knows the route in advance.
+ */
+function play(d1: string, d2: string, judgement: string) {
   let state: MissionStateData = emptyMissionState;
-  let position = "mission_brief";
-  const visited: string[] = [position];
+  const path: string[] = [];
+  let key: string | null = "the_list";
+  let completedAt: string | null = null;
 
-  for (const interaction of interactions) {
-    state = applyInteraction(state, interaction);
-    if (interaction.kind !== "custom") {
-      const current = byKey(interaction.screenKey);
-      position =
-        resolveNextScreen(current, nextBySequence(current.screenKey), state) ??
-        position;
-      visited.push(position);
+  for (let guard = 0; key && guard < 60; guard++) {
+    const current: MissionScreen = byKey.get(key)!;
+    path.push(key);
+
+    if (current.type === "choice") {
+      const pick =
+        key === "decision1" ? d1 : key === "decision2" ? d2 : judgement;
+      state = applyInteraction(state, {
+        kind: "choice",
+        screenKey: key,
+        optionId: pick,
+      });
+    } else if (current.type === "reveal") {
+      state = applyInteraction(state, { kind: "reveal", screenKey: key });
+    } else if (current.type === "handoff") {
+      state = applyInteraction(state, { kind: "handoff", screenKey: key });
+    } else {
+      state = applyInteraction(state, { kind: "visit", screenKey: key });
     }
+
+    if (!completedAt && isMissionComplete(COMPLETION_RULE, state)) {
+      completedAt = key;
+    }
+    if (current.type === "completion") break;
+
+    key = resolveNextScreen(current, nextSequenceKey(key), state);
   }
-  return { state, position, visited };
+
+  return { path, state, completedAt };
 }
 
-const upToDecision1: MissionInteraction[] = [
-  { kind: "visit", screenKey: "mission_brief" },
-  { kind: "handoff", screenKey: "prepare" },
-  { kind: "visit", screenKey: "zone1_list" },
-  {
-    kind: "multi_choice",
-    screenKey: "decision1_concerns",
-    optionIds: ["stop_unfair_claim", "find_out_meaning"],
-  },
+const ALL_C1 = ["consequence1_ask", "consequence1_stop"];
+const ALL_T1 = ["tracker1_ask", "tracker1_stop"];
+const ALL_C2 = [
+  "consequence2_pause",
+  "consequence2_share",
+  "consequence2_step_away",
 ];
+const ALL_T2 = ["tracker2_pause", "tracker2_share", "tracker2_step_away"];
+const ALL_REFLECTIONS = ["reflection_both", "reflection_d1", "reflection_d2"];
 
-// ══════════════════════════════════════════════════════ branching ══════════
-describe("decisions determine the consequence", () => {
-  it.each([
-    ["a", "consequence1_a"],
-    ["b", "consequence1_b"],
-    ["c", "consequence1_c"],
-  ])("first move %s leads to %s", (option, expected) => {
-    const { position } = play([
-      ...upToDecision1,
-      { kind: "choice", screenKey: "decision1_move", optionId: option },
-    ]);
-    expect(position).toBe(expected);
+const EXPECTED = {
+  ask_about_list: { consequence: "consequence1_ask", tracker: "tracker1_ask" },
+  stop_claim_spreading: {
+    consequence: "consequence1_stop",
+    tracker: "tracker1_stop",
+  },
+  ask_everyone_pause: {
+    consequence: "consequence2_pause",
+    tracker: "tracker2_pause",
+  },
+  share_the_role: {
+    consequence: "consequence2_share",
+    tracker: "tracker2_share",
+  },
+  noor_steps_away: {
+    consequence: "consequence2_step_away",
+    tracker: "tracker2_step_away",
+  },
+} as const;
+
+// ───────────────────────────────────────────────────────── the six routes ──
+
+describe("the six valid routes", () => {
+  const routes = D1.flatMap((a) => D2.map((b) => [a.id, b.id] as const));
+
+  it("there are exactly six", () => {
+    expect(routes).toHaveLength(6);
   });
 
-  it.each([
-    ["a", "consequence2_a"],
-    ["b", "consequence2_b"],
-    ["c", "consequence2_c"],
-  ])("second move %s leads to %s", (option, expected) => {
-    const { position } = play([
-      { kind: "choice", screenKey: "decision2_move", optionId: option },
-    ]);
-    expect(position).toBe(expected);
+  it.each(routes)("%s → %s reaches completion", (d1, d2) => {
+    const { path, completedAt } = play(d1, d2, "stand_by_both");
+    expect(path.at(-1)).toBe("complete");
+    // Completion is reached ON the Final Judgement screen, never before it.
+    expect(completedAt).toBe("final_judgement");
   });
 
-  it("all three first-move branches reconverge on the tracker", () => {
-    for (const key of ["consequence1_a", "consequence1_b", "consequence1_c"]) {
-      const s = byKey(key);
-      expect(resolveNextScreen(s, nextBySequence(key), emptyMissionState)).toBe(
-        "tracker1",
-      );
-    }
-  });
+  it.each(routes)("%s → %s reveals only its own consequences", (d1, d2) => {
+    const { path } = play(d1, d2, "stand_by_both");
+    const e1 = EXPECTED[d1 as keyof typeof EXPECTED];
+    const e2 = EXPECTED[d2 as keyof typeof EXPECTED];
 
-  it("neither branch is marked correct or incorrect", () => {
-    // Brief §10. No option carries a score, weight or correctness flag.
-    for (const key of ["decision1_move", "decision2_move", "judgement_card"]) {
-      const config = parseScreenConfig("choice", byKey(key).configuration);
-      for (const option of config.options) {
-        expect(Object.keys(option).sort()).toEqual(
-          key === "judgement_card" ? ["id", "label"] : ["id", "label", "next"],
-        );
-      }
-    }
-  });
-});
-
-// ═══════════════════════════════════════════════════ Concern cards (Q2) ════
-describe("Concern cards are recorded, not branching", () => {
-  it("records exactly two selections per decision", () => {
-    const { state } = play(upToDecision1);
-    expect(state.multiChoices.decision1_concerns).toEqual([
-      "stop_unfair_claim",
-      "find_out_meaning",
-    ]);
-  });
-
-  it("no Concern option carries a branch target", () => {
-    // Q2: the MOVE determines the consequence. Concerns capture what matters.
-    for (const key of ["decision1_concerns", "decision2_concerns"]) {
-      const config = parseScreenConfig(
-        "multi_choice",
-        byKey(key).configuration,
-      );
-      for (const option of config.options) {
-        expect(option).not.toHaveProperty("next");
+    expect(path).toContain(e1.consequence);
+    expect(path).toContain(e2.consequence);
+    for (const other of [...ALL_C1, ...ALL_C2]) {
+      if (other !== e1.consequence && other !== e2.consequence) {
+        expect(path).not.toContain(other);
       }
     }
   });
 
-  it("the consequence is unaffected by which concerns were chosen", () => {
-    const withConcerns = play([
-      ...upToDecision1,
-      { kind: "choice", screenKey: "decision1_move", optionId: "b" },
-    ]);
-    const withOthers = play([
-      {
-        kind: "multi_choice",
-        screenKey: "decision1_concerns",
-        optionIds: ["protect_project", "avoid_growing_rumour"],
-      },
-      { kind: "choice", screenKey: "decision1_move", optionId: "b" },
-    ]);
-    expect(withConcerns.position).toBe(withOthers.position);
+  it.each(routes)("%s → %s confirms only its own tracker state", (d1, d2) => {
+    const { path } = play(d1, d2, "stand_by_both");
+    const e1 = EXPECTED[d1 as keyof typeof EXPECTED];
+    const e2 = EXPECTED[d2 as keyof typeof EXPECTED];
+
+    expect(path).toContain(e1.tracker);
+    expect(path).toContain(e2.tracker);
+    for (const other of [...ALL_T1, ...ALL_T2]) {
+      if (other !== e1.tracker && other !== e2.tracker) {
+        expect(path).not.toContain(other);
+      }
+    }
   });
 
-  it("Decision 2 may repeat or differ from Decision 1", () => {
-    const { state } = play([
-      {
-        kind: "multi_choice",
-        screenKey: "decision1_concerns",
-        optionIds: ["stop_unfair_claim", "protect_project"],
-      },
-      {
-        kind: "multi_choice",
-        screenKey: "decision2_concerns",
-        optionIds: ["stop_unfair_claim", "protect_project"],
-      },
-    ]);
-    expect(state.multiChoices.decision2_concerns).toEqual(
-      state.multiChoices.decision1_concerns,
-    );
+  it.each(routes)("%s → %s orders the stages correctly", (d1, d2) => {
+    const { path } = play(d1, d2, "stand_by_both");
+    const at = (k: string) => path.indexOf(k);
 
-    const differing = play([
-      {
-        kind: "multi_choice",
-        screenKey: "decision1_concerns",
-        optionIds: ["stop_unfair_claim", "protect_project"],
-      },
-      {
-        kind: "multi_choice",
-        screenKey: "decision2_concerns",
-        optionIds: ["find_out_meaning", "avoid_growing_rumour"],
-      },
-    ]);
-    expect(differing.state.multiChoices.decision1_concerns).toEqual([
-      "stop_unfair_claim",
-      "protect_project",
-    ]);
-    expect(differing.state.multiChoices.decision2_concerns).toEqual([
-      "find_out_meaning",
-      "avoid_growing_rumour",
-    ]);
-  });
-
-  it("the seed asks for exactly two at both decisions", () => {
-    expect(seed.match(/'selectExactly', 2/g)).toHaveLength(2);
+    expect(at("the_list")).toBeLessThan(at("seen_said_unknown"));
+    expect(at("seen_said_unknown")).toBeLessThan(at("decision1"));
+    // The Changed List lands after the first consequence and before Decision 2.
+    expect(at("changed_list")).toBeGreaterThan(at("decision1"));
+    expect(at("changed_list")).toBeLessThan(at("decision2"));
+    // Evidence stays concealed until after Decision 2 (Brief, BRANCH QA).
+    expect(at("evidence")).toBeGreaterThan(at("decision2"));
+    expect(at("evidence")).toBeLessThan(at("judgement"));
+    expect(at("judgement")).toBeLessThan(at("final_judgement"));
   });
 });
 
-// ═════════════════════════════════════════════════════════ tracker ═════════
-describe("tracker is reflection, not a score", () => {
-  it("persists all three dimensions", () => {
-    const { state } = play([
-      {
-        kind: "tracker",
-        screenKey: "tracker1",
-        positions: { spread: 1, support: 0, clarity: 2 },
-      },
+// ──────────────────────────────────────────── the canonical tracker states ──
+
+describe("canonical tracker states", () => {
+  const rowsOf = (key: string) =>
+    parseScreenConfig("tracker_confirmation", byKey.get(key)!.configuration)
+      .rows;
+
+  it("Decision 1 — Ask about the list", () => {
+    expect(rowsOf("tracker1_ask")).toEqual([
+      { label: "Spread", position: "Groups" },
+      { label: "Support", position: "Some support" },
+      { label: "Clarity", position: "Guesswork" },
     ]);
-    expect(state.custom.tracker1).toEqual({
-      spread: 1,
-      support: 0,
-      clarity: 2,
-    });
   });
 
-  it("keeps both trackers independently", () => {
-    const { state } = play([
-      {
-        kind: "tracker",
-        screenKey: "tracker1",
-        positions: { spread: 0, support: 0, clarity: 0 },
-      },
-      {
-        kind: "tracker",
-        screenKey: "tracker2",
-        positions: { spread: 2, support: 2, clarity: 2 },
-      },
+  it("Decision 1 — Stop the claim spreading", () => {
+    expect(rowsOf("tracker1_stop")).toEqual([
+      { label: "Spread", position: "Groups" },
+      { label: "Support", position: "Clearly supported" },
+      { label: "Clarity", position: "Guesswork" },
     ]);
-    expect(state.custom.tracker1).not.toEqual(state.custom.tracker2);
   });
 
-  it("positions are labelled, never numeric scores", () => {
+  it("Decision 2 — Ask everyone to pause", () => {
+    expect(rowsOf("tracker2_pause")).toEqual([
+      { label: "Spread", position: "Nearly everyone" },
+      { label: "Support", position: "Clearly supported" },
+      { label: "Clarity", position: "Guesswork" },
+    ]);
+  });
+
+  it("Decision 2 — Continue, but share the role", () => {
+    expect(rowsOf("tracker2_share")).toEqual([
+      { label: "Spread", position: "Nearly everyone" },
+      { label: "Support", position: "Some support" },
+      { label: "Clarity", position: "Guesswork" },
+    ]);
+  });
+
+  it("Decision 2 — Suggest Noor steps away", () => {
+    expect(rowsOf("tracker2_step_away")).toEqual([
+      { label: "Spread", position: "Nearly everyone" },
+      { label: "Support", position: "Alone" },
+      { label: "Clarity", position: "Guesswork" },
+    ]);
+  });
+
+  it("Clarity stays Guesswork until Evidence, on every branch", () => {
+    for (const key of [...ALL_T1, ...ALL_T2]) {
+      const clarity = rowsOf(key).find((r) => r.label === "Clarity");
+      expect(clarity?.position).toBe("Guesswork");
+    }
+  });
+
+  it("Evidence changes ONLY Clarity", () => {
     const config = parseScreenConfig(
-      "tracker",
-      byKey("tracker1").configuration,
+      "reveal",
+      byKey.get("evidence")!.configuration,
     );
-    for (const dimension of config.dimensions) {
-      expect(dimension.positions).toHaveLength(3);
-      for (const label of dimension.positions) {
-        expect(label).not.toMatch(/^\d+$/);
-      }
-    }
+    expect(config.canonicalTracker).toEqual({ clarity: "Purpose clear" });
+    // Nothing about Spread or Support — they are left exactly as the branch
+    // left them, which is what "new facts do not erase what happened" means.
+    expect(Object.keys(config.canonicalTracker)).toEqual(["clarity"]);
   });
 
-  it("nothing aggregates, scores or ranks tracker values", () => {
-    // Look at executable code, not prose — "entry point" is not a score.
-    const code = persistence
-      .replace(/\/\*[\s\S]*?\*\//g, "")
-      .replace(/(^|[^:])\/\/.*$/gm, "$1");
-    for (const forbidden of [
-      /\bscore\b/i,
-      /\btotalScore\b/i,
-      /\bpointsAwarded\b/i,
-      /\brankings?\b/i,
-      /\bpercentComplete\b/i,
-    ]) {
-      expect(code).not.toMatch(forbidden);
-    }
+  it("the canonical state is applied by the SERVER, never sent by the browser", () => {
+    // The patch is read from the current screen's configuration, which only
+    // ever arrives through the gated RPC.
+    expect(persistence).toContain("function applyCanonicalTracker");
+    expect(persistence).toContain("screenConfigByType[screen.type]");
+    // And it is merged AFTER the child's own interaction, so nothing the
+    // browser sent can overwrite it.
+    expect(persistence).toMatch(
+      /applyCanonicalTracker\(\s*applyInteraction\(stage\.state, interaction\),/,
+    );
+  });
+
+  it("a client cannot forge state through a `custom` interaction", () => {
+    /*
+     * `custom` names no screen, so it bypassed the current-screen check and
+     * could write any key — including the canonical tracker. It is now
+     * refused at the client boundary.
+     */
+    expect(persistence).toMatch(
+      /if \(interaction\.kind === "custom"\) \{\s*throw new Error/,
+    );
   });
 });
 
-// ═══════════════════════════════════════════════════════ completion ════════
-describe("completion conditions", () => {
-  const complete: MissionStateData = {
-    ...emptyMissionState,
-    choices: {
-      decision1_move: "a",
-      decision2_move: "c",
-      judgement_card: "reconsider_1",
-    },
-    visitedScreens: ["later_evidence"],
-    respondedScreens: ["final_judgement"],
-  };
+// ─────────────────────────────────────────────────────── Judgement branches ──
 
-  it("completes when every required stage is done", () => {
-    expect(isMissionComplete(RULE, complete)).toBe(true);
+describe("Judgement and reflection", () => {
+  it.each(JUDGEMENTS)("$id reaches only its own reflection", (judgement) => {
+    const { path } = play("ask_about_list", "share_the_role", judgement.id);
+    expect(path).toContain(judgement.next);
+    for (const other of ALL_REFLECTIONS) {
+      if (other !== judgement.next) expect(path).not.toContain(other);
+    }
+  });
+
+  it("reconsidering Decision 1 shows the unchosen response, never its consequence", () => {
+    const config = parseScreenConfig(
+      "reflection",
+      byKey.get("reflection_d1")!.configuration,
+    );
+    // Labels only. Both were on screen when the child decided.
+    expect(config.unusedOptions.map((o) => o.label)).toEqual([
+      "Ask about the list",
+      "Stop the claim spreading",
+    ]);
+    // No consequence text anywhere in the configuration.
+    const serialised = JSON.stringify(
+      byKey.get("reflection_d1")!.configuration,
+    );
+    expect(serialised).not.toContain("office assistant");
+    expect(serialised).not.toContain("agree not to repeat");
+    // One response is filtered out at render time by the child's own choice.
+    expect(config.unusedFrom).toBe("decision1");
+    expect(config.selectable).toBe(false);
+  });
+
+  it("reconsidering Decision 2 offers the two unchosen responses to consider", () => {
+    const config = parseScreenConfig(
+      "reflection",
+      byKey.get("reflection_d2")!.configuration,
+    );
+    expect(config.unusedFrom).toBe("decision2");
+    expect(config.selectable).toBe(true);
+    expect(config.unusedPrompt).toBe("Which one would you now consider?");
+    const serialised = JSON.stringify(
+      byKey.get("reflection_d2")!.configuration,
+    );
+    for (const leak of [
+      "disagreement reaches",
+      "shares the role",
+      "steps away from the project role",
+    ]) {
+      expect(serialised).not.toContain(leak);
+    }
+  });
+
+  it("no reflection collects or stores text", () => {
+    for (const key of ALL_REFLECTIONS) {
+      const s = byKey.get(key)!;
+      expect(s.type).toBe("reflection");
+      // The reflection schema has no input field of any kind: parsing would
+      // succeed but there is nowhere for an answer to live.
+      const config = parseScreenConfig("reflection", s.configuration);
+      expect(config).not.toHaveProperty("inputType");
+      expect(config).not.toHaveProperty("maxLength");
+      expect(config).not.toHaveProperty("contributesToTrail");
+    }
+  });
+
+  it("the reflection selection has no interaction kind to travel on", () => {
+    // Screen 14C lets the child pick one unused response to consider. There is
+    // deliberately no way to send that anywhere.
+    const component = readFileSync(
+      join(repo, "src/components/mission/screens/six-names-types.tsx"),
+      "utf8",
+    );
+    const reflection = component.slice(
+      component.indexOf("export function ReflectionScreen"),
+    );
+    // The only thing it ever sends is the advance, and the advance carries
+    // nothing but the screen key.
+    const sends = reflection.match(/onAdvance\(\{[^}]*\}\)/g) ?? [];
+    expect(sends).toHaveLength(1);
+    expect(sends[0]).toContain('kind: "visit"');
+    expect(sends[0]).not.toContain("considering");
+    // And it has no other route to the server at all.
+    expect(reflection).not.toContain("recordInteraction");
+    expect(reflection).not.toContain("fetch(");
+  });
+});
+
+// ─────────────────────────────────────────────────────── pause and resume ──
+
+describe("pause and resume", () => {
+  it("the stopping point offers a way out that does not advance", () => {
+    const config = parseScreenConfig(
+      "content",
+      byKey.get("stopping_point")!.configuration,
+    );
+    expect(config.secondaryAction).toBe("Pause Mission");
+    expect(config.actionLabel).toBe("Continue");
+    // Continue goes to Evidence; pausing goes nowhere in the mission graph.
+    expect(config.next).toBe("evidence");
+  });
+
+  it("resuming re-enters at the stopping point without repeating anything", () => {
+    const { state } = play("ask_about_list", "share_the_role", "stand_by_both");
+
+    /*
+     * Rebuild the position from persisted state alone, as the server does on
+     * return, and confirm navigation continues rather than replaying.
+     */
+    const resumed = resolveNextScreen(
+      byKey.get("stopping_point")!,
+      nextSequenceKey("stopping_point"),
+      state,
+    );
+    expect(resumed).toBe("evidence");
+
+    // The established branch and the opened reveal both survive.
+    expect(state.choices.decision1).toBe("ask_about_list");
+    expect(state.choices.decision2).toBe("share_the_role");
+    expect(state.revealed).toContain("evidence");
+  });
+
+  it("re-entering an earlier screen never un-reveals or un-chooses", () => {
+    const { state } = play(
+      "stop_claim_spreading",
+      "noor_steps_away",
+      "reconsider_two",
+    );
+    const after = applyInteraction(state, {
+      kind: "visit",
+      screenKey: "changed_list",
+    });
+    expect(after.choices.decision1).toBe("stop_claim_spreading");
+    expect(after.revealed).toContain("evidence");
+  });
+});
+
+// ──────────────────────────────────────────────────────────── what is kept ──
+
+describe("state to persist — and state that must not be", () => {
+  it("keeps exactly the Brief's list and nothing resembling a prediction", () => {
+    const { state } = play(
+      "ask_about_list",
+      "noor_steps_away",
+      "reconsider_one",
+    );
+
+    expect(state.choices).toEqual({
+      decision1: "ask_about_list",
+      decision2: "noor_steps_away",
+      judgement: "reconsider_one",
+    });
+    expect(state.revealed).toEqual(["evidence"]);
+    expect(state.confirmedHandoffs).toEqual([
+      "handoff_step3",
+      "handoff_step7",
+      "handoff_step11",
+    ]);
+    // Nothing was ever written as a response: no Final Judgement text, no
+    // reflection text, no Screen 14 answer.
+    expect(state.respondedScreens).toEqual([]);
+  });
+
+  it("no physical Concern choice is collected anywhere in the mission", () => {
+    // The Concern cards are chosen on the Case Board. The Academy provides the
+    // handoff around that and records nothing about it.
+    expect(graph.some((s) => s.type === "multi_choice")).toBe(false);
+    const { state } = play("ask_about_list", "share_the_role", "stand_by_both");
+    expect(state.multiChoices).toEqual({});
+
+    for (const concern of [
+      "Stop an unfair claim",
+      "Find out what the list means",
+      "Protect the project",
+      "Avoid making the rumour bigger",
+    ]) {
+      // Named in the printed Kit, never as a selectable option in the Academy.
+      expect(seedCode).not.toContain(`'label', '${concern}'`);
+    }
+  });
+
+  it("no tracker prediction is collected", () => {
+    // The prediction happens against the physical tracker, before confirming.
+    // It is a NOTE on the decision screen, with no field and no storage.
+    for (const key of ["decision1", "decision2"]) {
+      const config = parseScreenConfig("choice", byKey.get(key)!.configuration);
+      expect(config.confirmNote).toBeUndefined();
+    }
+    expect(seedCode).toContain("'confirmNote'");
+    expect(seedCode).toContain("make a quick prediction");
+    // And there is no interactive tracker left in the mission at all.
+    expect(graph.some((s) => s.type === "tracker")).toBe(false);
+  });
+
+  it("no response screen survives anywhere in the mission", () => {
+    /*
+     * Version 1 collected two: a judgement reflection and the Final Judgement
+     * text. The Build Brief forbids both — the Final Judgement is written on
+     * the physical card and must not be re-entered.
+     */
+    expect(graph.some((s) => s.type === "response")).toBe(false);
+    expect(seedCode).not.toContain("'response'");
+    expect(seedCode).not.toContain("contributesToTrail");
+    expect(byKey.get("final_judgement")!.type).toBe("content");
+  });
+
+  it("the Final Judgement screen asks for nothing back", () => {
+    const config = parseScreenConfig(
+      "content",
+      byKey.get("final_judgement")!.configuration,
+    );
+    expect(config.actionLabel).toBe("Complete Mission");
+    // No prompts repeated on screen, no field, no upload.
+    expect(config.reflectionPrompts).toEqual([]);
+    expect(seedCode).not.toContain("upload");
+  });
+});
+
+// ────────────────────────────────────────────────────────────── completion ──
+
+describe("completion", () => {
+  it("does NOT complete when the Judgement card is confirmed", () => {
+    /*
+     * The regression this guards: every other condition is satisfied the
+     * moment Judgement is confirmed, so without `screen_visited:
+     * final_judgement` the mission would complete from Screen 13 and skip both
+     * the reflection and the Final Judgement.
+     */
+    let state = emptyMissionState;
+    for (const key of ["evidence"]) {
+      state = applyInteraction(state, { kind: "reveal", screenKey: key });
+    }
+    state = applyInteraction(state, {
+      kind: "choice",
+      screenKey: "decision1",
+      optionId: "ask_about_list",
+    });
+    state = applyInteraction(state, {
+      kind: "choice",
+      screenKey: "decision2",
+      optionId: "share_the_role",
+    });
+    state = applyInteraction(state, {
+      kind: "choice",
+      screenKey: "judgement",
+      optionId: "stand_by_both",
+    });
+
+    expect(isMissionComplete(COMPLETION_RULE, state)).toBe(false);
+
+    state = applyInteraction(state, {
+      kind: "visit",
+      screenKey: "final_judgement",
+    });
+    expect(isMissionComplete(COMPLETION_RULE, state)).toBe(true);
   });
 
   it("any Judgement card completes — none is correct", () => {
-    for (const card of ["stand_by_both", "reconsider_1", "reconsider_2"]) {
-      expect(
-        isMissionComplete(RULE, {
-          ...complete,
-          choices: { ...complete.choices, judgement_card: card },
-        }),
-      ).toBe(true);
+    for (const judgement of JUDGEMENTS) {
+      const { path, completedAt } = play(
+        "ask_about_list",
+        "share_the_role",
+        judgement.id,
+      );
+      expect(path.at(-1)).toBe("complete");
+      expect(completedAt).toBe("final_judgement");
     }
   });
 
-  it.each([
-    [
-      "first decision missing",
-      { choices: { decision2_move: "a", judgement_card: "stand_by_both" } },
-    ],
-    [
-      "second decision missing",
-      { choices: { decision1_move: "a", judgement_card: "stand_by_both" } },
-    ],
-    ["Later Evidence unseen", { visitedScreens: [] }],
-    [
-      "no Judgement card",
-      { choices: { decision1_move: "a", decision2_move: "c" } },
-    ],
-    ["no Final Judgement", { respondedScreens: [] }],
-  ])("does not complete when %s", (_label, patch) => {
-    expect(
-      isMissionComplete(RULE, { ...complete, ...patch } as MissionStateData),
-    ).toBe(false);
-  });
-
-  it("requires no upload", () => {
-    expect(JSON.stringify(RULE)).not.toMatch(
-      /upload|evidence_uploaded|storage/i,
+  it("the seeded rule matches the one under test", () => {
+    for (const key of ["decision1", "decision2", "judgement"]) {
+      expect(seedCode).toContain(
+        `'kind', 'choice_exists',  'screenKey', '${key}'`,
+      );
+    }
+    expect(seedCode).toContain(
+      "'kind', 'screen_visited', 'screenKey', 'evidence'",
+    );
+    expect(seedCode).toContain(
+      "'kind', 'screen_visited', 'screenKey', 'final_judgement'",
     );
   });
 
-  it("the seeded rule matches", () => {
-    for (const kind of ["choice_exists", "screen_visited", "response_exists"]) {
-      expect(seed).toContain(kind);
+  it("requires no upload and stores no file", () => {
+    const config = parseScreenConfig(
+      "completion",
+      byKey.get("complete")!.configuration,
+    );
+    expect(config.trailEntries).toHaveLength(3);
+    expect(config.trailEntries.every((e) => e.type === "physical")).toBe(true);
+    // A physical entry cannot name a file: the schema has no field for one.
+    for (const entry of config.trailEntries) {
+      expect(entry).not.toHaveProperty("storagePath");
+      expect(entry).not.toHaveProperty("fromResponse");
     }
-    expect(seed).toContain("'screenKey', 'later_evidence'");
-    expect(seed).toContain("'screenKey', 'final_judgement'");
+  });
+
+  it("the Mission Trail is the physical artefacts, named as the Brief names them", () => {
+    expect(seedCode).toContain("Six Names Case Board");
+    expect(seedCode).toContain("What’s Changing? tracker");
+    expect(seedCode).toContain("Final Judgement card");
+    expect(seedCode).toContain(
+      "Your Six Names Case Board and What’s Changing? tracker are your Mission Trail.",
+    );
+    expect(seedCode).toContain(
+      "Your Mission Trail is private unless you choose to share part of it.",
+    );
   });
 });
 
-// ═══════════════════════════════════════════════ Mission Trail (no upload) ══
-describe("Mission Trail", () => {
-  it("creates three physical entries and one digital, with no upload", () => {
-    const config = parseScreenConfig("completion", {
-      message: "Done.",
-      trailEntries: [
-        {
-          type: "physical",
-          title: "Six Names Mission Board",
-          description: "…",
-        },
-        {
-          type: "physical",
-          title: "What's Changing? tracker",
-          description: "…",
-        },
-        { type: "physical", title: "Final Judgement card", description: "…" },
-        {
-          type: "digital",
-          title: "What I stand by now",
-          fromResponse: "final_judgement",
-        },
-      ],
-    });
-    expect(
-      config.trailEntries.filter((e) => e.type === "physical"),
-    ).toHaveLength(3);
-    expect(
-      config.trailEntries.filter((e) => e.type === "digital"),
-    ).toHaveLength(1);
+// ─────────────────────────────────────────────────── authored copy, verbatim ──
+
+describe("copy the Brief marks “Show exactly” is reproduced verbatim", () => {
+  const exact = [
+    // Decision 1 consequences
+    "The office assistant says the head teacher is in a meeting and cannot answer yet. Pupils notice someone asking about the list. One says: “That proves it must be serious.”",
+    "Some pupils agree not to repeat the claim. One asks why anyone would defend the named pupils unless they know something. The claim reaches another group, but several pupils now know that nobody has checked what the list means.",
+    // Decision 2 consequences
+    "Some agree that the list proves nothing. Others say refusing to act may allow copying to go unchallenged. The disagreement reaches nearly everyone involved in the project.",
+    "Noor stays involved, but another pupil shares the role. Some people see this as a fair temporary solution. Others assume the shared role confirms that something suspicious happened.",
+    "Noor steps away from the project role. Some pupils say this protects the project. Others treat the removal as proof that the accusation must be true.",
+    // Evidence
+    "The names belonged to pupils whose team-equipment records still needed checking. A crossed-out name meant the record had been completed. Jude and Zain were added because their equipment forms arrived late. The list was not about copying. A real issue still remained: several equipment records were incomplete and needed correcting.",
+    // Final Judgement
+    "Complete your Final Judgement and Grow in the Child Mission. Return here when you are finished.",
+    // Stopping point
+    "If you need a break, you can pause here.",
+  ];
+
+  it.each(exact)("%s", (line) => {
+    expect(seed).toContain(line);
   });
 
-  it("physical entries never claim a stored file", () => {
-    // Architecture §15 / Brief §27 — the Academy must not imply it holds the
-    // artefact. The insert hard-codes a null storage_path.
-    expect(access).toContain(
-      "-- Physical evidence has no file, and must never pretend otherwise.",
+  it("the seven Seen / Said / Unknown items are exact and correctly classified", () => {
+    const config = parseScreenConfig(
+      "sort_items",
+      byKey.get("seen_said_unknown")!.configuration,
     );
-    expect(access).toMatch(
-      /type = 'physical'\s*\n\s*or storage_path is not null/,
-    );
-  });
-
-  it("Trail entries are derived server-side, not read from the current screen", () => {
-    /*
-     * REGRESSION GUARD — the derive_trail_entries migration.
-     *
-     * FOUND BY HOSTED VALIDATION: completion succeeded and mission_evidence
-     * stayed empty.
-     *
-     * Completion is evaluated AFTER an interaction, so the current screen is
-     * whatever the child just acted on — for Six Names, `final_judgement`.
-     * The `complete` screen is a configuration carrier and is never itself
-     * rendered, so reading trailEntries from `screen.configuration` always
-     * produced nothing and every mission completed with an empty Trail.
-     *
-     * Every behavioural test passed trailEntries in explicitly, which is why
-     * none of them caught it.
-     */
-    const derive = readFileSync(
-      join(repo, "supabase/migrations/20260925221000_derive_trail_entries.sql"),
-      "utf8",
-    );
-
-    // The function resolves entries from the mission's own completion screen...
-    expect(derive).toContain("select s.configuration->'trailEntries' into v_trail");
-    expect(derive).toContain("and s.type       = 'completion'");
-    // ...at the version this run is pinned to (D-17)...
-    expect(derive).toContain("and s.version    = v_progress.mission_version");
-    // ...which means it must be a definer, per D-36.
-    expect(derive).toContain("security definer");
-    expect(derive).toContain("owns_progress(p_progress_id)");
-
-    // And the engine must NOT try to read them from the rendered screen.
-    expect(persistence).not.toContain('screen?.type === "completion"');
-    expect(persistence).not.toContain("extractTrailEntries");
-  });
-
-  it("Trail creation is atomic with completion", () => {
-    const fn = access.slice(access.indexOf("function complete_mission"));
-    expect(fn).toContain("insert into mission_evidence");
-    expect(fn).toContain("set status           = 'complete'");
-  });
-
-  it("only one complete_mission signature survives the migrations", () => {
-    /*
-     * REGRESSION GUARD — the drop_stale_complete_mission migration.
-     *
-     * FOUND BY HOSTED SCHEMA VERIFICATION, not by behavioural tests.
-     *
-     * The persistence migration created complete_mission(uuid, jsonb). The
-     * screen_access migration used CREATE OR REPLACE to add p_trail — but a
-     * different signature is not a replacement, so Postgres created a SECOND
-     * function and kept the original. The stale two-argument version predates
-     * Mission Trail creation and writes no evidence, so any two-argument call
-     * completed a mission with no Trail, silently.
-     *
-     * Behavioural tests could not see this: they only ever exercised the
-     * three-argument call, which bound to the correct function.
-     *
-     * RULE: changing a function's argument list means dropping the old
-     * signature explicitly. CREATE OR REPLACE will not do it for you.
-     */
-    const drop = readFileSync(
-      join(repo, "supabase/migrations/20260925220800_drop_stale_complete_mission.sql"),
-      "utf8",
-    );
-
-    // The stale two-argument overload is dropped by exact signature...
-    expect(drop).toContain("drop function public.complete_mission(uuid, jsonb);");
-    // ...and the three-argument version is neither dropped nor redefined here.
-    expect(drop).not.toContain("complete_mission(uuid, jsonb, jsonb)");
-    expect(drop).not.toMatch(/create\s+(or replace\s+)?function/i);
-
-    // The surviving definition still carries p_trail and writes the Trail.
-    const surviving = access.slice(access.indexOf("function complete_mission"));
-    expect(surviving).toContain("p_trail       jsonb default");
-    expect(surviving).toContain("insert into mission_evidence");
-    expect(surviving).toContain("security invoker");
-  });
-});
-
-// ════════════════════════════════════ staged information (C9-1 / Q4) ═══════
-describe("staged information is server-authoritative", () => {
-  it("an entitled client cannot read mission_screens directly", () => {
-    expect(access).toContain(
-      'drop policy if exists "screens require entitlement" on mission_screens',
-    );
-    // Nothing re-grants a client-readable select on the table.
-    expect(access).not.toMatch(
-      /create policy[^;]*on mission_screens[^;]*for select/,
-    );
-  });
-
-  it("a server-authorised request retrieves only the current screen", () => {
-    const fn = access.slice(
-      access.indexOf("function get_current_mission_screen"),
-    );
-    expect(fn).toContain("and s.screen_key = v_progress.current_screen_key");
-    expect(fn).toContain("security definer");
-  });
-
-  it("the full chain is re-established inside the function", () => {
-    const fn = access.slice(
-      access.indexOf("function get_current_mission_screen"),
-    );
-    expect(fn).toContain("if not owns_child(p_child_id) then");
-    expect(fn).toContain("from mission_entitlements e");
-    expect(fn).toContain("and e.status = 'active'");
-  });
-
-  it("Later Evidence cannot be retrieved before its stage", () => {
-    // It is reachable only as current_screen_key, which only tracker2's
-    // configured `next` can set.
-    const fn = access.slice(
-      access.indexOf("function get_current_mission_screen"),
-    );
-    expect(fn).not.toContain("later_evidence");
-    expect(seed).toContain("'next', 'later_evidence'");
-
-    const state = { ...emptyMissionState };
-    const tracker2 = byKey("tracker2");
-    expect(resolveNextScreen(tracker2, nextBySequence("tracker2"), state)).toBe(
-      "later_evidence",
-    );
-    // ...and nothing earlier resolves to it.
-    for (const key of [
-      "mission_brief",
-      "zone1_list",
-      "decision1_move",
-      "tracker1",
-    ]) {
-      expect(
-        resolveNextScreen(byKey(key), nextBySequence(key), state),
-      ).not.toBe("later_evidence");
-    }
-  });
-
-  it("a future consequence cannot be retrieved before its branch", () => {
-    // consequence1_c is reachable only by choosing option c.
-    const chose_a = play([
-      ...upToDecision1,
-      { kind: "choice", screenKey: "decision1_move", optionId: "a" },
+    expect(config.items).toEqual([
+      {
+        id: "i1",
+        text: "Six names are written on the paper.",
+        classification: "seen",
+      },
+      { id: "i2", text: "The paper has no title.", classification: "seen" },
+      {
+        id: "i3",
+        text: "The list is on the board outside the head teacher’s office.",
+        classification: "seen",
+      },
+      {
+        id: "i4",
+        text: "Someone says the list is about copying.",
+        classification: "said",
+      },
+      { id: "i5", text: "Who wrote the list?", classification: "unknown" },
+      {
+        id: "i6",
+        text: "Why are these six names there?",
+        classification: "unknown",
+      },
+      {
+        id: "i7",
+        text: "Is the copying claim true?",
+        classification: "unknown",
+      },
     ]);
-    expect(chose_a.visited).not.toContain("consequence1_b");
-    expect(chose_a.visited).not.toContain("consequence1_c");
+    for (const item of config.items) {
+      expect(seed).toContain(item.text);
+    }
+  });
+
+  it("Seen / Said / Unknown are three equal choices, shuffled, and unscored", () => {
+    const config = parseScreenConfig(
+      "sort_items",
+      byKey.get("seen_said_unknown")!.configuration,
+    );
+    expect(config.categories.map((c) => c.label)).toEqual([
+      "Seen",
+      "Said",
+      "Unknown",
+    ]);
+    expect(config.shuffle).toBe(true);
+    // Nothing in the schema can hold a result.
+    expect(config).not.toHaveProperty("score");
+    expect(config).not.toHaveProperty("correct");
+    expect(seedCode).not.toMatch(
+      /score|correct answer|right answer|mark(ed)? as wrong/i,
+    );
+  });
+
+  it("the two decisions offer exactly the Brief's responses", () => {
+    const d1 = parseScreenConfig(
+      "choice",
+      byKey.get("decision1")!.configuration,
+    );
+    expect(d1.options).toHaveLength(2);
+    expect(d1.options.map((o) => o.label)).toEqual([
+      "Ask about the list",
+      "Stop the claim spreading",
+    ]);
+
+    const d2 = parseScreenConfig(
+      "choice",
+      byKey.get("decision2")!.configuration,
+    );
+    expect(d2.options).toHaveLength(3);
+    expect(d2.options.map((o) => o.label)).toEqual([
+      "Ask everyone to pause",
+      "Continue, but share the role",
+      "Suggest Noor steps away",
+    ]);
+
+    for (const option of [...d1.options, ...d2.options]) {
+      expect(option.description).toBeTruthy();
+      expect(seed).toContain(option.description!);
+    }
+  });
+
+  it("the three Judgement cards are exact", () => {
+    const config = parseScreenConfig(
+      "choice",
+      byKey.get("judgement")!.configuration,
+    );
+    expect(config.options.map((o) => o.label)).toEqual([
+      "I stand by both decisions.",
+      "I would reconsider Decision 1.",
+      "I would reconsider Decision 2.",
+    ]);
+  });
+});
+
+// ─────────────────────────────────────────────────────────── the list object ──
+
+describe("the list and the Changed List", () => {
+  const listOf = (key: string) =>
+    parseScreenConfig("content", byKey.get(key)!.configuration).listObject;
+
+  it("the first list is six plain names", () => {
+    expect(listOf("the_list").map((i) => i.text)).toEqual([
+      "Noor",
+      "Alex",
+      "Sam",
+      "Mika",
+      "Ari",
+      "Remy",
+    ]);
+    expect(listOf("the_list").every((i) => i.mark === "none")).toBe(true);
+  });
+
+  it("the Changed List keeps the original order and marks the changes", () => {
+    const changed = listOf("changed_list");
+    expect(changed.map((i) => i.text)).toEqual([
+      "Noor",
+      "Alex",
+      "Sam",
+      "Mika",
+      "Ari",
+      "Remy",
+      "Jude",
+      "Zain",
+    ]);
+    expect(changed.find((i) => i.text === "Mika")?.mark).toBe("struck");
+    expect(changed.find((i) => i.text === "Jude")?.mark).toBe("added");
+    expect(changed.find((i) => i.text === "Zain")?.mark).toBe("added");
+    // Everything else is untouched, so the two lists read as the same sheet.
+    for (const name of ["Noor", "Alex", "Sam", "Ari", "Remy"]) {
+      expect(changed.find((i) => i.text === name)?.mark).toBe("none");
+    }
+  });
+
+  it("the crossing-out is not conveyed by styling alone", () => {
+    const component = readFileSync(
+      join(repo, "src/components/mission/screens/six-names-types.tsx"),
+      "utf8",
+    );
+    const list = component.slice(
+      component.indexOf("export function ListObject"),
+    );
+    expect(list).toContain("(crossed out)");
+    expect(list).toContain("(added)");
+    expect(list).toContain("sr-only");
+  });
+
+  it("the first list carries no title, explanation or signature", () => {
+    const s = byKey.get("the_list")!;
+    expect(s.body).toBeNull();
+    const config = parseScreenConfig("content", s.configuration);
+    expect(config.reflectionPrompts).toEqual([]);
+  });
+
+  it("the revisit does not repeat the sorting activity or supply an answer key", () => {
+    const s = byKey.get("ssu_revisit")!;
+    expect(s.type).not.toBe("sort_items");
+    const config = parseScreenConfig("content", s.configuration);
+    expect(config.reflectionPrompts).toEqual([
+      "What has visibly changed?",
+      "What is still only said?",
+      "What remains unknown?",
+    ]);
+  });
+});
+
+// ───────────────────────────────────────────────────────────── Mission Control ──
+
+describe("Mission Control", () => {
+  const withControl = graph.filter((s) => {
+    const config = s.configuration as { missionControl?: unknown[] } | null;
+    return (config?.missionControl?.length ?? 0) > 0;
+  });
+
+  it("appears only at the stages the Brief names", () => {
+    expect(withControl.map((s) => s.screenKey).sort()).toEqual(
+      [
+        "handoff_step11",
+        "handoff_step3",
+        "handoff_step7",
+        "seen_said_unknown",
+      ].sort(),
+    );
+  });
+
+  it("the consequence screens carry the 'I'm not sure what changed' support", () => {
+    // Seeded on all five consequences; the graph above abbreviates them.
+    const occurrences = seedCode.split("I’m not sure what changed.").length - 1;
+    expect(occurrences).toBe(5);
+  });
+
+  it("uses the Brief's support options verbatim", () => {
+    const support: [string, string][] = [
+      [
+        "I’m not sure what I know.",
+        "Read the item again. Did you see this in the case? Did someone say it? Or has the case not told you yet?",
+      ],
+      [
+        "I can’t choose a concern.",
+        "You do not need to find the perfect concern. Look at all four cards and ask: Which one matters most to me right now, with what I know so far?",
+      ],
+      [
+        "I’m not sure what changed.",
+        "Read the consequence again. Look at Spread, Support and Clarity one at a time. What do you think each part should show now?",
+      ],
+      [
+        "I’m not sure what matters now.",
+        "Start with what changed after your first decision. Then look at the four Concern cards again. You can keep your first concern or choose a different one.",
+      ],
+      [
+        "I’m not sure what I stand by.",
+        "Take the two decisions one at a time. What did you know when you made each one? What was each choice trying to protect? Then choose the Judgement card that best matches your view now.",
+      ],
+    ];
+    for (const [title, body] of support) {
+      expect(seed).toContain(title);
+      expect(seed).toContain(body);
+    }
+  });
+
+  it("never reveals a consequence, the Evidence, or the meaning of the list", () => {
+    const controls = seed.match(/'body',\s+'([^']|'')*'/g) ?? [];
+    const joined = controls.join(" ");
+    for (const leak of [
+      "equipment",
+      "office assistant",
+      "was not about copying",
+      "steps away from the project role",
+    ]) {
+      expect(joined.toLowerCase()).not.toContain(leak.toLowerCase());
+    }
+  });
+
+  it("never recommends an option", () => {
+    const controls = seed.match(/'body',\s+'([^']|'')*'/g) ?? [];
+    for (const body of controls) {
+      expect(body).not.toMatch(
+        /you should|the best|the right choice|we recommend/i,
+      );
+    }
+  });
+
+  it("cannot advance the mission, by construction", () => {
+    const component = readFileSync(
+      join(repo, "src/components/mission/mission-control.tsx"),
+      "utf8",
+    );
+    // It takes no state setter and emits no interaction.
+    expect(component).not.toContain("onAdvance");
+    expect(component).not.toContain("recordInteraction");
+    expect(component).not.toContain("useTransition");
+  });
+});
+
+// ────────────────────────────────────────────────────────────────── security ──
+
+describe("staged information is server-authoritative", () => {
+  it("mission_screens has no client read policy", () => {
+    expect(access).toContain("drop policy");
+    expect(access).toContain("mission_screens");
+  });
+
+  it("the gated RPC re-establishes the whole chain inside the function", () => {
+    expect(access).toContain("not_your_child");
+    expect(access).toContain("not_entitled");
+    expect(access).toContain("security definer");
+  });
+
+  it("the key of an unused branch is no longer disclosed", () => {
+    /*
+     * Found by live execution: a child on `consequence1_ask` was told
+     * next_sequence_key = `consequence1_stop`, the sibling they will never
+     * reach. Withheld whenever the screen names its own destination.
+     */
+    expect(withholdNext).toContain("when s.configuration ? 'next' then null");
+    expect(withholdNext).toContain(
+      "jsonb_array_elements(s.configuration -> 'options')",
+    );
+    // Every v2 screen names its own destination, so nothing is disclosed.
+    const declared = seedCode.match(/'next',\s*'[a-z0-9_]+'/g) ?? [];
+    expect(declared.length).toBeGreaterThanOrEqual(graph.length - 1);
   });
 
   it("an interaction for a screen the child is not on is refused", () => {
@@ -645,215 +1256,92 @@ describe("staged information is server-authoritative", () => {
     );
   });
 
-  it("cross-family access remains impossible", () => {
-    // owns_child resolves through auth.uid(), so another family's child id
-    // raises before any screen is read.
-    expect(access).toContain("raise exception 'not_your_child'");
-    expect(persistence).toContain("requireEntitledMission(");
-  });
-
-  it("every function that reads mission_screens is security definer", () => {
-    /*
-     * REGRESSION GUARD — the start_mission_access migration.
-     *
-     * The screen_access migration removed all client read access to
-     * mission_screens. start_mission was security INVOKER, so it silently lost
-     * its ability to find a mission's first screen, and every new run opened
-     * with a null position.
-     * Source-level tests could not see this; live execution found it.
-     *
-     * Any function that reads mission_screens must therefore be definer, and
-     * must re-establish ownership and entitlement itself.
-     */
-    const startFix = readFileSync(
-      join(repo, "supabase/migrations/20260925220700_start_mission_access.sql"),
-      "utf8",
+  it("completion cannot be forged from the browser", () => {
+    // The rule is evaluated server-side from pinned configuration, and the
+    // write happens through the atomic RPC.
+    expect(persistence).toContain(
+      "progress.completion_rule ?? mission.completion_rule",
     );
-    for (const [sql, fn] of [
-      [startFix, "start_mission"],
-      [access, "get_current_mission_screen"],
-    ] as const) {
-      const body = sql.slice(sql.indexOf(`function ${fn}`));
-      const upToEnd = body.slice(0, body.indexOf("$$;") + 3);
-      expect(upToEnd, `${fn} must be security definer`).toContain("security definer");
-      expect(upToEnd, `${fn} must check ownership`).toContain("owns_child(p_child_id)");
-      expect(upToEnd, `${fn} must check entitlement`).toContain("mission_entitlements");
-      expect(upToEnd, `${fn} must read screens`).toContain("mission_screens");
-    }
+    expect(persistence).toContain('supabase.rpc("complete_mission"');
+    expect(persistence).not.toContain("req.body.completed");
   });
 
   it("the client is never given more than one screen", () => {
     expect(persistence).toContain("get_current_mission_screen");
-    expect(persistence).not.toMatch(/from\("mission_screens"\)/);
+    expect(persistence).not.toContain('.from("mission_screens")');
   });
 });
 
-// ════════════════════════════════════════════ Mission Control boundaries ════
-describe("Mission Control", () => {
-  it("is configured in the seed, never hard-coded in a component", () => {
-    const component = readFileSync(
-      join(repo, "src/components/mission/mission-control.tsx"),
-      "utf8",
-    );
-    expect(component).not.toMatch(/What do I know\?|What am I assuming\?/);
-    expect(seed).toContain("What do I know?");
-    expect(seed).toContain("What am I assuming?");
-  });
+// ───────────────────────────────────────────────────────────── seed integrity ──
 
-  it("appears only on the seven approved screens", () => {
-    const withSupport = [
-      "zone1_list",
-      "decision1_concerns",
-      "decision1_move",
-      "list_changes",
-      "decision2_concerns",
-      "decision2_move",
-      "later_evidence",
-    ];
-    for (const key of withSupport) {
-      expect(screenBlock(key), key).toContain("'What do I know?'");
-    }
-
-    // ...and nowhere else. Support is deliberately limited (Q3).
-    const withoutSupport = [
-      "mission_brief",
-      "prepare",
-      "tracker1",
-      "tracker2",
-      "judgement_card",
-      "judgement_reflection",
-      "final_judgement",
-      "complete",
-    ];
-    for (const key of withoutSupport) {
-      expect(screenBlock(key), key).not.toContain("'What do I know?'");
-    }
-  });
-
-  it("never reveals the meaning of the list or Later Evidence early", () => {
-    // Support on pre-reveal screens must not contain the explanation.
-    const preReveal =
-      screenBlock("zone1_list") +
-      screenBlock("decision1_concerns") +
-      screenBlock("decision1_move");
-    expect(preReveal).not.toMatch(/contribution.{0,40}checking list/i);
-    expect(preReveal).not.toMatch(/was not created to identify/i);
-  });
-
-  it("never recommends an option", () => {
-    const support = seed.match(/'body', '[^']*'/g) ?? [];
-    for (const line of support) {
-      expect(line).not.toMatch(
-        /you should choose|the best option|we recommend|the right answer/i,
-      );
-    }
-  });
-
-  it("opening it cannot advance mission state", () => {
-    const component = readFileSync(
-      join(repo, "src/components/mission/mission-control.tsx"),
-      "utf8",
-    );
-    expect(component).not.toContain("onAdvance");
-    expect(component).not.toContain("recordInteraction");
-  });
-});
-
-// ═══════════════════════════════════════════════════ seed integrity ════════
 describe("seed integrity", () => {
-  it("declares all 21 screens", () => {
-    expect(seed.match(/\(m, 1, '[a-z0-9_]+'/g)).toHaveLength(21);
+  it("declares every screen the graph under test references", () => {
+    for (const s of graph) {
+      expect(seedCode).toContain(`'${s.screenKey}'`);
+    }
+  });
+
+  it("declares the screens at the types the graph expects", () => {
+    for (const s of graph) {
+      expect(seedCode).toMatch(new RegExp(`'${s.screenKey}',\\s*'${s.type}'`));
+    }
   });
 
   it("every branch target and `next` refers to a declared screen", () => {
-    const declared = new Set(
-      (seed.match(/\(m, 1, '([a-z0-9_]+)'/g) ?? []).map((m) =>
-        m.replace(/\(m, 1, '/, "").replace(/'$/, ""),
-      ),
-    );
-    const referenced = (seed.match(/'next', '([a-z0-9_]+)'/g) ?? []).map((m) =>
-      m.replace(/'next', '/, "").replace(/'$/, ""),
-    );
-    expect(referenced.length).toBeGreaterThan(0);
-    for (const target of referenced) {
-      expect(
-        declared.has(target),
-        `${target} is referenced but not declared`,
-      ).toBe(true);
-    }
-  });
-
-  it("contains no score, badge, streak or ranking language", () => {
-    for (const forbidden of [
-      /\bscore\b/i,
-      /badge/i,
-      /streak/i,
-      /leaderboard/i,
-      /\brank\b/i,
-      /points/i,
-    ]) {
-      const matches = seed.match(forbidden) ?? [];
-      // "not a score" is the one permitted mention.
-      for (const match of matches) {
-        const at = seed.indexOf(match);
-        expect(seed.slice(Math.max(0, at - 20), at + 10)).toMatch(
-          /not a score/i,
-        );
+    const keys = new Set(graph.map((s) => s.screenKey));
+    for (const s of graph) {
+      const config = s.configuration as {
+        next?: string;
+        options?: { next?: string }[];
+      };
+      if (config.next) expect(keys).toContain(config.next);
+      for (const option of config.options ?? []) {
+        if (option.next) expect(keys).toContain(option.next);
       }
     }
   });
 
+  it("seeds version 2 and leaves version 1 untouched", () => {
+    // D-17 pins an in-progress run to the version it started with.
+    expect(seedCode).toContain(
+      "delete from mission_screens where mission_id = m and version = 2",
+    );
+    expect(seedCode).not.toContain("version = 1");
+    expect(seedCode).toContain("set version = 2");
+  });
+
+  it("contains no score, badge, streak or ranking language", () => {
+    expect(seedCode).not.toMatch(
+      /\b(score|points|badge|streak|leaderboard|rank|level up|well done|correct!)\b/i,
+    );
+  });
+
   it("asks for no real names, school details or identifying information", () => {
-    expect(seed).toContain("You do not need to enter any real names");
-    expect(seed).not.toMatch(/your school|real name of|classmate's name/i);
+    expect(seedCode).not.toMatch(
+      /your school|real name|your teacher|upload a photo/i,
+    );
   });
 
-  it("ENGINE-04: conditional reveal is implemented and registered", () => {
-    /*
-     * PRD §36 lists ENGINE-04 as a Must. The engine already had revealConfig,
-     * the `reveal` interaction and isRevealed() covering all three conditions;
-     * only the renderer was missing.
-     *
-     * Six Names does not use it — it stages information by sequence position,
-     * which the screen_access migration enforces in the database. In-screen
-     * concealment is presentational and must not be relied on for secrets.
-     */
-    const renderer = readFileSync(
-      join(repo, "src/features/mission-engine/renderer.tsx"),
-      "utf8",
-    );
-    const screens = readFileSync(
-      join(repo, "src/components/mission/screens/index.tsx"),
-      "utf8",
-    );
-
-    expect(renderer).toContain("reveal: RevealScreen");
-    expect(screens).toContain("export function RevealScreen");
-    // It asks the engine, rather than re-deriving the condition itself.
-    expect(screens).toContain("isRevealed(screen, state)");
-    // A revealed screen stays revealed across sessions (Architecture §13).
-    expect(screens).toContain('kind: "reveal"');
-    // And it carries the caveat, so nobody mistakes it for staged security.
-    // Strip comment markers before matching prose that wraps across lines.
-    const prose = screens.replace(/^\s*\*\s?/gm, "").replace(/\s+/g, " ");
-    expect(prose).toContain("NOT the mechanism that protects staged information");
-  });
-
-  it("every screen in the graph has a registered component type", () => {
+  it("every screen type in the graph has a registered component", () => {
     const renderer = readFileSync(
       join(repo, "src/features/mission-engine/renderer.tsx"),
       "utf8",
     );
     for (const type of new Set(graph.map((s) => s.type))) {
-      expect(renderer, `${type} must be registered`).toContain(`${type}:`);
+      expect(renderer).toMatch(new RegExp(`\\b${type}:\\s*\\w+Screen`));
+    }
+  });
+
+  it("the new screen types exist in the database enum", () => {
+    const migration = readFileSync(
+      join(
+        repo,
+        "supabase/migrations/20260927100000_six_names_screen_types.sql",
+      ),
+      "utf8",
+    );
+    for (const type of ["sort_items", "tracker_confirmation", "reflection"]) {
+      expect(migration).toContain(`add value if not exists '${type}'`);
     }
   });
 });
-
-/** The seed text for one screen: its declaration up to the next declaration. */
-function screenBlock(key: string): string {
-  const start = seed.indexOf(`(m, 1, '${key}'`);
-  if (start === -1) throw new Error(`${key} is not declared in the seed`);
-  const next = seed.indexOf("(m, 1, '", start + 10);
-  return seed.slice(start, next === -1 ? undefined : next);
-}

@@ -1,4 +1,6 @@
+import Image from "next/image";
 import Link from "next/link";
+import wlaLogo from "../../../public/wla-logo-horizontal.png";
 
 /**
  * PUBLIC SITE NAVIGATION
@@ -35,16 +37,27 @@ export const MORE_NAV = [
 
 export function SiteNav() {
   return (
-    <header className="border-b border-[var(--color-border)]">
+    /*
+      MEASURED from the public site: the header sits on its own lighter band
+      above the canvas, about 80px tall, with a hairline beneath it.
+    */
+    <header className="wla-band-raised border-b border-[var(--color-border)]">
       <nav
         aria-label="Primary"
-        className="wla-container flex min-h-[72px] flex-wrap items-center justify-between gap-[var(--space-m)]"
+        className="wla-container flex min-h-[80px] flex-wrap items-center justify-between gap-[var(--space-m)]"
       >
-        <Link
-          href="/"
-          className="font-[family-name:var(--font-serif)] text-[length:var(--text-h3)]"
-        >
-          Within Lab
+        {/*
+          The real lockup, not Fraunces set to resemble it. The public site
+          shows the logo here, and type standing in for it read as a different
+          typeface sitting next to the genuine article on every other surface.
+        */}
+        <Link href="/" className="flex items-center">
+          <Image
+            src={wlaLogo}
+            alt="Within Lab Academy"
+            priority
+            className="h-[28px] w-auto sm:h-[34px]"
+          />
         </Link>
 
         <ul className="flex flex-wrap items-center gap-[var(--space-l)]">
@@ -52,16 +65,22 @@ export function SiteNav() {
             <li key={item.href}>
               <Link
                 href={item.href}
-                className="inline-flex min-h-[var(--target-min)] items-center text-[length:var(--text-label)]"
+                className="inline-flex min-h-[var(--target-min)] items-center text-[length:var(--text-small)] hover:text-[var(--color-primary)]"
               >
                 {item.label}
               </Link>
             </li>
           ))}
           <li>
+            {/*
+              MEASURED: on the site this is the one bordered control on the
+              page — a rounded rectangle at about 4px, NOT a pill and not olive
+              text. It is how the site separates "go to your own account" from
+              the marketing links beside it.
+            */}
             <Link
               href="/academy/my-missions"
-              className="inline-flex min-h-[var(--target-min)] items-center text-[length:var(--text-label)] text-[var(--color-primary)]"
+              className="inline-flex min-h-[var(--target-min)] items-center rounded-[var(--radius-control)] border border-[var(--color-border)] bg-[var(--color-surface)] px-[var(--space-m)] text-[length:var(--text-small)] font-medium hover:border-[var(--color-border-strong)]"
             >
               My Missions
             </Link>

@@ -45,9 +45,17 @@ export function ScreenFrame({
 
       {children}
 
-      {/* The physical step. Always visible, never hover-dependent. */}
+      {/*
+        The physical step. Always visible, never hover-dependent.
+
+        Set in Fraunces SEMIBOLD, which is the role the public site gives to
+        short editorial statements — "Six names appear on a list, but what the
+        list means is not clear." That is exactly what this line is: the one
+        sentence telling the child what to go and do. Regular weight left it
+        reading as another heading.
+      */}
       {instruction && (
-        <p className="wla-measure border-l-2 border-[var(--color-primary)] pl-[var(--space-m)] font-[family-name:var(--font-serif)] text-[length:var(--text-h3)]">
+        <p className="wla-measure border-l-2 border-[var(--color-primary)] pl-[var(--space-m)] font-[family-name:var(--font-serif)] text-[length:var(--text-h3)] font-[var(--weight-semibold)]">
           {instruction}
         </p>
       )}
@@ -95,12 +103,15 @@ export function PrimaryAction({
 /** A selectable card. Selection is never carried by colour alone (§23). */
 export function SelectableOption({
   label,
+  description,
   selected,
   onSelect,
   disabled,
   selectedLabel = "Chosen",
 }: {
   label: string;
+  /** The response in full, under its short label. */
+  description?: string;
   selected: boolean;
   onSelect: () => void;
   disabled?: boolean;
@@ -123,7 +134,17 @@ export function SelectableOption({
           : "border-[var(--color-border)] bg-[var(--color-surface)] hover:border-[var(--color-border-strong)]",
       )}
     >
-      <span>{label}</span>
+      {/*
+        Every option gets the same structure, weight and spacing whether or not
+        it carries a description — the Build Brief requires that no response
+        look preferred, and uneven emphasis is the easiest way to break that.
+      */}
+      <span className="flex flex-col gap-[var(--space-xs)]">
+        <span className="font-medium">{label}</span>
+        {description && (
+          <span className="text-[var(--color-text-muted)]">{description}</span>
+        )}
+      </span>
       {selected && (
         <span className="shrink-0 text-[length:var(--text-label)] text-[var(--color-text-muted)]">
           {selectedLabel}

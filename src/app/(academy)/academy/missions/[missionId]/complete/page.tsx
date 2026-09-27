@@ -44,38 +44,62 @@ export default async function MissionCompletePage({
   return (
     <>
       <AcademyChrome />
-      <main className="wla-container-narrow py-[var(--space-3xl)]">
-      <p className="text-[length:var(--text-label)] font-medium text-[var(--color-text-muted)]">
-        Complete
-      </p>
-      <h1 className="mt-[var(--space-s)] text-[length:var(--text-h1)]">
-        {home.mission.title}
-      </h1>
-      <p className="wla-measure mt-[var(--space-m)] text-[length:var(--text-body-lg)]">
-        You finished something. What you worked out is yours to keep.
-      </p>
+      <main className="wla-container-narrow py-[var(--space-3xl)] md:py-[var(--space-5xl)]">
+        <p className="text-[length:var(--text-small)] font-medium text-[var(--color-text-muted)]">
+          Complete
+        </p>
 
-      <div className="mt-[var(--space-xl)] flex flex-wrap gap-[var(--space-m)]">
-        {/* Architecture §14 — the primary return */}
-        <Link href="/academy/my-missions">
-          <Button size="large">Back to My Missions</Button>
-        </Link>
-        <Link href={`${base}/trail`}>
-          <Button variant="secondary" size="large">
-            View Mission Trail
-          </Button>
-        </Link>
-      </div>
+        {/*
+          THE ONE SCREEN THAT EARNS DISPLAY TYPE.
+          The site's 60px Fraunces belongs to its public hero; inside the
+          Academy nothing else is loud, which is what leaves room for this to
+          be. Closure is the moment worth setting large — and setting the
+          CHILD'S MISSION large, rather than the word "Complete", keeps the
+          emphasis on what they did instead of on the system noticing.
+        */}
+        <h1 className="wla-display mt-[var(--space-s)]">
+          {home.mission.title}
+        </h1>
 
-      <p className="mt-[var(--space-xl)] text-[length:var(--text-small)] text-[var(--color-text-muted)]">
-        <Link
-          href={base}
-          className="underline decoration-[var(--color-border-strong)] underline-offset-4"
-        >
-          Return to Mission Home
-        </Link>{" "}
-        — your Mission Kit and parent note stay there.
-      </p>
+        {/*
+          Fraunces italic in olive, as the public site closes its home page.
+          Brief §26 and UI/UX §42: closure and evidence, never performance —
+          so this is a sentence, not a celebration.
+        */}
+        <p className="wla-editorial wla-measure mt-[var(--space-l)] text-[length:var(--text-h3)] leading-[var(--leading-normal)]">
+          You finished something. What you worked out is yours to keep.
+        </p>
+
+        {/*
+          One button, not two. The public site puts a single olive pill on a
+          page and makes every other action a text link; two large buttons
+          side by side would make the return and the Trail read as equal
+          choices, which Architecture §14 does not intend.
+        */}
+        <div className="mt-[var(--space-2xl)] flex flex-wrap items-center gap-[var(--space-l)]">
+          {/* Architecture §14 — the primary return */}
+          <Link href="/academy/my-missions">
+            <Button size="large">Back to My Missions →</Button>
+          </Link>
+          <Link
+            href={`${base}/trail`}
+            className="inline-flex min-h-[var(--target-min)] items-center text-[length:var(--text-label)] font-medium underline decoration-[var(--color-border-strong)] underline-offset-4 hover:decoration-[var(--color-primary)]"
+          >
+            View Mission Trail →
+          </Link>
+        </div>
+
+        <hr className="wla-rule mt-[var(--space-2xl)]" />
+
+        <p className="mt-[var(--space-l)] text-[length:var(--text-small)] text-[var(--color-text-muted)]">
+          <Link
+            href={base}
+            className="underline decoration-[var(--color-border-strong)] underline-offset-4 hover:decoration-[var(--color-primary)]"
+          >
+            Return to Mission Home
+          </Link>{" "}
+          whenever you like. Your Mission Kit and parent note stay there.
+        </p>
       </main>
     </>
   );

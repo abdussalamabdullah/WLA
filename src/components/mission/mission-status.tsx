@@ -38,7 +38,14 @@ export function MissionStatusBadge({
     <span
       className={cn(
         "inline-flex items-center gap-[var(--space-s)]",
-        "text-[length:var(--text-label)] font-medium tracking-wide uppercase",
+        /*
+         * Sentence case, not caps. The public site sets uppercase in exactly
+         * one place — the 12px footer group headings — and nowhere in the
+         * body of a page. Tracked-out caps at label size cost legibility for
+         * an audience that includes seven-year-olds, and the hierarchy here
+         * is already carried by size, weight and colour.
+         */
+        "text-[length:var(--text-small)] font-medium",
         "text-[var(--color-text-muted)]",
         className,
       )}

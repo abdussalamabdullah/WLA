@@ -4,6 +4,17 @@ import { useState } from "react";
 import { Field, Input } from "@/components/ui/field";
 import { PrimaryAction, ScreenFrame, SelectableOption } from "./shared";
 import {
+  ListObject,
+  PauseMissionLink,
+  ReflectionPrompts,
+} from "./six-names-types";
+
+export {
+  SortItemsScreen,
+  TrackerConfirmationScreen,
+  ReflectionScreen,
+} from "./six-names-types";
+import {
   isRevealed,
   parseScreenConfig,
   type ScreenComponentProps,
@@ -21,6 +32,7 @@ import { cn } from "@/lib/utils";
 /** Instruction or staged information, with a single continue action. */
 export function ContentScreen({
   screen,
+  missionSlug,
   onAdvance,
   isPending,
   error,
@@ -34,15 +46,31 @@ export function ContentScreen({
       missionControl={config.missionControl}
       error={error}
       action={
-        <PrimaryAction
-          label={config.actionLabel ?? "Continue"}
-          isPending={isPending}
-          onClick={() =>
-            onAdvance({ kind: "visit", screenKey: screen.screenKey })
-          }
-        />
+        <>
+          <PrimaryAction
+            label={config.actionLabel ?? "Continue"}
+            isPending={isPending}
+            onClick={() =>
+              onAdvance({ kind: "visit", screenKey: screen.screenKey })
+            }
+          />
+          {/*
+            "Pause Mission" leaves; it does not advance. Nothing is written,
+            because the child's position was persisted when they arrived here
+            — which is why pausing cannot fail and needs no confirmation.
+          */}
+          {config.secondaryAction && (
+            <PauseMissionLink
+              missionSlug={missionSlug}
+              label={config.secondaryAction}
+            />
+          )}
+        </>
       }
-    />
+    >
+      <ListObject items={config.listObject} label={config.listLabel} />
+      <ReflectionPrompts prompts={config.reflectionPrompts} />
+    </ScreenFrame>
   );
 }
 
@@ -121,7 +149,7 @@ export function ChoiceScreen({
       error={error}
       action={
         <PrimaryAction
-          label="Confirm"
+          label={config.confirmLabel ?? "Confirm"}
           disabled={!selected || locked}
           isPending={isPending}
           onClick={() =>
@@ -143,12 +171,29 @@ export function ChoiceScreen({
           <SelectableOption
             key={option.id}
             label={option.label}
+            description={option.description}
             selected={selected === option.id}
             disabled={locked}
             onSelect={() => setSelected(option.id)}
           />
         ))}
       </fieldset>
+
+      {/*
+        Appears only once a response is chosen, and only before it is
+        confirmed — which is the whole point: the prediction is made against
+        the physical tracker while the outcome is still unknown.
+
+        A note, never a field. Nothing here can be submitted or stored.
+      */}
+      {config.confirmNote && selected && (
+        <p
+          aria-live="polite"
+          className="wla-measure rounded-[var(--radius-surface)] bg-[var(--color-surface-sage)] p-[var(--space-l)]"
+        >
+          {config.confirmNote}
+        </p>
+      )}
     </ScreenFrame>
   );
 }
@@ -419,7 +464,13 @@ export function ResponseScreen({
  * whose secret must be cryptographically withheld should stage it as a
  * separate screen, as Six Names does.
  */
-export function RevealScreen({ screen, state, onAdvance, isPending, error }: ScreenComponentProps) {
+export function RevealScreen({
+  screen,
+  state,
+  onAdvance,
+  isPending,
+  error,
+}: ScreenComponentProps) {
   const config = parseScreenConfig("reveal", screen.configuration);
   const revealed = isRevealed(screen, state);
 
@@ -434,13 +485,17 @@ export function RevealScreen({ screen, state, onAdvance, isPending, error }: Scr
           <PrimaryAction
             label="Continue"
             isPending={isPending}
-            onClick={() => onAdvance({ kind: "visit", screenKey: screen.screenKey })}
+            onClick={() =>
+              onAdvance({ kind: "visit", screenKey: screen.screenKey })
+            }
           />
         ) : (
           <PrimaryAction
             label={config.revealLabel}
             isPending={isPending}
-            onClick={() => onAdvance({ kind: "reveal", screenKey: screen.screenKey })}
+            onClick={() =>
+              onAdvance({ kind: "reveal", screenKey: screen.screenKey })
+            }
           />
         )
       }
@@ -449,14 +504,29 @@ export function RevealScreen({ screen, state, onAdvance, isPending, error }: Scr
         {revealed ? (
           <>
             {config.revealedTitle && (
-              <h2 className="text-[length:var(--text-h3)]">{config.revealedTitle}</h2>
+              <h2 className="text-[length:var(--text-h3)]">
+                {config.revealedTitle}
+              </h2>
             )}
             {/* Announced, so the change is not conveyed visually alone (§62) */}
-            <div aria-live="polite" className="mt-[var(--space-s)] flex flex-col gap-[var(--space-m)]">
+            <div
+              aria-live="polite"
+              className="mt-[var(--space-s)] flex flex-col gap-[var(--space-m)]"
+            >
               {config.revealedBody.split("\n\n").map((para, i) => (
                 <p key={i}>{para}</p>
               ))}
             </div>
+            {/*
+              Questions to sit with, not questions to answer. No field appears
+              here and nothing is stored — the Brief is explicit that Evidence
+              must not collect a written response.
+            */}
+            {config.reflectionPrompts.length > 0 && (
+              <div className="mt-[var(--space-l)]">
+                <ReflectionPrompts prompts={config.reflectionPrompts} />
+              </div>
+            )}
           </>
         ) : (
           <p className="font-[family-name:var(--font-serif)] text-[length:var(--text-h3)]">
@@ -492,14 +562,27 @@ export function HandoffScreen({
         />
       }
     >
-      <div className="wla-measure flex flex-col gap-[var(--space-m)]">
-        <p className="font-medium">{config.location}</p>
-        <ol className="flex list-decimal flex-col gap-[var(--space-s)] pl-[var(--space-l)]">
+      {/*
+        A HANDOFF LOOKS DIFFERENT FROM A SCREEN.
+
+        The Build Brief requires handoff states to be visually distinct from
+        the numbered Academy screens at every size, because they mean something
+        different: put the screen down and go and do something. So the whole
+        block sits on sage rather than the cream canvas, which is the one
+        surface change the design language reserves for a change of register.
+      */}
+      <div className="wla-measure rounded-[var(--radius-surface)] bg-[var(--color-surface-sage)] p-[var(--space-l)]">
+        <p className="font-[family-name:var(--font-serif)] text-[length:var(--text-h3)]">
+          {config.location}
+        </p>
+        <ol className="mt-[var(--space-m)] flex list-decimal flex-col gap-[var(--space-s)] pl-[var(--space-l)]">
           {config.steps.map((step) => (
             <li key={step}>{step}</li>
           ))}
         </ol>
-        <p>{config.returnInstruction}</p>
+        <p className="mt-[var(--space-m)] text-[var(--color-text-muted)]">
+          {config.returnInstruction}
+        </p>
       </div>
     </ScreenFrame>
   );

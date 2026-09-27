@@ -164,3 +164,87 @@ validation alongside these.
 
 **Sprint 9: closed**, subject to the six gaps in section 3.
 Sprint 10 not started.
+
+---
+
+# Six Names v2 reconciliation — live validation
+
+**Run:** 2026-09-27
+**Against:** PostgreSQL 16.15, an isolated cluster created for this run, with
+the same minimal Supabase shim (`auth.users`, `auth.uid()`, the `anon` /
+`authenticated` / `service_role` roles, the `storage` schema). Queries ran as
+`authenticated`, a non-owner non-superuser role, so RLS applied as in
+production.
+
+**Not run against:** a hosted Supabase project. Every gap in section 3 above
+still stands — PostgREST, GoTrue, Storage policies, Stripe, concurrency, and
+the Next.js path end to end.
+
+## Discovered and fixed during this run
+
+**The key of an unused branch was being disclosed.**
+
+A child sitting on the Decision 1 consequence for "Ask about the list"
+received:
+
+```
+screen_key        = consequence1_ask
+next_sequence_key = consequence1_stop
+```
+
+`next_sequence_key` is the next screen _by sequence_, and the two Decision 1
+consequences are adjacent. No content leaked — `mission_screens` still has no
+client read policy and the sibling's body was never retrievable — but the
+browser was told the name of a branch that child will never reach.
+
+`next_sequence_key` is the last fallback in `resolveNextScreen`, used only when
+a screen declares no destination of its own. Every v2 screen declares one, so
+the value was sent and never read. `20260927100100_withhold_unused_next_key.sql`
+withholds it in exactly that case: when the screen has a top-level `next`, or
+is a `choice` whose every option has one. Screens that genuinely rely on
+sequence order — every version 1 screen — still receive it.
+
+Confirmed after the change: at `consequence1_ask` and at `decision1`, the key
+is withheld.
+
+## Verified against the real PostgreSQL / RLS environment
+
+| #   | Check                                                      | Result                                                    |
+| --- | ---------------------------------------------------------- | --------------------------------------------------------- |
+| 1   | All twelve migrations execute cleanly                      | no errors                                                 |
+| 2   | All five seeds apply                                       | v1 21 screens, v2 27 screens, both intact                 |
+| 3   | `start_mission` pins the CURRENT version                   | `mission_version = 2`, opens on `the_list`                |
+| 4   | **Entitled client cannot read `mission_screens`**          | **0 rows**                                                |
+| 5   | **Gated RPC returns exactly one screen**                   | `the_list`, with its own `next`                           |
+| 6   | **Unused Decision 1 consequence unreachable**              | at `consequence1_ask`: **0 rows** for `consequence1_stop` |
+| 7   | **Evidence unreachable before its stage**                  | **0 rows**                                                |
+| 8   | Evidence served only when it IS the current screen         | `PROJECT EQUIPMENT CHECK` returned at `evidence`          |
+| 9   | **Unused Decision 2 consequences unreachable at Evidence** | **0 rows**                                                |
+| 10  | **Cross-family access blocked**                            | raises `not_your_child`                                   |
+| 11  | **Completion creates the right Trail**                     | 3 rows, all `physical`                                    |
+| 12  | Nothing digital, nothing stored as a file                  | `digital = 0`, `storage_path is not null = 0`             |
+| 13  | **No text was ever collected**                             | `mission_responses` = **0 rows**                          |
+| 14  | Canonical tracker survives completion                      | Clarity = `Purpose clear`, Spread and Support unchanged   |
+| 15  | Trail creation is idempotent                               | second `complete_mission`: still 3 rows                   |
+| 16  | One `get_current_mission_screen` overload only             | `count = 1` (the 0008 lesson holds)                       |
+
+## Verified by the graph walk
+
+The v2 screen graph was read back **out of the database** and traversed for all
+six routes. For every route: only the selected consequences and tracker
+confirmations are reachable, the Changed List falls between Decision 1 and
+Decision 2, Evidence falls after Decision 2, and the route ends at `complete`.
+No dangling target, and no screen relies on sequence fallthrough.
+
+## Still unverified
+
+Everything in section 3 above. Additionally:
+
+- **The Academy screens have not been played by a real child through the
+  browser.** The authenticated Academy routes talk to hosted staging, which was
+  not signed into. The new screen types were rendered from fixture data and
+  measured at 375 / 768 / 1024 / 1512 — 0 horizontal overflow at every size —
+  but the mission has not been played end to end in a browser against a
+  database.
+- **The hosted staging project has not been updated.** No migration or seed was
+  pushed. Staging still runs version 1.

@@ -32,6 +32,24 @@ const missionControl = z
   .array(z.object({ title: z.string().min(1), body: z.string().min(1) }))
   .default([]);
 
+/**
+ * CANONICAL TRACKER STATE — dimension id → position label.
+ *
+ * The Build Brief requires the Academy to confirm, and persist, the tracker
+ * state that belongs to the branch the child is actually on. It is a property
+ * of the authored mission, not something the child reports.
+ *
+ * So it is declared here, in configuration, and applied BY THE SERVER when the
+ * child advances off the screen that declares it. The browser never sends it
+ * and cannot influence it. See `applyCanonicalTracker` in persistence.ts.
+ *
+ * A screen may patch a subset — Evidence sets Clarity alone, leaving Spread
+ * and Support exactly as the branch left them.
+ */
+const canonicalTracker = z
+  .record(z.string().min(1), z.string().min(1))
+  .default({});
+
 /** Architecture §9 / UI/UX §36 — plain instruction or context. */
 export const contentConfig = z.object({
   next: nextRef,
@@ -43,6 +61,46 @@ export const contentConfig = z.object({
   /** Optional mission-supplied image. Object-led only (UI/UX §14). */
   image: z.string().optional(),
   imageAlt: z.string().optional(),
+  /**
+   * A second, quieter way off this screen that LEAVES the mission rather than
+   * advancing it — the Build Brief's "Good stopping point ... Pause Mission".
+   *
+   * It carries no target: leaving always returns to Mission Home, where
+   * Continue Mission resumes from the persisted position. A screen therefore
+   * cannot use this to send a child anywhere the mission graph does not
+   * already allow.
+   */
+  secondaryAction: z.string().optional(),
+  /**
+   * Short prompts shown under the body for the child to consider.
+   *
+   * Read-and-reflect only. There is no field, and nothing is stored — see the
+   * `reflection` screen type, which exists for the same reason.
+   */
+  reflectionPrompts: z.array(z.string().min(1)).default([]),
+  /**
+   * A LIST OBJECT — the case object itself, not page copy.
+   *
+   * Six Names turns on a plain sheet of names that is later altered, and the
+   * alteration has to be unmistakable: a name struck through, two names added.
+   * Rendering that as body text would lose the distinction to anyone reading
+   * with assistive technology, so the change is structured data and the
+   * component states it in words as well as in visual form.
+   *
+   * Generic: any mission may need to show an object that changes.
+   */
+  listObject: z
+    .array(
+      z.object({
+        text: z.string().min(1),
+        mark: z.enum(["none", "struck", "added"]).default("none"),
+      }),
+    )
+    .default([]),
+  /** Accessible name for the list object, e.g. "The list, as it now reads". */
+  listLabel: z.string().optional(),
+  /** See `canonicalTracker` below. Applied server-side on advance. */
+  canonicalTracker: canonicalTracker,
 });
 
 /** Brief §21 — a decision. Options may branch (Tech Spec §16). */
@@ -55,11 +113,28 @@ export const choiceConfig = z.object({
       z.object({
         id: z.string().min(1),
         label: z.string().min(1),
+        /**
+         * The response in full, under its short label. Both Six Names
+         * decisions are authored this way — a name to compare, then what it
+         * actually means. Optional, because not every decision needs it.
+         */
+        description: z.string().optional(),
         /** Branch target. This is what makes branching configuration, not code. */
         next: nextRef,
       }),
     )
     .min(2),
+  /**
+   * Shown once a response is selected and before it is confirmed.
+   *
+   * Six Names uses it to send the child back to the physical tracker to
+   * predict what might change. It is deliberately a NOTE and not a field: the
+   * Build Brief requires the prediction to happen on paper and forbids storing
+   * it, so there is nowhere here for an answer to go.
+   */
+  confirmNote: z.string().optional(),
+  /** Label for the confirm action. */
+  confirmLabel: z.string().optional(),
   /** Whether the child can change their mind once confirmed. */
   locksOnConfirm: z.boolean().default(false),
 });
@@ -113,6 +188,14 @@ export const revealConfig = z.object({
       screenKey: z.string().min(1),
     }),
   ]),
+  /**
+   * Prompts shown AFTER the reveal. Read-and-reflect; no field, nothing
+   * stored. Six Names' Evidence asks "What does this evidence explain? What
+   * does it not undo?" and must not collect an answer to either.
+   */
+  reflectionPrompts: z.array(z.string().min(1)).default([]),
+  /** Applied server-side when the reveal is opened. */
+  canonicalTracker: canonicalTracker,
   next: nextRef,
 });
 
@@ -204,6 +287,95 @@ export const trackerConfig = z.object({
   next: nextRef,
 });
 
+/**
+ * Classify a shuffled set of items, one at a time.
+ *
+ * ORIENTATION, NOT ASSESSMENT. The authored classification is shown after each
+ * selection so the child can check and correct their own thinking. No score is
+ * computed, none is stored, and nothing distinguishes a child who matched
+ * every classification from one who matched none — which is why the schema has
+ * nowhere to put a result.
+ *
+ * Nothing about the activity is persisted beyond having completed it. The
+ * Build Brief's STATE TO PERSIST list does not include per-item progress, and
+ * "persist only what is necessary to resume safely" is satisfied by resuming
+ * at the activity itself.
+ */
+export const sortItemsConfig = z.object({
+  missionControl,
+  instruction: z.string().optional(),
+  /** Shown once, above the current item. */
+  prompt: z.string().min(1),
+  /** The equal choices offered for every item. Order is preserved. */
+  categories: z
+    .array(z.object({ id: z.string().min(1), label: z.string().min(1) }))
+    .min(2),
+  items: z
+    .array(
+      z.object({
+        id: z.string().min(1),
+        text: z.string().min(1),
+        /** Must match a category id. Revealed after the child selects. */
+        classification: z.string().min(1),
+      }),
+    )
+    .min(1),
+  /** Shuffle the presentation order. The Brief requires it for Six Names. */
+  shuffle: z.boolean().default(true),
+  actionLabel: z.string().optional(),
+  next: nextRef,
+});
+
+/**
+ * A read-only confirmation of canonical tracker state.
+ *
+ * The child moves physical counters; this states what the Academy holds to be
+ * true for their branch, so they can check and correct their own tracker. It
+ * offers no controls, which is the point — see `canonicalTracker`.
+ */
+export const trackerConfirmationConfig = z.object({
+  missionControl,
+  instruction: z.string().optional(),
+  /** Ordered rows: label plus the canonical position for this branch. */
+  rows: z
+    .array(z.object({ label: z.string().min(1), position: z.string().min(1) }))
+    .min(1),
+  /** The same values keyed by dimension id, persisted server-side. */
+  canonicalTracker: canonicalTracker,
+  actionLabel: z.string().optional(),
+  next: nextRef,
+});
+
+/**
+ * Read-and-reflect. Collects nothing.
+ *
+ * `unusedFrom` names an earlier choice screen; the component shows the options
+ * from that screen the child did NOT pick, so they can consider one. Those are
+ * labels the child was already shown when they decided — never consequences,
+ * which live on their own screens and are never fetched (see the screen_access
+ * migration).
+ *
+ * `selectable` lets the child pick one of those to think about. That selection
+ * is local to the screen and is deliberately given nowhere to go: there is no
+ * interaction kind for it, so it cannot be persisted even by mistake.
+ */
+export const reflectionConfig = z.object({
+  missionControl,
+  instruction: z.string().optional(),
+  prompts: z.array(z.string().min(1)).min(1),
+  /** Screen key of an earlier `choice`. Its unchosen options are listed. */
+  unusedFrom: z.string().optional(),
+  /** Heading for that list, e.g. "Which one would you now consider?" */
+  unusedPrompt: z.string().optional(),
+  /** All option ids/labels from `unusedFrom`, so the chosen one can be filtered. */
+  unusedOptions: z
+    .array(z.object({ id: z.string().min(1), label: z.string().min(1) }))
+    .default([]),
+  selectable: z.boolean().default(false),
+  actionLabel: z.string().optional(),
+  next: nextRef,
+});
+
 /** Architecture §14 — the end of the mission. */
 export const completionConfig = z.object({
   message: z.string().min(1),
@@ -244,6 +416,9 @@ export const screenConfigByType = {
   prepare: prepareConfig,
   multi_choice: multiChoiceConfig,
   tracker: trackerConfig,
+  sort_items: sortItemsConfig,
+  tracker_confirmation: trackerConfirmationConfig,
+  reflection: reflectionConfig,
   completion: completionConfig,
 } as const;
 

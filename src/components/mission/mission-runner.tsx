@@ -49,6 +49,7 @@ export function MissionRunner({
       key={screen.screenKey}
       screen={screen}
       state={state}
+      missionSlug={missionSlug}
       onAdvance={advance}
       isPending={isPending}
       error={error}

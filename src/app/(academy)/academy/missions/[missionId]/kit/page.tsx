@@ -58,42 +58,58 @@ export default async function MissionKitPage({
   return (
     <>
       <AcademyChrome />
-      <main className="wla-container py-[var(--space-2xl)]">
-      <Link
-        href={`/academy/missions/${mission.slug}`}
-        className="text-[length:var(--text-label)] underline decoration-[var(--color-border-strong)] underline-offset-4"
-      >
-        ← {mission.title}
-      </Link>
+      <main className="wla-container py-[var(--space-2xl)] md:py-[var(--space-3xl)]">
+        <Link
+          href={`/academy/missions/${mission.slug}`}
+          className="text-[length:var(--text-label)] underline decoration-[var(--color-border-strong)] underline-offset-4 hover:decoration-[var(--color-primary)]"
+        >
+          ← {mission.title}
+        </Link>
 
-      <h1 className="mt-[var(--space-m)] text-[length:var(--text-h1)]">
-        Mission Kit
-      </h1>
-      <p className="wla-measure mt-[var(--space-s)] text-[var(--color-text-muted)]">
-        Everything WLA provides for this mission. These stay here before, during
-        and after.
-      </p>
+        {/*
+          The site's section arrangement: the heading and its explanation hold
+          the left five columns, the list of things itself holds the right
+          seven. It is the same shape the public site gives its FAQ, and for
+          the same reason — the list is the content, and the heading is a label
+          for it rather than a lid on top of it.
+        */}
+        <div className="wla-split mt-[var(--space-xl)]">
+          <div className="lg:col-span-5">
+            <h1 className="text-[length:var(--text-h1)]">Mission Kit</h1>
+            <p className="wla-measure mt-[var(--space-m)] text-[var(--color-text-muted)]">
+              Everything WLA provides for this mission. These stay here before,
+              during and after.
+            </p>
+          </div>
 
-      {kit.length === 0 ? (
-        <EmptyState
-          title="No materials for this mission"
-          body="This mission doesn't need anything printed."
-        />
-      ) : kit.every((item) => item.url === null) ? (
-        /*
-         * Every file failed to produce a signed URL — the assets are missing
-         * from Storage. UI/UX §56: say it is unavailable, do NOT imply the
-         * child's progress is lost, and offer a way to retry. Distinct from
-         * "no materials", which is a mission that needs none.
-         */
-        <UnavailableState title="These materials aren't available right now." />
-      ) : (
-        <ul className="mt-[var(--space-xl)] border-t border-[var(--color-border)]">
-          {kit.map(({ resource, url }) => (
-            <ResourceItem key={resource.id} resource={resource} url={url} />
-          ))}
-        </ul>
-      )}
+          <div className="lg:col-span-7">
+            {kit.length === 0 ? (
+              <EmptyState
+                title="No materials for this mission"
+                body="This mission doesn't need anything printed."
+              />
+            ) : kit.every((item) => item.url === null) ? (
+              /*
+               * Every file failed to produce a signed URL — the assets are
+               * missing from Storage. UI/UX §56: say it is unavailable, do NOT
+               * imply the child's progress is lost, and offer a way to retry.
+               * Distinct from "no materials", which is a mission that needs
+               * none.
+               */
+              <UnavailableState title="These materials aren't available right now." />
+            ) : (
+              <ul className="border-t border-[var(--color-border)]">
+                {kit.map(({ resource, url }) => (
+                  <ResourceItem
+                    key={resource.id}
+                    resource={resource}
+                    url={url}
+                  />
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
       </main>
     </>
   );

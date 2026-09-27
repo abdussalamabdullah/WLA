@@ -28,6 +28,9 @@ export type ScreenTypeDb =
   | "prepare"
   | "multi_choice"
   | "tracker"
+  | "sort_items"
+  | "tracker_confirmation"
+  | "reflection"
   | "completion";
 export type ResourceType = "pdf" | "image" | "document" | "other";
 export type EvidenceType = "physical" | "digital";

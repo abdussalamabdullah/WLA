@@ -67,7 +67,16 @@ schema_paths = []
 enabled = true
 # Specifies an ordered list of seed files to load during db reset.
 # Supports glob patterns relative to supabase directory: "./seeds/*.sql"
-sql_paths = ["./seed/six_names.sql", "./seed/six_names_screens.sql"]
+sql_paths = [
+  "./seed/six_names.sql",
+  "./seed/six_names_screens.sql",
+  # 2026-09-27 reconciliation. New files, so they have no recorded hash and
+  # will actually run (D-37). Order matters: v2 screens reference the mission
+  # row, and the cover update is independent of both.
+  "./seed/six_names_cover.sql",
+  "./seed/six_names_v2_screens.sql",
+  "./seed/six_names_v2_kit.sql",
+]
 
 [db.network_restrictions]
 # Enable management of network restrictions.

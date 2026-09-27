@@ -53,9 +53,14 @@ export function EmptyState({
       {body && (
         <p className="wla-measure text-[var(--color-text-muted)]">{body}</p>
       )}
+      {/*
+        An empty screen is an invitation to act, so its action is the page's
+        one olive pill rather than a bordered control — the public site keeps
+        outline buttons out of a page body entirely.
+      */}
       {action && (
         <a href={action.href}>
-          <Button variant="secondary">{action.label}</Button>
+          <Button>{action.label}</Button>
         </a>
       )}
     </div>

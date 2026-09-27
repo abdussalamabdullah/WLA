@@ -5,6 +5,7 @@ import { ChildSelection } from "@/components/profile/child-selection";
 import { resolveActiveChild } from "@/features/children/active-child";
 import { getMissionCollection } from "@/features/missions/queries";
 import { AcademyChrome } from "@/components/academy/academy-chrome";
+import { PageHeader } from "@/components/ui/section";
 
 export const metadata = { title: "My Missions" };
 
@@ -81,42 +82,47 @@ export default async function MyMissionsPage({
     <>
       <AcademyChrome />
       <main className="wla-container py-[var(--space-2xl)]">
-      <Header />
+        <Header />
 
-      {/*
+        {/*
         Returning from Stripe is NOT proof of payment (Tech Spec §40). The
         entitlement is created by the verified webhook, which may land a moment
         later. So this confirms the payment was submitted and says the mission
         will appear — it never claims the mission is already there.
       */}
-      {purchase === "complete" && (
-        <div className="mt-[var(--space-l)]">
-          <FormNotice message="Thank you. Once the payment is confirmed, the mission appears here — refresh in a moment if you don't see it yet." />
-        </div>
-      )}
+        {purchase === "complete" && (
+          <div className="mt-[var(--space-l)]">
+            <FormNotice message="Thank you. Once the payment is confirmed, the mission appears here — refresh in a moment if you don't see it yet." />
+          </div>
+        )}
 
-      {/* A free grant is already committed when we redirect, so this can say
+        {/* A free grant is already committed when we redirect, so this can say
           so plainly — unlike the Stripe return, which cannot. */}
-      {added === "1" && (
-        <div className="mt-[var(--space-l)]">
-          <FormNotice message="Mission added." />
-        </div>
-      )}
+        {added === "1" && (
+          <div className="mt-[var(--space-l)]">
+            <FormNotice message="Mission added." />
+          </div>
+        )}
 
-      {collection.length === 0 ? (
-        // Copy verbatim from the Public Website Master §7 empty state.
-        <EmptyState
-          title="No missions yet"
-          body="Explore WLA missions or start with the free mission."
-          action={{ label: "Explore Missions →", href: "/missions" }}
-        />
-      ) : (
-        <ul className="mt-[var(--space-xl)] grid gap-[var(--space-l)] sm:grid-cols-2 lg:grid-cols-3">
-          {collection.map(({ mission, status }) => (
-            <MissionCard key={mission.id} mission={mission} status={status} />
-          ))}
-        </ul>
-      )}
+        {collection.length === 0 ? (
+          // Copy verbatim from the Public Website Master §7 empty state.
+          <EmptyState
+            title="No missions yet"
+            body="Explore WLA missions or start with the free mission."
+            action={{ label: "Explore Missions →", href: "/missions" }}
+          />
+        ) : (
+          /*
+          MEASURED: the site's grids run on a 32px gutter, two-up for mission
+          photographs and three-up for its closing panels. A row of three
+          362px cards plus two 32px gutters is exactly the 1152px container.
+        */
+          <ul className="mt-[var(--space-2xl)] grid gap-x-[var(--grid-gutter)] gap-y-[var(--space-2xl)] sm:grid-cols-2 lg:grid-cols-3">
+            {collection.map(({ mission, status }) => (
+              <MissionCard key={mission.id} mission={mission} status={status} />
+            ))}
+          </ul>
+        )}
       </main>
     </>
   );
@@ -131,11 +137,15 @@ export default async function MyMissionsPage({
  */
 function Header() {
   return (
-    <>
-      <h1 className="text-[length:var(--text-h1)]">My Missions</h1>
-      <p className="mt-[var(--space-s)] wla-measure text-[var(--color-text-muted)]">
-        Your WLA missions, in one place.
-      </p>
-    </>
+    <PageHeader
+      title="My Missions"
+      /*
+        The one editorial line on this screen — Fraunces italic in olive, as
+        the site sets its hero subhead and its closing statement. It replaces
+        the grey deck that was here rather than joining it: a title, an italic
+        line AND a muted explanation is three supporting voices for one page.
+      */
+      editorial="Everything you've started, and everything still waiting."
+    />
   );
 }

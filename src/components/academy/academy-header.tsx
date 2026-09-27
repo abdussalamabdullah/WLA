@@ -1,4 +1,6 @@
+import Image from "next/image";
 import Link from "next/link";
+import wlaLogo from "../../../public/wla-logo-horizontal.png";
 import {
   ProfileSwitcher,
   type ChildOption,
@@ -37,23 +39,49 @@ export function AcademyHeader({
   const quiet = variant === "quiet";
 
   return (
-    <header className={cn(!quiet && "border-b border-[var(--color-border)]")}>
+    /*
+      MEASURED: the public site's header sits on its own lighter band
+      (#f4eee3) above the canvas, roughly 80px tall, separated by a hairline.
+      The band is what does the separating — the rule alone left the header
+      sitting on the same surface as the page, which the site never does.
+
+      The quiet variant keeps neither, per §17.
+    */
+    <header
+      className={cn(
+        !quiet && "wla-band-raised border-b border-[var(--color-border)]",
+      )}
+    >
       <div
         className={cn(
-          "flex min-h-[64px] items-center justify-between gap-[var(--space-m)]",
+          "flex items-center justify-between gap-[var(--space-m)]",
+          quiet ? "min-h-[64px]" : "min-h-[80px]",
           quiet ? "wla-container-narrow" : "wla-container",
         )}
       >
-        <Link
-          href="/academy/my-missions"
-          className={cn(
-            "font-[family-name:var(--font-serif)]",
-            quiet
-              ? "text-[length:var(--text-label)] text-[var(--color-text-muted)]"
-              : "text-[length:var(--text-h3)]",
-          )}
-        >
-          Within Lab Academy
+        {/*
+          The wordmark, not type set to look like it. The logo is a distinct
+          lockup — the vessel mark, its own letterforms, letterspaced ACADEMY —
+          and Fraunces standing in for it read as a different typeface next to
+          the real thing.
+
+          Statically imported so Next supplies the intrinsic dimensions and
+          serves it optimised; `priority` because it is above the fold on every
+          Academy screen. Height is fixed and width auto so the 575×164 ratio
+          is never distorted.
+        */}
+        <Link href="/academy/my-missions" className="flex items-center">
+          <Image
+            src={wlaLogo}
+            alt="Within Lab Academy"
+            priority
+            className={cn(
+              "w-auto",
+              /* Smaller inside Active Mission, where §17 asks the header to
+                 become quieter. */
+              quiet ? "h-[22px] sm:h-[26px]" : "h-[28px] sm:h-[34px]",
+            )}
+          />
         </Link>
 
         {/* §35 — mission identity and the two ways out, in the header. */}
@@ -67,13 +95,13 @@ export function AcademyHeader({
             </span>
             <Link
               href={`/academy/missions/${mission.slug}`}
-              className="text-[length:var(--text-label)] underline decoration-[var(--color-border-strong)] underline-offset-4"
+              className="text-[length:var(--text-small)] underline decoration-[var(--color-border-strong)] underline-offset-4 hover:decoration-[var(--color-primary)]"
             >
               Mission Home
             </Link>
             <Link
               href={`/academy/missions/${mission.slug}/kit`}
-              className="text-[length:var(--text-label)] underline decoration-[var(--color-border-strong)] underline-offset-4"
+              className="text-[length:var(--text-small)] underline decoration-[var(--color-border-strong)] underline-offset-4 hover:decoration-[var(--color-primary)]"
             >
               Mission Kit
             </Link>
@@ -88,7 +116,7 @@ export function AcademyHeader({
             />
             <Link
               href="/account"
-              className="text-[length:var(--text-label)] underline decoration-[var(--color-border-strong)] underline-offset-4"
+              className="text-[length:var(--text-small)] underline decoration-[var(--color-border-strong)] underline-offset-4"
             >
               Account
             </Link>

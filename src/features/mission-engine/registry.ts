@@ -19,6 +19,13 @@ export type ScreenComponentProps = {
   screen: MissionScreen;
   state: MissionStateData;
   /**
+   * The mission being played, for the rare screen that offers a way OUT of
+   * the mission rather than through it — the Build Brief's "Pause Mission".
+   * It is a slug for routing, never an authorisation input: every server
+   * entry point re-establishes the child, the entitlement and the stage.
+   */
+  missionSlug: string;
+  /**
    * Record an interaction and advance.
    *
    * Takes a MissionInteraction, not a state patch: screens describe what the

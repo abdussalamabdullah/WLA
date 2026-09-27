@@ -7,8 +7,11 @@ import {
   HandoffScreen,
   MultiChoiceScreen,
   PrepareScreen,
+  ReflectionScreen,
   ResponseScreen,
   RevealScreen,
+  SortItemsScreen,
+  TrackerConfirmationScreen,
   TrackerScreen,
 } from "@/components/mission/screens";
 import type { MissionScreen } from "./navigation";
@@ -25,6 +28,9 @@ registerScreens({
   choice: ChoiceScreen,
   multi_choice: MultiChoiceScreen,
   tracker: TrackerScreen,
+  sort_items: SortItemsScreen,
+  tracker_confirmation: TrackerConfirmationScreen,
+  reflection: ReflectionScreen,
   response: ResponseScreen,
   reveal: RevealScreen,
   handoff: HandoffScreen,
@@ -51,12 +57,14 @@ registerScreens({
 export function MissionScreenRenderer({
   screen,
   state,
+  missionSlug,
   onAdvance,
   isPending = false,
   error,
 }: {
   screen: MissionScreen;
   state: MissionStateData;
+  missionSlug: string;
   onAdvance: (interaction: MissionInteraction) => void;
   isPending?: boolean;
   error?: string;
@@ -67,6 +75,7 @@ export function MissionScreenRenderer({
   return createElement(component, {
     screen,
     state,
+    missionSlug,
     onAdvance,
     isPending,
     error,

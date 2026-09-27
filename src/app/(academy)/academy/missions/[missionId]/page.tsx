@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import { AcademyChrome } from "@/components/academy/academy-chrome";
 import { notFound } from "next/navigation";
@@ -5,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { StartMissionButton } from "@/components/mission/start-mission-button";
 import { ErrorState } from "@/components/system/states";
 import { MissionIdentity } from "@/components/mission/mission-identity";
+import { resolveMissionCover } from "@/features/missions/covers";
 import { resolveActiveChild } from "@/features/children/active-child";
 import { getMissionHome } from "@/features/missions/queries";
 import { AccessError } from "@/lib/permissions";
@@ -72,65 +74,110 @@ export default async function MissionHomePage({
   const primaryLabel =
     status === "not_started" ? "Start Mission →" : "Continue Mission →";
 
+  const cover = resolveMissionCover(mission);
+
   return (
     <>
       <AcademyChrome />
-      <main className="wla-container py-[var(--space-2xl)]">
-      <MissionIdentity mission={mission} status={status} />
+      <main>
+        {/*
+          1. Identity, led by the mission's photograph.
 
-      {/* 2. The strongest action. Nothing below may compete with it. */}
-      <div className="mt-[var(--space-xl)]">
-        {status === "complete" ? (
-          <Link href={`${base}/trail`}>
-            <Button size="large">View Mission Trail →</Button>
-          </Link>
-        ) : (
-          <StartMissionButton missionSlug={mission.slug} label={primaryLabel} />
-        )}
+          The split the public site uses everywhere: the image holds the left
+          five columns and everything the child reads sits in the right seven,
+          so the page opens the way a mission card does rather than with a
+          heading floating on empty canvas.
+        */}
+        <div className="wla-container wla-split py-[var(--space-2xl)] md:py-[var(--space-3xl)]">
+          {cover && (
+            <div className="lg:col-span-5">
+              <div className="relative aspect-[4/3] w-full overflow-hidden rounded-[var(--radius-surface)] bg-[var(--color-surface-sage)]">
+                <Image
+                  src={cover.src}
+                  alt={cover.alt}
+                  fill
+                  priority
+                  sizes="(min-width: 1024px) 460px, 100vw"
+                  className="object-cover"
+                />
+              </div>
+            </div>
+          )}
 
-        {status === "in_progress" && (
-          <p className="mt-[var(--space-sm)] text-[length:var(--text-small)] text-[var(--color-text-muted)]">
-            You&rsquo;ll go back to where you stopped.
-          </p>
-        )}
-        {status === "complete" && (
-          <p className="mt-[var(--space-sm)] text-[length:var(--text-small)] text-[var(--color-text-muted)]">
-            You finished this one. It stays here, and so does everything you
-            made.
-          </p>
-        )}
-      </div>
+          <div className={cover ? "lg:col-span-7" : "lg:col-span-8"}>
+            <MissionIdentity mission={mission} status={status} />
 
-      {/* 3. Subordinate. Available in every status, including Complete
-             (Architecture §7, §8, §17). Plain sections rather than cards —
-             Brief §34: "Do not default to cards." */}
-      <div className="mt-[var(--space-3xl)] grid gap-[var(--space-xl)] border-t border-[var(--color-border)] pt-[var(--space-xl)] md:grid-cols-2">
-        <section>
-          <h2 className="text-[length:var(--text-h3)]">Mission Kit</h2>
-          <p className="mt-[var(--space-xs)] text-[var(--color-text-muted)]">
-            Everything you&rsquo;ll need for this mission.
-          </p>
-          <Link
-            href={`${base}/kit`}
-            className="mt-[var(--space-sm)] inline-flex min-h-[var(--target-min)] items-center text-[length:var(--text-label)] font-medium underline decoration-[var(--color-border-strong)] underline-offset-4 hover:decoration-[var(--color-primary)]"
-          >
-            Open Mission Kit
-          </Link>
-        </section>
+            {/* 2. The strongest action. Nothing below may compete with it. */}
+            <div className="mt-[var(--space-xl)]">
+              {status === "complete" ? (
+                <Link href={`${base}/trail`}>
+                  <Button size="large">View Mission Trail →</Button>
+                </Link>
+              ) : (
+                <StartMissionButton
+                  missionSlug={mission.slug}
+                  label={primaryLabel}
+                />
+              )}
 
-        <section>
-          <h2 className="text-[length:var(--text-h3)]">For Parents</h2>
-          <p className="mt-[var(--space-xs)] text-[var(--color-text-muted)]">
-            A short note about helping your child get started.
-          </p>
-          <Link
-            href={`${base}/parents`}
-            className="mt-[var(--space-sm)] inline-flex min-h-[var(--target-min)] items-center text-[length:var(--text-label)] font-medium underline decoration-[var(--color-border-strong)] underline-offset-4 hover:decoration-[var(--color-primary)]"
-          >
-            Read the parent note
-          </Link>
-        </section>
-      </div>
+              {status === "in_progress" && (
+                <p className="mt-[var(--space-sm)] text-[length:var(--text-small)] text-[var(--color-text-muted)]">
+                  You&rsquo;ll go back to where you stopped.
+                </p>
+              )}
+              {status === "complete" && (
+                <p className="mt-[var(--space-sm)] text-[length:var(--text-small)] text-[var(--color-text-muted)]">
+                  You finished this one. It stays here, and so does everything
+                  you made.
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/*
+          3. Subordinate. Available in every status, including Complete
+          (Architecture §7, §8, §17).
+
+          A FULL-BLEED SAGE BAND, not a rounded shelf. The public site marks a
+          change of register by changing the page's background edge to edge —
+          it never floats a tinted panel on the canvas. The band does the same
+          job the shelf was doing, and does it in the site's own vocabulary:
+          everything above is the child's mission and the one action that
+          matters; everything inside is the support around it.
+
+          Still not cards — Brief §34, "do not default to cards" — and Start
+          stays unmistakably dominant (Architecture §5).
+        */}
+        <div className="wla-band-sage wla-section">
+          <div className="wla-container wla-split">
+            <section className="lg:col-span-6">
+              <h2 className="text-[length:var(--text-h3)]">Mission Kit</h2>
+              <p className="mt-[var(--space-xs)] text-[var(--color-text-muted)]">
+                Everything you&rsquo;ll need for this mission.
+              </p>
+              <Link
+                href={`${base}/kit`}
+                className="mt-[var(--space-s)] inline-flex min-h-[var(--target-min)] items-center text-[length:var(--text-label)] font-medium underline decoration-[var(--color-border-strong)] underline-offset-4 hover:decoration-[var(--color-primary)]"
+              >
+                Open Mission Kit →
+              </Link>
+            </section>
+
+            <section className="lg:col-span-6">
+              <h2 className="text-[length:var(--text-h3)]">For Parents</h2>
+              <p className="mt-[var(--space-xs)] text-[var(--color-text-muted)]">
+                A short note about helping your child get started.
+              </p>
+              <Link
+                href={`${base}/parents`}
+                className="mt-[var(--space-s)] inline-flex min-h-[var(--target-min)] items-center text-[length:var(--text-label)] font-medium underline decoration-[var(--color-border-strong)] underline-offset-4 hover:decoration-[var(--color-primary)]"
+              >
+                Read the parent note →
+              </Link>
+            </section>
+          </div>
+        </div>
       </main>
     </>
   );

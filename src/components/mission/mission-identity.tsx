@@ -1,6 +1,8 @@
-import { LAB_LABEL } from "@/features/missions/labs";
+import { LabIcon } from "@/components/mission/lab-icon";
+import { LAB_LABEL, LAB_TAGLINE } from "@/features/missions/labs";
 import { MissionStatusBadge } from "@/components/mission/mission-status";
-import { formatMissionMeta } from "@/lib/utils";
+import { MetaList } from "@/components/ui/section";
+import { missionMetaParts } from "@/lib/utils";
 import type { MissionRow, MissionStatus } from "@/types/database";
 
 /**
@@ -20,15 +22,45 @@ export function MissionIdentity({
       <h1 className="mt-[var(--space-sm)] text-[length:var(--text-h1)]">
         {mission.title}
       </h1>
-      <p className="mt-[var(--space-s)] text-[var(--color-text-muted)]">
-        {LAB_LABEL[mission.lab]} ·{" "}
-        {formatMissionMeta(mission.min_age, mission.max_age, mission.duration)}
-      </p>
+      {/*
+        The Build Brief's ENTRY section lists exactly what Mission Home shows:
+        the title, the Lab, its tagline, the age range, the mission time and
+        the delivery type. Delivery was missing and is a fact already on the
+        mission row; the tagline belongs to the Lab (see LAB_TAGLINE).
+      */}
+      <MetaList
+        className="mt-[var(--space-s)]"
+        leading={<LabIcon lab={mission.lab} />}
+        items={[
+          LAB_LABEL[mission.lab],
+          ...missionMetaParts(
+            mission.min_age,
+            mission.max_age,
+            mission.duration,
+          ),
+          capitalise(mission.delivery_type),
+        ]}
+      />
+
+      {LAB_TAGLINE[mission.lab] && (
+        <p className="wla-editorial mt-[var(--space-m)] text-[length:var(--text-h3)]">
+          {LAB_TAGLINE[mission.lab]}
+        </p>
+      )}
+      {/*
+        The mission's own sentence, set the way the site sets a hook line:
+        Fraunces rather than the surrounding Karla. It is the one moment on
+        Mission Home that speaks in the brand's editorial voice.
+      */}
       {mission.description && (
-        <p className="wla-measure mt-[var(--space-m)] text-[length:var(--text-body-lg)]">
+        <p className="wla-measure mt-[var(--space-l)] font-[family-name:var(--font-serif)] text-[length:var(--text-body-lg)] leading-[var(--leading-normal)]">
           {mission.description}
         </p>
       )}
     </div>
   );
+}
+
+function capitalise(value: string): string {
+  return value.charAt(0).toUpperCase() + value.slice(1);
 }

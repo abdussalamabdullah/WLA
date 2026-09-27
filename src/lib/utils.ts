@@ -24,6 +24,23 @@ export function formatPrice(
 }
 
 /** "Ages 7–11 · 60–90 mins" — the metadata line locked by Architecture §4. */
+/**
+ * Mission metadata as SEPARATE parts, for <MetaList>.
+ *
+ * The site sets its meta with air around each middot, so the separator has to
+ * be rendered rather than baked into a joined string. formatMissionMeta below
+ * still returns the joined form for the places that need plain text.
+ */
+export function missionMetaParts(
+  minAge: number,
+  maxAge: number,
+  duration: string | null,
+): string[] {
+  const parts = [`Ages ${minAge}\u2013${maxAge}`];
+  if (duration) parts.push(duration);
+  return parts;
+}
+
 export function formatMissionMeta(
   minAge: number,
   maxAge: number,

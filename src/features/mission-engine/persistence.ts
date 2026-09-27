@@ -7,6 +7,7 @@ import {
   resolveNextScreen,
   type MissionScreen,
 } from "./navigation";
+import { screenConfigByType } from "./schemas";
 import {
   completionRule,
   isMissionComplete,
@@ -15,11 +16,7 @@ import {
   type MissionInteraction,
   type MissionStateData,
 } from "./index";
-import type {
-  Json,
-  MissionProgressRow,
-  MissionRow,
-} from "@/types/database";
+import type { Json, MissionProgressRow, MissionRow } from "@/types/database";
 
 /**
  * MISSION PERSISTENCE — Sprint 6.
@@ -180,6 +177,44 @@ export type InteractionResult = {
 };
 
 /**
+ * Apply the canonical tracker state a screen declares — server-side.
+ *
+ * The Build Brief requires the Academy to persist the tracker state belonging
+ * to the branch the child is on, and to set Clarity to "Purpose clear" when
+ * Evidence is opened. That state is a property of the authored mission, so it
+ * is read from the screen's own configuration, which only ever arrives through
+ * the gated RPC. The browser is never asked for it and cannot influence it.
+ *
+ * Merged, not replaced: Evidence patches Clarity alone and must leave Spread
+ * and Support exactly as the branch left them.
+ *
+ * Generic by construction — this knows that a screen MAY declare canonical
+ * tracker state, never which mission is playing.
+ */
+function applyCanonicalTracker(
+  state: MissionStateData,
+  screen: MissionScreen,
+): MissionStateData {
+  const schema = screenConfigByType[screen.type];
+  if (!schema) return state;
+
+  const parsed = schema.safeParse(screen.configuration);
+  if (!parsed.success) return state;
+
+  const patch = (parsed.data as { canonicalTracker?: Record<string, string> })
+    .canonicalTracker;
+  if (!patch || Object.keys(patch).length === 0) return state;
+
+  const existing =
+    (state.custom.tracker as Record<string, string> | undefined) ?? {};
+
+  return {
+    ...state,
+    custom: { ...state.custom, tracker: { ...existing, ...patch } },
+  };
+}
+
+/**
  * Record one meaningful interaction and advance.
  *
  * Tech Spec §29 defines the save points: choice confirmed, response submitted,
@@ -220,25 +255,42 @@ export async function recordInteraction(
   }
 
   /*
+   * `custom` is not reachable from the browser.
+   *
+   * Every other interaction kind names a screen and is checked against the
+   * one the child is actually on. `custom` names no screen, so it skipped that
+   * check and could write any key into `custom` state — including the
+   * canonical tracker the Build Brief requires the Academy to hold as
+   * authoritative. It exists for server-authored state (see
+   * `applyCanonicalTracker`); it is not something a client may send.
+   */
+  if (interaction.kind === "custom") {
+    throw new Error("That interaction does not belong to the current step.");
+  }
+
+  /*
    * An interaction may only target the screen the child is actually on.
    *
    * Because only that screen is ever fetched, a forged interaction for a
-   * future screen — skipping ahead to Later Evidence, or pre-answering a
+   * future screen — skipping ahead to Evidence, or pre-answering a
    * consequence — has nothing to match and is refused here.
    */
-  if (interaction.kind !== "custom") {
-    if (!screen || screen.screenKey !== interaction.screenKey) {
-      throw new Error("That interaction does not belong to the current step.");
-    }
+  if (!screen || screen.screenKey !== interaction.screenKey) {
+    throw new Error("That interaction does not belong to the current step.");
   }
 
-  const nextState = applyInteraction(stage.state, interaction);
+  /*
+   * The reducer runs first, then the SERVER applies any canonical tracker
+   * state the current screen declares. Order matters: the canonical patch must
+   * land after the child's own interaction so nothing the browser sent can
+   * overwrite it.
+   */
+  const nextState = applyCanonicalTracker(
+    applyInteraction(stage.state, interaction),
+    screen,
+  );
 
-  // Position advances only for screen-bound interactions.
-  let nextScreenKey = progress.current_screen_key;
-  if (interaction.kind !== "custom" && screen) {
-    nextScreenKey = resolveNextScreen(screen, nextSequenceKey, nextState);
-  }
+  const nextScreenKey = resolveNextScreen(screen, nextSequenceKey, nextState);
 
   const { supabase } = await requireEntitledMission(childId, missionIdOrSlug);
 
@@ -262,7 +314,7 @@ export async function recordInteraction(
      *
      * They deliberately are NOT read here. Completion is evaluated after an
      * interaction, so the current screen is whatever the child just acted on
-     * — for Six Names, the `final_judgement` response. The completion screen
+     * — for Six Names, the `final_judgement` screen. The completion screen
      * is a configuration carrier that is never itself rendered, and the
      * engine cannot see it: mission_screens has no client read policy.
      *

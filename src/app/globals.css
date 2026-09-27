@@ -1,30 +1,20 @@
 @import "tailwindcss";
 @import "../styles/tokens.css";
 
-/* Expose WLA tokens to Tailwind utilities (bg-background, text-muted, etc.) */
+/*
+ * Expose WLA tokens to Tailwind utilities (bg-background, text-muted, etc.).
+ *
+ * Only tokens whose Tailwind NAME differs from the token name belong here.
+ * Entries like `--font-serif: var(--font-serif)` were self-referential: both
+ * the circular declaration and the real one from tokens.css landed in :root,
+ * and the correct one won purely because it came last in source order. A
+ * change of import order would have dropped every heading to Georgia.
+ *
+ * Components reference these tokens directly — `font-[family-name:var(...)]`,
+ * `rounded-[var(--radius-card)]` — so the mapping was never needed for them.
+ */
 @theme inline {
-  --color-background: var(--color-background);
-  --color-surface: var(--color-surface);
-  --color-surface-sage: var(--color-surface-sage);
-  --color-text: var(--color-text);
   --color-muted: var(--color-text-muted);
-  --color-border: var(--color-border);
-  --color-border-strong: var(--color-border-strong);
-  --color-primary: var(--color-primary);
-  --color-primary-hover: var(--color-primary-hover);
-  --color-accent: var(--color-accent);
-  --color-success: var(--color-success);
-  --color-error: var(--color-error);
-  --color-warning: var(--color-warning);
-
-  --font-serif: var(--font-serif);
-  --font-sans: var(--font-sans);
-
-  --text-eyebrow: var(--text-eyebrow);
-
-  --radius-card: var(--radius-card);
-  --radius-panel: var(--radius-panel);
-  --radius-dialog: var(--radius-dialog);
 }
 
 @layer base {
@@ -89,10 +79,22 @@
     max-width: var(--measure);
   }
 
-  /* Page shell — UI/UX §10 */
+  /*
+   * Page shell.
+   *
+   * The site's content column measures 1152px and its gutters sit OUTSIDE
+   * that, so max-width has to be the column PLUS both gutters — otherwise a
+   * border-box container renders 1152 minus two gutters and never lines up
+   * with the public site.
+   *
+   * Done with calc rather than `box-sizing: content-box`, which was the first
+   * attempt and broke every small screen: content-box plus `width: 100%`
+   * makes the element its parent's full width and then adds the padding on
+   * top, so the page overflowed the viewport by exactly two gutters.
+   */
   .wla-container {
     width: 100%;
-    max-width: var(--content-max);
+    max-width: calc(var(--content-max) + 2 * var(--gutter-mobile));
     margin-inline: auto;
     padding-inline: var(--gutter-mobile);
   }
@@ -100,21 +102,127 @@
   /* Active Mission shell — deliberately narrower (§34, §60) */
   .wla-container-narrow {
     width: 100%;
-    max-width: var(--content-narrow);
+    max-width: calc(var(--content-narrow) + 2 * var(--gutter-mobile));
     margin-inline: auto;
     padding-inline: var(--gutter-mobile);
   }
 
   @media (min-width: 768px) {
-    .wla-container,
+    .wla-container {
+      max-width: calc(var(--content-max) + 2 * var(--gutter-tablet));
+      padding-inline: var(--gutter-tablet);
+    }
+
     .wla-container-narrow {
+      max-width: calc(var(--content-narrow) + 2 * var(--gutter-tablet));
       padding-inline: var(--gutter-tablet);
     }
   }
 
   @media (min-width: 1280px) {
     .wla-container {
+      max-width: calc(var(--content-max) + 2 * var(--gutter-desktop));
       padding-inline: var(--gutter-desktop);
     }
+  }
+}
+
+@layer utilities {
+  /*
+   * THE SPLIT — the public site's governing layout idea.
+   *
+   * Nearly every section on the site is a Fraunces heading parked in the left
+   * five columns with all of its content — prose, lists, FAQ rows, grids — in
+   * the right seven. The left column is mostly empty, and that emptiness is
+   * the design rather than an accident of it.
+   *
+   * MEASURED: 12 columns, 32px gutter, inside a 1152px container. Seven
+   * columns of that grid is 659px and the site's body column measures 657px,
+   * which is how we know the grid is 12 and not 10 or 16.
+   *
+   * Children place themselves (`lg:col-span-5`, `lg:col-span-7`) so a section
+   * can carry a third element — a footnote, a rule, a full-width figure —
+   * without fighting the container.
+   */
+  .wla-split {
+    display: grid;
+    row-gap: var(--space-l);
+    column-gap: var(--grid-gutter);
+  }
+
+  @media (min-width: 1024px) {
+    .wla-split {
+      grid-template-columns: repeat(var(--grid-columns), minmax(0, 1fr));
+    }
+  }
+
+  /*
+   * Section rhythm. MEASURED at 96px between a band edge and the cap of the
+   * heading below it, corrected for half-leading. Tightened on small screens,
+   * where 96px of empty canvas is a scroll cost rather than composure.
+   */
+  .wla-section {
+    padding-block: var(--space-3xl);
+  }
+
+  @media (min-width: 768px) {
+    .wla-section {
+      padding-block: var(--space-section);
+    }
+  }
+
+  /*
+   * BANDS, NOT CARDS.
+   *
+   * The site separates sections with full-bleed background changes and
+   * hairline rules. It puts content inside a bordered box exactly once, in
+   * the closing three-up. Reach for a band before reaching for a card.
+   */
+  .wla-band-sage {
+    background: var(--color-surface-sage);
+  }
+
+  .wla-band-raised {
+    background: var(--color-surface-raised);
+  }
+
+  /* A full-width hairline, as used above and below the site's Labs rail. */
+  .wla-rule {
+    border: 0;
+    border-top: 1px solid var(--color-border);
+  }
+
+  /*
+   * Body copy. MEASURED: 18px at 1.62, with 20px BETWEEN paragraphs — the
+   * site does not rely on line height alone to separate them.
+   */
+  .wla-prose > * + * {
+    margin-top: var(--space-paragraph);
+  }
+
+  /*
+   * Display type. MEASURED at 60px on a 65px line — a ratio of 1.08, far
+   * tighter than the 1.15 used for headings below it. At this size the
+   * leading has to close up or the lines read as three separate statements.
+   */
+  .wla-display {
+    font-family: var(--font-serif);
+    font-size: var(--text-display);
+    line-height: var(--leading-display);
+    letter-spacing: var(--tracking-display);
+    font-weight: var(--weight-regular);
+  }
+
+  /*
+   * The editorial line. MEASURED: the site sets its hero subhead and its
+   * closing "The experiment starts within." in Fraunces italic, in OLIVE
+   * rather than charcoal. It is the one place the brand raises its voice, so
+   * it stays rare — one per screen at most.
+   */
+  .wla-editorial {
+    font-family: var(--font-serif);
+    font-style: italic;
+    color: var(--color-text-accent);
+    letter-spacing: var(--tracking-display);
   }
 }

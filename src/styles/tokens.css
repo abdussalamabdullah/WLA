@@ -1,29 +1,44 @@
 /*
  * WLA Design Tokens
- * Source of authority: UI/UX Design Specification §6 (colour), §11 (spacing),
- * §12 (shape), §13 (borders/shadows), §71 (token inventory).
  *
- * The five brand colours are LOCKED by the Designer Brief and Handover
- * Reflections. Semantic tokens derived from them are marked DERIVED and need
- * design sign-off — no document specifies them.
+ * Source of authority: the public Within Lab Academy site, measured pixel by
+ * pixel from ten captures taken 2026-09-27. Method, evidence and confidence
+ * per value are in docs/DESIGN-LANGUAGE.md. Values marked MEASURED come from
+ * that exercise; values marked DERIVED or ESTIMATED do not and are open to
+ * design sign-off.
+ *
+ * The measurement is trustworthy: the site's CTA fill sampled #5e6a50 against
+ * the locked Deep Olive #5f6a4f — one value in 255 on every channel, through
+ * HEIC capture, colour conversion and JPEG. See DESIGN-LANGUAGE §1.
  */
 
 :root {
-  /* ---- Brand palette (LOCKED — Designer Brief / Handover §6) ---- */
-  --wla-cream: #f5efe3; /* Warm Cream   — primary canvas */
+  /* ---- Brand palette (Designer Brief / Handover §6) ---- */
+  /*
+   * Warm Cream was previously #f5efe3. The site renders its canvas at
+   * #f1e7d7 — warmer and deeper. Changed on client instruction (2026-09-27)
+   * so the Academy and the public site share one canvas; charcoal on it
+   * measures 10.7:1, comfortably AAA. Recorded as D-24.
+   */
+  --wla-cream: #f1e7d7; /* Warm Cream     — primary canvas. MEASURED */
   --wla-charcoal: #3a2f2a; /* Charcoal Brown — primary text */
-  --wla-olive: #5f6a4f; /* Deep Olive   — primary interaction/CTA */
-  --wla-sage: #a3b18a; /* Soft Sage    — supporting surfaces */
-  --wla-clay: #b87c5a; /* Clay         — small accents only */
+  --wla-olive: #5f6a4f; /* Deep Olive     — primary interaction/CTA */
+  --wla-sage: #a3b18a; /* Soft Sage      — supporting surfaces */
+  --wla-clay: #b87c5a; /* Clay           — small accents only */
 
-  /* ---- Semantic colour (UI/UX §71) ---- */
+  /* ---- Semantic colour ---- */
   --color-background: var(--wla-cream);
-  --color-surface: #fbf8f2; /* DERIVED — lifted paper, not a floating panel */
-  --color-surface-sage: #eceee2; /* DERIVED — sage wash for section variation */
+  --color-surface: #faf4ec; /* MEASURED — the site's card fill */
+  --color-surface-raised: #f4eee3; /* MEASURED — the header band */
+  /*
+   * MEASURED. The previous value (#eceee2) was roughly an 18% sage tint and
+   * read as dirty grey; the site's band is about 35% and is unmistakably a
+   * different surface rather than a slightly dimmer canvas.
+   */
+  --color-surface-sage: #dde3cf;
   --color-text: var(--wla-charcoal);
-  --color-text-muted: #6b5d55; /* DERIVED — Handover §4: readability is weight
-                                  + colour + size, never a lighter grey alone */
-  --color-border: #ded2c2; /* DERIVED — low contrast, per §13 */
+  --color-text-muted: #6b5d55; /* MEASURED (site meta and body-secondary) */
+  --color-border: #e2dbcb; /* MEASURED — card border and hairline rules */
   --color-border-strong: #c4b5a2; /* DERIVED */
   /*
    * COLOUR APPLICATION RULE (client instruction, 2026-09-25):
@@ -31,29 +46,37 @@
    *   Deep Olive  → larger UI emphasis, buttons, active states.
    *   Charcoal    → small body and supporting text on Warm Cream.
    *
-   * Do NOT set small text in olive. Olive on cream measures 5.0:1 — adequate
-   * for a button or a heading, marginal for 14px supporting copy. Use
-   * --color-text-action for small text links instead.
+   * Do NOT set small text in olive. Olive on the canvas measures 4.76:1 —
+   * enough for a button label or a display line, marginal for 14px supporting
+   * copy. Use --color-text-action for small text links instead.
    */
   --color-primary: var(--wla-olive);
   --color-primary-hover: #4f5941; /* DERIVED */
-  --color-primary-text: var(--wla-cream);
-  --color-focus: var(
-    --wla-clay
-  ); /* DERIVED — clay reads clearly against both
-                                     cream and olive; §64 requires focus be
-                                     visible without breaking character */
+  /*
+   * MEASURED. The site's button label is a near-white warm tint, not the
+   * canvas cream — which is what keeps it at 5.36:1 on olive rather than the
+   * 4.76:1 the canvas colour would give.
+   */
+  --color-primary-text: #fbf7ec;
+  --color-focus: var(--wla-clay); /* DERIVED */
   --color-accent: var(--wla-clay);
   /* Small text actions ("View Mission →"). Charcoal, not olive — see the
      colour application rule above. Emphasis comes from the underline. */
   --color-text-action: var(--color-text);
+  /*
+   * MEASURED. The site sets its editorial italic lines — the hero subhead and
+   * the closing "The experiment starts within." — in olive, not charcoal
+   * (sampled #505d46 and #525f45). Reserved for Fraunces italic at display
+   * sizes, where 4.76:1 is comfortably clear of the 3:1 large-text floor.
+   */
+  --color-text-accent: var(--wla-olive);
 
   /*
    * Focus indicator.
    *
-   * Clay on cream measures 3.02:1 — it scrapes WCAG 2.2's 3:1 floor for
+   * Clay on cream measures ~3:1 — it scrapes WCAG 2.2's 3:1 floor for
    * non-text contrast and fails outright on an olive button. Charcoal on
-   * cream is 11.3:1, but charcoal on olive is only 2.26:1, so no single
+   * cream is 10.7:1, but charcoal on olive is only 2.3:1, so no single
    * colour works on every surface this ring lands on.
    *
    * The ring is therefore drawn twice: a background-coloured halo separates
@@ -71,66 +94,80 @@
 
   /* ---- Typography ----
      APPROVED FACES (D-33): Fraunces for display/headings, Karla for body,
-     interface, labels, navigation and buttons. Do not substitute.
-
-     The scale below was MEASURED from the approved Lovable screenshots
-     (Home, Missions, Labs) at an assumed 2× device pixel ratio. Values are
-     rounded to the nearest sensible step. See docs/TYPOGRAPHY.md for the
-     measurement method, confidence level per value, and the list of things
-     the screenshots could not establish. */
+     interface, labels, navigation and buttons. Do not substitute. */
   --font-serif: var(--font-wla-serif), Georgia, "Times New Roman", serif;
   --font-sans:
     var(--font-wla-sans), -apple-system, BlinkMacSystemFont, sans-serif;
 
   /*
-   * Desktop scale — a ~1.25 major-third progression, pinned to the two values
-   * actually measured from the approved design rather than derived from a
-   * formula: body 18px and section heading 30px. Sizes between and around
-   * them follow the ratio and are rounded to whole pixels, so the scale is
-   * consistent without drifting off the measured anchors.
+   * Scale. Five of the eight steps are MEASURED from the site via cap height
+   * (Fraunces cap ≈ 0.70em, Karla ≈ 0.73em); the rest interpolate between
+   * them on the same ~1.27 progression.
    *
-   *   14 · 15 · 18* · 22 · 24 · 30* · 38 · 46      (* = measured)
+   *   12* · 14 · 15* · 18* · 20 · 22* · 28 · 37* · 60*      (* = measured)
+   *
+   * The display step is the important correction: the site sets its hero at
+   * 60px, where the Academy had 46px. On the site the display type is the
+   * loudest thing on the page, not merely large.
    */
-  --text-display: 2.875rem; /* 46px — hero only */
-  --text-h1: 2.375rem; /* 38px — page titles */
-  --text-h2: 1.875rem; /* 30px — MEASURED. Sections, mission card titles */
-  --text-h3: 1.5rem; /* 24px — editorial statements, pull quotes */
-  --text-body-lg: 1.375rem; /* 22px — introductory copy */
-  --text-body: 1.125rem; /* 18px — MEASURED from body line spacing */
-  --text-small: 0.9375rem; /* 15px — metadata, supporting text */
-  --text-label: 0.875rem; /* 14px — buttons, navigation, labels */
-  --text-eyebrow: 0.875rem; /* 14px — matches label; caps are not used to
-                               create hierarchy (see tracking note below) */
+  /*
+   * Display and h1 are FLUID; everything below them is fixed.
+   *
+   * The measured value is the ceiling and is reached at about 1280px, so at
+   * the 1512px viewport the captures were taken at, both sit exactly on the
+   * site's numbers. Below that they scale down, because 60px Fraunces does
+   * not fit a 375px screen — the first build of this overflowed the viewport.
+   *
+   * ESTIMATED below the ceiling. Every capture of the public site is 1512px
+   * wide, so its own small-screen type could not be measured; these are the
+   * conventional reading and should be checked against a mobile capture.
+   */
+  --text-display: clamp(2.25rem, 1.25rem + 3.5vw, 3.75rem); /* →60px MEASURED */
+  --text-h1: clamp(1.75rem, 1.25rem + 1.6vw, 2.3125rem); /* →37px MEASURED */
+  --text-h2: 1.75rem; /* 28px — sub-sections */
+  --text-h3: 1.375rem; /* 22px — MEASURED. Card titles, FAQ questions */
+  --text-body-lg: 1.25rem; /* 20px — the deck under a heading */
+  --text-body: 1.125rem; /* 18px — MEASURED */
+  --text-small: 0.9375rem; /* 15px — MEASURED. Metadata, supporting text */
+  --text-label: 0.875rem; /* 14px — buttons, labels */
+  --text-eyebrow: 0.75rem; /* 12px — MEASURED. Footer group headings; the
+                              only place the site sets caps */
 
   /* Weights. Headings in the approved design are REGULAR, not bold — the
      editorial quality comes from Fraunces itself, not from weight. */
-  --weight-regular: 400; /* headings, body */
-  --weight-medium: 500; /* labels, navigation, links */
-  --weight-semibold: 600; /* editorial statements, emphasis */
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+
+  /*
+   * Metadata separator spacing. MEASURED.
+   *
+   * The site sets its dot-separated meta with air around the middots —
+   * "Ages 11–15 · 60–75 mins" reads as separate facts, not one run-on string.
+   * A plain " · " closes that gap; this token restores it.
+   */
+  --space-meta: 0.5em;
 
   /*
    * Fraunces sets loose at display sizes, as most editorial serifs do. A small
-   * negative track at 38px and above closes the gaps without altering the
+   * negative track at 37px and above closes the gaps without altering the
    * letterforms. Standard optical correction, not a change of brand voice.
    */
   --tracking-display: -0.012em;
 
-  /*
-   * ESTIMATED, not measured — see docs/TYPOGRAPHY.md.
-   *
-   * Used ONLY for the eyebrows the approved public design actually sets in
-   * caps ("TRY WLA", footer group headings). It is deliberately not applied
-   * to Academy labels: uppercase is harder to read at small sizes, and weight
-   * and colour carry that hierarchy instead.
-   */
+  /* ESTIMATED. Applied only to the 12px caps the site actually uses for
+     footer group headings — never to Academy labels, where uppercase would
+     cost legibility at small sizes for no hierarchy gain. */
   --tracking-eyebrow: 0.08em;
 
-  --leading-tight: 1.15; /* headings — §9 */
+  --leading-display: 1.08; /* MEASURED — hero, 65px on 60px */
+  --leading-tight: 1.15; /* headings below display */
   --leading-normal: 1.4;
-  --leading-relaxed: 1.6; /* body — MEASURED from line spacing */
-  --measure: 68ch; /* comfortable reading width — §9 */
+  --leading-relaxed: 1.62; /* MEASURED — body, 29px on 18px */
+  --space-paragraph: 20px; /* MEASURED — space between body paragraphs */
+  --measure: 68ch;
 
-  /* ---- Spacing: 4px base scale (UI/UX §11) ---- */
+  /* ---- Spacing: 4px base scale ---- */
   --space-xs: 4px;
   --space-s: 8px;
   --space-sm: 12px;
@@ -141,35 +178,68 @@
   --space-3xl: 64px;
   --space-4xl: 80px;
   --space-5xl: 96px;
-  --space-section: 120px;
+  --space-section: 96px; /* MEASURED — the site's vertical section rhythm */
 
-  /* ---- Shape (UI/UX §12) ---- */
-  --radius-button: 999px;
-  --radius-card: 8px;
-  --radius-input: 6px;
-  --radius-panel: 10px;
-  --radius-dialog: 12px;
+  /* ---- Shape ----
+     MEASURED by scanning the first filled pixel per row down from each
+     top-left corner:
 
-  /* ---- Elevation (UI/UX §13) — "paper lifted from a surface" ---- */
+       primary CTA      half its height — a true pill (48px tall)
+       header control   ~4px
+       cards, images    5–6px
+
+     The site is materially SQUARER than the Academy was. The Phase 2 move to
+     10/14/16/18 was judged against the screenshots rather than measured from
+     them, and it was wrong in direction as well as degree. One surface radius
+     now covers cards, images, inputs and panels; only the primary CTA is a
+     pill. The old names are kept as aliases so the system reads as one value,
+     not four near-identical ones. */
+  --radius-button: 999px; /* MEASURED — primary CTA only */
+  --radius-surface: 6px; /* MEASURED — everything with an edge */
+  --radius-control: var(--radius-surface); /* secondary buttons, inputs */
+  --radius-input: var(--radius-surface);
+  --radius-card: var(--radius-surface);
+  --radius-panel: var(--radius-surface);
+  --radius-dialog: 8px; /* ESTIMATED — the site has no dialog to measure */
+
+  /* ---- Elevation — the site uses NONE ----
+     Every card on the public site is a hairline border and a lighter fill,
+     with no shadow at all. --shadow-raised is kept at `none` so any surface
+     still referencing it resolves to the site's actual treatment rather than
+     silently reintroducing elevation. Overlays are the one exception: a
+     dialog must separate from the page, and there is no dialog on the site
+     to measure against. */
   --shadow-none: none;
-  --shadow-raised:
-    0 1px 2px rgb(58 47 42 / 0.06), 0 2px 8px rgb(58 47 42 / 0.04);
-  --shadow-overlay: 0 8px 32px rgb(58 47 42 / 0.14);
+  --shadow-raised: none;
+  --shadow-overlay: 0 8px 32px rgb(58 47 42 / 0.14); /* ESTIMATED */
 
-  /* ---- Layout (UI/UX §10) ---- */
-  --content-max: 1280px;
+  /* ---- Layout ----
+     MEASURED. The container is 1152px and the grid is 12 columns with a 32px
+     gutter; the arithmetic confirms itself, since 7 columns of that grid is
+     659px and the site's measured body column is 657px.
+
+     The governing layout idea is the asymmetric split: a Fraunces heading in
+     columns 1–5, all content in columns 6–12, and the left column mostly
+     empty on purpose. See .wla-split in globals.css. */
+  --content-max: 1152px; /* MEASURED (1157 observed) */
   --content-narrow: 720px; /* Active Mission — §34/§60 keep it focused */
+  --grid-columns: 12;
+  --grid-gutter: 32px; /* MEASURED */
   --gutter-mobile: 20px;
   --gutter-tablet: 32px;
   --gutter-desktop: 48px;
 
-  /* ---- Motion (UI/UX §65) — calm, short, never decorative ---- */
+  /* ---- Motion — calm, short, never decorative ---- */
   --duration-fast: 120ms;
   --duration-base: 200ms;
   --duration-slow: 320ms;
   --ease-standard: cubic-bezier(0.2, 0, 0.2, 1);
 
-  /* ---- Touch targets (UI/UX §63) ---- */
+  /* ---- Touch targets (UI/UX §63) ----
+     A DELIBERATE DIVERGENCE. The site's header control measures 31px tall.
+     The Academy keeps 44px, because its audience is 7–15 and §63 is an
+     accessibility requirement rather than a stylistic one. Shape matches the
+     site; size does not. */
   --target-min: 44px;
 }
 
