@@ -25,7 +25,8 @@ export function ResourceItem({
 
   return (
     <li className="border-b border-[var(--color-border)] py-[var(--space-l)] last:border-b-0">
-      <h3 className="text-[length:var(--text-h3)]">{resource.title}</h3>
+      {/* h2, not h3: a Kit resource is a section of the Mission Kit page, whose h1 is "Mission Kit". Jumping h1 → h3 skips a level (WCAG 1.3.1). */}
+      <h2 className="text-[length:var(--text-h3)]">{resource.title}</h2>
       {resource.description && (
         <p className="wla-measure mt-[var(--space-xs)] text-[length:var(--text-small)] text-[var(--color-text-muted)]">
           {resource.description}

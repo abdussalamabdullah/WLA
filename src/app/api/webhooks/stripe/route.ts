@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
 import type Stripe from "stripe";
-import { serverEnv } from "@/lib/env";
+import { stripeEnv } from "@/lib/env";
 import { stripe } from "@/features/commerce/checkout";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendMissionAccessEmail } from "@/lib/email/send";
+import { logError, logWarn } from "@/lib/observability/logger";
 
 /**
  * THE ENTITLEMENT BOUNDARY — Tech Spec §40.
@@ -29,7 +30,7 @@ import { sendMissionAccessEmail } from "@/lib/email/send";
 export const runtime = "nodejs"; // raw body required for signature verification
 
 export async function POST(request: Request) {
-  const env = serverEnv();
+  const env = stripeEnv();
 
   const signature = request.headers.get("stripe-signature");
   if (!signature) {
@@ -98,7 +99,9 @@ export async function POST(request: Request) {
   if (!intent) {
     // A gift purchase has no child yet — it creates a gift record instead,
     // redeemed later (Tech Spec §41). Not yet implemented: gift flow.
-    console.error("[stripe] no checkout intent for session", session.id);
+    // OPS-01. A gift purchase legitimately has no intent yet, so this is a
+    // warning rather than an error — but it must still be visible.
+    logWarn("stripe_no_checkout_intent", { sessionId: session.id });
     return NextResponse.json({ received: true, unmatched: true });
   }
 
@@ -107,11 +110,18 @@ export async function POST(request: Request) {
     session.amount_total !== intent.amount_minor ||
     session.currency?.toUpperCase() !== intent.currency.toUpperCase()
   ) {
-    console.error("[stripe] amount mismatch", {
-      sessionId: session.id,
-      expected: `${intent.amount_minor} ${intent.currency}`,
-      received: `${session.amount_total} ${session.currency}`,
-    });
+    // A reconciliation failure is the one webhook outcome that should always
+    // be looked at: it means Stripe collected something other than what we
+    // recorded. No entitlement is created.
+    logError(
+      "stripe_amount_mismatch",
+      new Error("amount or currency mismatch"),
+      {
+        sessionId: session.id,
+        expected: `${intent.amount_minor} ${intent.currency}`,
+        received: `${session.amount_total} ${session.currency}`,
+      },
+    );
     return NextResponse.json({ received: true, mismatch: true });
   }
 
@@ -131,7 +141,7 @@ export async function POST(request: Request) {
   );
 
   if (error) {
-    console.error("[stripe] failed to create entitlement", error);
+    logError("stripe_entitlement_failed", error, { sessionId: session.id });
     // Release the claim so Stripe's retry can genuinely re-run this.
     await admin.from("stripe_events").delete().eq("id", event.id);
     // 500 so Stripe retries — a dropped entitlement means a paying family
@@ -170,7 +180,11 @@ async function notifyAccessGranted(
         .select("display_name, parent_id")
         .eq("id", childId)
         .maybeSingle(),
-      admin.from("missions").select("title, slug").eq("id", missionId).maybeSingle(),
+      admin
+        .from("missions")
+        .select("title, slug")
+        .eq("id", missionId)
+        .maybeSingle(),
     ]);
 
     if (!child || !mission) return;
@@ -192,6 +206,9 @@ async function notifyAccessGranted(
       missionUrl: `${origin}/academy/missions/${mission.slug}`,
     });
   } catch (err) {
-    console.error("[stripe] access email failed", err);
+    // The purchase already succeeded; the email is a courtesy.
+    logWarn("stripe_access_email_failed", {
+      reason: err instanceof Error ? err.message : "unknown",
+    });
   }
 }

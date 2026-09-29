@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { AcademyChrome } from "@/components/academy/academy-chrome";
 import { notFound } from "next/navigation";
-import { Button } from "@/components/ui/button";
+import { ButtonLink } from "@/components/ui/button";
 import { resolveActiveChild } from "@/features/children/active-child";
 import { getMissionHome } from "@/features/missions/queries";
 import { AccessError } from "@/lib/permissions";
@@ -78,9 +78,9 @@ export default async function MissionCompletePage({
         */}
         <div className="mt-[var(--space-2xl)] flex flex-wrap items-center gap-[var(--space-l)]">
           {/* Architecture §14 — the primary return */}
-          <Link href="/academy/my-missions">
-            <Button size="large">Back to My Missions →</Button>
-          </Link>
+          <ButtonLink href="/academy/my-missions" size="large">
+            Back to My Missions →
+          </ButtonLink>
           <Link
             href={`${base}/trail`}
             className="inline-flex min-h-[var(--target-min)] items-center text-[length:var(--text-label)] font-medium underline decoration-[var(--color-border-strong)] underline-offset-4 hover:decoration-[var(--color-primary)]"

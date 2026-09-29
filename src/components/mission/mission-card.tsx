@@ -85,7 +85,9 @@ export function MissionCard({
         >
           <MissionStatusBadge status={status} />
 
-          <h3
+          {/* h2, not h3: a card is a section of My Missions, whose h1 is the
+              page title. h1 → h3 skips a level (WCAG 1.3.1). */}
+          <h2
             className={cn(
               "mt-[var(--space-s)] text-[length:var(--text-h3)]",
               "underline decoration-transparent underline-offset-4 transition-colors",
@@ -93,7 +95,7 @@ export function MissionCard({
             )}
           >
             {mission.title}
-          </h3>
+          </h2>
 
           <MetaList
             className="mt-[var(--space-xs)]"

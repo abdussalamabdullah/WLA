@@ -248,3 +248,233 @@ Everything in section 3 above. Additionally:
   database.
 - **The hosted staging project has not been updated.** No migration or seed was
   pushed. Staging still runs version 1.
+
+---
+
+# Hosted staging — Six Names v2 integration and QA
+
+**Run:** 2026-09-28
+**Against:** the hosted staging project `WLA Academy- staging`
+(`zvquddwdcysgrcuvywqw`, PostgreSQL 17.6, eu-west-1) — **not** a shim. This
+closes gaps 1, 2, 3 and 6 of section 3 above for the Six Names path: PostgREST,
+GoTrue, Storage policies and the Next.js application were all exercised for
+real. Stripe (gap 4) and concurrency (gap 5) remain unexercised.
+
+## What was applied
+
+Three migrations (`20260927100000`, `20260927100100`, `20260927110000`) and
+four seeds. Staging was on 11 of 14 migrations and running mission version 1;
+it is now on 14 of 14 and version 2. All six Mission Kit PDFs were uploaded to
+the private `mission-resources` bucket.
+
+Verified **after** the push rather than assumed from its exit code, per D-37.
+
+## D-17 holds in production
+
+A pre-existing in-progress run was on staging, pinned to `mission_version = 1`
+and sitting on the v1 screen `tracker1`. After the upgrade it is **unchanged**:
+still v1, still on `tracker1`, with its own v1 state (`decision1_move: 'b'`).
+New runs pin to version 2. Version 1's 21 screens remain intact beside version
+2's 27.
+
+## Verified on hosted staging
+
+| Check                            | Result                                                               |
+| -------------------------------- | -------------------------------------------------------------------- |
+| Mission version / published      | `version = 2`, `published = false`                                   |
+| Screens                          | v1: 21 · v2: 27                                                      |
+| Completion rule                  | all five conditions, including `screen_visited: final_judgement`     |
+| Mission Kit                      | 5 resources, Child Mission first, all six PDFs in Storage            |
+| Child Mission PDF via signed URL | 200, 50,684 bytes, 8 pages, **sha256 identical** to the repo asset   |
+| Entitled family                  | signed URL **granted**                                               |
+| Other family, unentitled         | **400**                                                              |
+| Anonymous                        | **400**                                                              |
+| `/object/public/…`               | **400** — the bucket is private                                      |
+| Unauthenticated direct object    | **400**                                                              |
+| `mission_screens` direct read    | **0 rows** for entitled parent, other family and anonymous           |
+| Cross-family isolation           | neither family sees the other's children, progress or entitlements   |
+| Gated RPC, other family          | raises `not_your_child`                                              |
+| Client forging an entitlement    | **403**                                                              |
+| Screens served per request       | exactly **1**, always the current one                                |
+| `next_sequence_key`              | **null** — D-42 is live; no unused branch key is disclosed           |
+| Reflection branches              | unused option **labels** only; no consequence text in the payload    |
+| Completed run                    | 3 physical Trail entries, no files, `mission_responses` = **0 rows** |
+| Canonical tracker after Evidence | Spread and Support unchanged, Clarity → `Purpose clear`              |
+
+## Browser QA — actually performed
+
+Signed in as a real parent (session cookies produced by `@supabase/ssr` itself,
+never typed into a form) against hosted staging.
+
+**Route 1 (Ask about the list → Ask everyone to pause) was played end to end
+through the browser** and reached `status = complete`: the list, Seen/Said/
+Unknown, all three handoffs, both decisions, both consequences, both tracker
+confirmations, the Changed List, the revisit, the stopping point, Evidence,
+Judgement, reflection and Final Judgement.
+
+The other five routes were driven through the **gated RPC as an authenticated
+parent** — the same path the application uses — asserting per route that only
+the selected consequences and tracker confirmations are reachable, that no
+unused consequence appears, that the Changed List falls between the decisions
+and Evidence after Decision 2. All five passed.
+
+Pause/resume, Mission Control and responsive layout were exercised in the
+browser. Zero horizontal overflow at 375, 768, 1024 and 1512 across My
+Missions, Mission Home, Mission Kit and Active Mission.
+
+## Found and fixed during this run
+
+`resolveMissionCover` dropped the cover image's written description whenever
+`cover_image` was set, so the photograph was described locally and undescribed
+on staging. Fixed, regression-tested, mutation-tested — see D-47.
+
+---
+
+# Academy completion pass — 2026-09-28
+
+**Against:** hosted staging (`WLA Academy- staging`, PostgreSQL 17.6) and a
+clean local PostgreSQL 16 cluster. Six Names remained `published = false`
+throughout.
+
+## Migrations
+
+11 → 14 → **16**. Added this pass:
+
+- `20260928100000_analytics_and_admin_stats.sql` — ANALYTICS-01, plus the
+  admin's per-mission counts and version usage.
+- `20260928100100_lock_is_admin.sql` — closes the privilege escalation below.
+
+All 16 apply cleanly **from an empty database**, followed by all 6 seeds.
+
+## Found and fixed during this pass
+
+**1. Privilege escalation — any parent could make themselves an administrator.**
+
+```
+set role authenticated;
+set request.jwt.claim.sub = '<any parent>';
+update profiles set is_admin = true where id = '<their own id>';
+-- succeeded
+```
+
+0001's `parent updates own profile` policy had no `with check` and no column
+restriction; 0002 later added `is_admin` to that table. An admin can edit the
+mission catalogue and what is charged, so this was a real escalation, live on
+staging. Closed with two independent locks (D-49), each verified to hold on its
+own. Confirmed on staging afterwards: self-promotion returns **403**, renaming
+still returns **204**.
+
+Two details made the first attempt silently useless and are recorded because
+they will recur: a **column-level REVOKE is a no-op while a table-level GRANT
+exists**, and **`current_user` inside a `security definer` function is the
+function OWNER**, not the caller.
+
+**2. A `"use server"` module exported a non-async value.**
+
+`actions.ts` exported `emptyAdminState`. Next refuses that, so importing the
+module threw at evaluation and the whole editor PAGE 500'd — not just the save.
+Typecheck, lint and the unit suite were all green; only a real browser POST
+surfaced it. Moved to `schemas.ts`, with a guard that now scans every
+`"use server"` file in the repository.
+
+**3. Accessibility defects (WCAG 2.2 AA).** Audited on 12 rendered pages:
+pages whose only heading was an `h2` (full-page empty/error states), `h1 → h3`
+skips on My Missions, Mission Kit and Mission Trail, several sub-24px targets,
+and `<a>` wrapping `<button>` in nine places — invalid HTML, and the reason a
+211×22 target was sitting around a correctly sized one. All fixed; the audit
+now reports **0 issues** across all 12 pages.
+
+## Verified on hosted staging
+
+| Check                                       | Result                                                                   |
+| ------------------------------------------- | ------------------------------------------------------------------------ |
+| Migration state                             | 16 of 16 applied, none pending                                           |
+| Six Names                                   | version 2, **published = false**                                         |
+| Parent self-promoting to admin              | **403**, `is_admin` unchanged                                            |
+| Parent renaming themselves                  | 204                                                                      |
+| `admin_mission_stats` as a parent           | `not_admin`                                                              |
+| `analytics_events` read by a parent         | **0 rows** (RLS on, no policy)                                           |
+| Ordinary parent reaching `/admin`           | redirected to the Academy                                                |
+| Anonymous reaching `/admin`                 | redirected                                                               |
+| Admin editing the catalogue                 | saved; `published`, `version`, `completion_rule` and price all unchanged |
+| Analytics on a real start                   | one row: name, mission, version, timestamp — **no child id**             |
+| Forging an event for another family's child | `not_your_child`                                                         |
+| Six Names, all six branches                 | **6 / 6 PASS**                                                           |
+| Accessibility, 12 pages                     | 0 issues                                                                 |
+| Responsive, 16 page×width combinations      | 0 horizontal overflow                                                    |
+
+## Still unverified
+
+- **Stripe end to end.** No `STRIPE_SECRET_KEY` or `STRIPE_WEBHOOK_SECRET`
+  exists in this environment, so checkout, the webhook, entitlement creation
+  and idempotency have never been exercised against Stripe. The code path is
+  covered by unit tests only.
+- **Transactional email.** No `RESEND_API_KEY` or `EMAIL_FROM`, so
+  `sendMissionAccessEmail` has only ever taken its not-configured branch.
+- **Concurrency.** Simultaneous `start_mission` calls and racing webhook
+  deliveries remain single-transaction by construction and un-raced.
+
+---
+
+# Final integration pass — 2026-09-28
+
+Migrations **16 → 18**. All 18 apply from an empty database, followed by all 6
+seeds. Staging is at 18/18, none pending. Six Names stayed `published = false`.
+
+## Found and fixed
+
+1. **Free access required Stripe credentials.** `createAdminClient()` validated
+   all five environment variables together, so a free-mission grant threw
+   whenever Stripe was unconfigured. Split per service (D-53).
+2. **An administrator could rewrite `missions.version`, and delete missions.**
+   `PATCH {"version": 99}` succeeded against staging — verified, then restored
+   to 2 immediately. Scoped to catalogue columns (D-54).
+3. **Over-redaction in the logger** dropped `error.name` and the analytics
+   event name (D-55).
+
+## Stripe — what was and was not tested
+
+**Not tested end to end.** No `STRIPE_SECRET_KEY` or `STRIPE_WEBHOOK_SECRET`
+exists in this environment, so no Checkout session was created and no webhook
+was ever delivered. No payment was simulated and nothing was weakened to make a
+test pass.
+
+What WAS established, at the database boundary rather than in the UI:
+
+| Check                                  | Result                                                             |
+| -------------------------------------- | ------------------------------------------------------------------ |
+| Duplicate webhook delivery             | second `stripe_events` insert rejected by primary key              |
+| Duplicate entitlement grant            | 1 row after two identical grants (`unique (child_id, mission_id)`) |
+| Client inserts `mission_entitlements`  | RLS violation                                                      |
+| Client inserts `stripe_events`         | RLS violation                                                      |
+| Client inserts `checkout_intents`      | RLS violation                                                      |
+| Other family reads a checkout intent   | 0 rows                                                             |
+| A `purchase` entitlement grants access | buyer starts and reads their screen                                |
+| Unrelated family with no entitlement   | `not_entitled` / `not_your_child`                                  |
+
+Plus 45 source-level commerce tests covering price provenance, child
+resolution from `checkout_intents` rather than Stripe metadata, signature
+verification, unpaid sessions, amount reconciliation and claim release.
+
+**Remaining configuration:** `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`,
+`NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, a webhook
+endpoint registered for `checkout.session.completed`, and a published priced
+mission to buy.
+
+## Email — what was and was not tested
+
+**No message was sent.** No `RESEND_API_KEY` or `EMAIL_FROM` exists. Verified
+behaviourally in its real unconfigured state: returns
+`{ sent: false, reason: "not_configured" }`, never throws, and logs neither the
+recipient nor the child's name.
+
+**Remaining configuration:** `RESEND_API_KEY`, `EMAIL_FROM` with a verified
+sending domain, and `NEXT_PUBLIC_SITE_URL` for the link.
+
+## Verified live in this pass
+
+20/20 security checks at the server/database boundary · 6/6 Six Names branches
+· D-17 holds (the pre-existing run is still pinned to v1 on `tracker1`) ·
+accessibility 0 issues across 14 pages · responsive 0 overflow across 16
+page×width combinations · admin editor saves without touching `published`,
+`version`, `completion_rule` or price.

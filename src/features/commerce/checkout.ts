@@ -1,7 +1,7 @@
 import "server-only";
 
 import Stripe from "stripe";
-import { serverEnv } from "@/lib/env";
+import { stripeEnv } from "@/lib/env";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireOwnedChild, requireParent } from "@/lib/permissions";
 import type { ChildProfileRow, MissionRow } from "@/types/database";
@@ -30,7 +30,7 @@ export class CheckoutError extends Error {
 let stripeClient: Stripe | null = null;
 export function stripe(): Stripe {
   if (!stripeClient) {
-    stripeClient = new Stripe(serverEnv().STRIPE_SECRET_KEY);
+    stripeClient = new Stripe(stripeEnv().STRIPE_SECRET_KEY);
   }
   return stripeClient;
 }

@@ -384,7 +384,9 @@ describe("deferred commerce scope", () => {
   });
 
   it("no resource versioning was introduced (D-19)", () => {
-    const pinning = read("supabase/migrations/20260925220300_version_pinning.sql");
+    const pinning = read(
+      "supabase/migrations/20260925220300_version_pinning.sql",
+    );
     expect(pinning).not.toContain("alter table mission_resources");
   });
 });
@@ -402,3 +404,62 @@ function sourceFiles(dir: string): string[] {
   }
   return out;
 }
+
+describe("configuration is split by service", () => {
+  const read = (p: string) =>
+    readFileSync(join(__dirname, "../../../..", p), "utf8");
+  const code = (p: string) =>
+    read(p)
+      .replace(/\/\*[\s\S]*?\*\//g, " ")
+      .replace(/(^|[^:])\/\/.*$/gm, "$1 ");
+
+  it("a FREE mission grant does not require Stripe credentials", () => {
+    /*
+     * REGRESSION. `createAdminClient()` read a single schema validating all
+     * five variables together, so `grantFreeEntitlement` threw whenever Stripe
+     * was unconfigured — a deployment offering only free missions could not
+     * grant access at all.
+     *
+     * `lib/email/send.ts` had already reasoned to the same conclusion in the
+     * other direction: "email must not become a hard requirement for payments
+     * to work". Payments must equally not gate free access.
+     */
+    const admin = code("src/lib/supabase/admin.ts");
+    expect(admin).toContain("supabaseServerEnv");
+    expect(admin).not.toContain("stripeEnv");
+
+    const env = code("src/lib/env.ts");
+    const supabaseBlock = env.slice(
+      env.indexOf("const supabaseSchema"),
+      env.indexOf("const stripeSchema"),
+    );
+    expect(supabaseBlock).not.toContain("STRIPE");
+  });
+
+  it("Stripe credentials are read only where Stripe is involved", () => {
+    for (const file of [
+      "src/features/commerce/checkout.ts",
+      "src/app/api/webhooks/stripe/route.ts",
+    ]) {
+      expect(code(file)).toContain("stripeEnv");
+    }
+    // And nowhere else.
+    const offenders: string[] = [];
+    for (const file of [
+      "src/lib/supabase/admin.ts",
+      "src/lib/email/send.ts",
+      "src/lib/analytics/events.ts",
+    ]) {
+      if (code(file).includes("stripeEnv")) offenders.push(file);
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it("webhook failures are logged through the structured logger", () => {
+    // OPS-01 — redaction and a stable reference, not bare console.error.
+    const hook = code("src/app/api/webhooks/stripe/route.ts");
+    expect(hook).toContain("logError");
+    expect(hook).toContain("logWarn");
+    expect(hook).not.toContain("console.error");
+  });
+});

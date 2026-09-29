@@ -24,7 +24,7 @@ export default function AccountLayout({
           </Link>
           <Link
             href="/academy/my-missions"
-            className="text-[length:var(--text-label)] underline decoration-[var(--color-border-strong)] underline-offset-4"
+            className="inline-flex min-h-[var(--target-min)] items-center text-[length:var(--text-label)] underline decoration-[var(--color-border-strong)] underline-offset-4 hover:decoration-[var(--color-primary)]"
           >
             Back to missions
           </Link>

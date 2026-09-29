@@ -1,5 +1,4 @@
-import Link from "next/link";
-import { Button } from "@/components/ui/button";
+import { ButtonLink } from "@/components/ui/button";
 
 /**
  * STUB — public Mission Detail.
@@ -29,9 +28,9 @@ export default async function MissionDetailPage({
 
       <div className="mt-[var(--space-xl)]">
         {/* Price is shown on the purchase page, read from the mission row. */}
-        <Link href={`/purchase/${slug}`}>
-          <Button size="large">Get this mission</Button>
-        </Link>
+        <ButtonLink href={`/purchase/${slug}`} size="large">
+          Get this mission
+        </ButtonLink>
       </div>
     </main>
   );

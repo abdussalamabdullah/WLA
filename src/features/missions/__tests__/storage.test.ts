@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { cn } from "@/lib/utils";
+import { resolveMissionCover } from "@/features/missions/covers";
 import { join } from "node:path";
 
 const repo = join(__dirname, "../../../..");
@@ -14,6 +16,17 @@ const read = (p: string) => readFileSync(join(repo, p), "utf8");
  * sentence "the site sets uppercase in exactly one place". A guard that can be
  * satisfied by prose is not a guard.
  */
+/** Every .ts/.tsx under src, so a guard cannot miss a file by not naming it. */
+function listSourceFiles(dir = "src"): string[] {
+  const out: string[] = [];
+  for (const entry of readdirSync(join(repo, dir), { withFileTypes: true })) {
+    const rel = `${dir}/${entry.name}`;
+    if (entry.isDirectory()) out.push(...listSourceFiles(rel));
+    else if (/\.tsx?$/.test(entry.name)) out.push(rel);
+  }
+  return out;
+}
+
 const code = (p: string) =>
   read(p)
     .replace(/\/\*[\s\S]*?\*\//g, " ")
@@ -275,19 +288,21 @@ describe("Six Names Mission Kit assets", () => {
     }
   });
 
-  it("the Child Mission PDF is NOT fabricated", () => {
+  it("the Child Mission asset is the supplied PDF, not a fabricated one", () => {
     /*
-     * OPEN-13 — the Child Mission document has never been supplied. Its
-     * resource row stays, its file stays absent, and the Kit renders that one
-     * entry as unavailable. Substituting generated content would misrepresent
-     * approved mission material.
+     * Outstanding until the client supplied it on 2026-09-27. Until then the
+     * row was seeded and the file absent, so the Kit listed it honestly and
+     * degraded to its unavailable state — no substitute was generated, which
+     * is what D-39 requires and what the client instructed.
+     *
+     * Now present: a real 8-page PDF whose content matches the Child Mission
+     * document the mission was authored from.
      */
-    expect(() =>
-      readFileSync(join(assetDir, "six-names-child-mission.pdf")),
-    ).toThrow();
-    // The row is still seeded, so the Kit lists it honestly.
+    const pdf = readFileSync(join(assetDir, "six-names-child-mission.pdf"));
+    expect(pdf.subarray(0, 5).toString()).toBe("%PDF-");
+    expect(pdf.length).toBeGreaterThan(10_000);
+    // The row was always seeded; it now resolves to a file.
     expect(seed).toContain("'six-names-child-mission.pdf'");
-    expect(seed).toContain("'Child Mission'");
   });
 
   it("storage paths stay mission-scoped, matching the bucket policy", () => {
@@ -502,8 +517,149 @@ describe("design refinements hold", () => {
     expect(tokens).toContain("--font-sans:");
   });
 
+  it("a size token always carries the length: hint", () => {
+    /*
+     * A REGRESSION GUARD FOR A BUG THAT SHIPPED SILENTLY.
+     *
+     * `cn()` is tailwind-merge. Given two arbitrary `text-[…]` utilities it
+     * cannot classify, it treats them as one group and keeps only the last.
+     * The Button put its colour first and its size second, so the COLOUR was
+     * dropped: the primary button rendered its label in inherited charcoal on
+     * olive at 2.26:1.
+     *
+     * Verified against tailwind-merge itself — `length:` + a bare colour is
+     * handled correctly, and so is a bare colour beside a hover colour. The
+     * only combination that loses a class is bare-size + bare-colour. So this
+     * guard is narrow on purpose: every SIZE token must be hinted, and then
+     * the ambiguity cannot arise.
+     */
+    const offenders: string[] = [];
+    for (const file of listSourceFiles()) {
+      for (const m of code(file).matchAll(
+        /text-\[var\(--text-[a-z0-9-]+\)\]/g,
+      )) {
+        offenders.push(`${file}: ${m[0]}`);
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it("the Button really keeps both its colour and its size after cn()", () => {
+    /*
+     * The behavioural half. A source guard cannot see what tailwind-merge
+     * does, and tailwind-merge is what broke the button — so this runs the
+     * real `cn()` over the real composition order (variant first, size second)
+     * and asserts nothing is lost.
+     */
+    const button = code("src/components/ui/button.tsx");
+    const variant = button.match(/primary:\s*\n?\s*"([^"]+)"/)?.[1] ?? "";
+    const size = button.match(/large:\s*"([^"]+)"/)?.[1] ?? "";
+    expect(variant).toContain("text-[color:");
+    expect(size).toContain("text-[length:");
+
+    const merged = cn(variant, size);
+    expect(merged).toContain("text-[color:var(--color-primary-text)]");
+    expect(merged).toContain("text-[length:var(--text-button)]");
+  });
+
   it("reduced motion is still respected", () => {
     expect(tokens).toContain("prefers-reduced-motion: reduce");
+  });
+});
+
+// ──────────────────────────────────────────────── For Parents document ─────
+describe("the parent note document", () => {
+  const assets = "supabase/seed/assets/six-names";
+  /** SQL with `--` comments stripped. A guard must not match prose. */
+  const sql = (p: string) => read(p).replace(/^\s*--.*$/gm, "");
+  const resources = code("src/features/missions/resources.ts");
+  const parentsPage = code(
+    "src/app/(academy)/academy/missions/[missionId]/parents/page.tsx",
+  );
+  const migration = read(
+    "supabase/migrations/20260927110000_parent_note_document.sql",
+  );
+  const seedDoc = sql("supabase/seed/six_names_parent_note_document.sql");
+
+  it("the supplied PDF is present", () => {
+    const pdf = readFileSync(join(repo, assets, "six-names-parent-note.pdf"));
+    expect(pdf.subarray(0, 5).toString()).toBe("%PDF-");
+    expect(pdf.length).toBeGreaterThan(5_000);
+  });
+
+  it("is NOT a Mission Kit resource", () => {
+    /*
+     * Architecture §8 keeps For Parents separate from the Kit, and Brief §17
+     * forbids the two collapsing into one "files" area. The document hangs off
+     * mission_parent_notes, so it can never appear in the child's Kit list.
+     */
+    expect(migration).toContain("alter table mission_parent_notes");
+    expect(migration).toContain("document_path");
+    /*
+     * Stripped of comments: this seed's own comment explains why the note is
+     * NOT a mission_resources row, so a naive text match on the raw file
+     * flags the very file that does the right thing.
+     */
+    const doc = sql("supabase/seed/six_names_parent_note_document.sql");
+    expect(doc).toContain("mission_parent_notes");
+    expect(doc).not.toContain("mission_resources");
+
+    // And no Kit seed lists it among the child's printables.
+    for (const seedFile of [
+      "supabase/seed/six_names.sql",
+      "supabase/seed/six_names_v2_kit.sql",
+    ]) {
+      expect(sql(seedFile)).not.toContain("six-names-parent-note.pdf");
+    }
+  });
+
+  it("is served only as a short-lived signed URL from the private bucket", () => {
+    // Tech Spec §47 — no permanent public URLs for mission material.
+    expect(resources).toContain("getParentNoteDocumentUrl");
+    expect(resources).toContain("createSignedUrl");
+    expect(resources).not.toContain("getPublicUrl");
+    // And never from public/, which would bypass entitlement entirely.
+    expect(seedDoc).not.toContain("/public/");
+    expect(existsSync(join(repo, "public/six-names-parent-note.pdf"))).toBe(
+      false,
+    );
+  });
+
+  it("is entitlement-gated before a URL is minted, using the caller's session", () => {
+    const fn = resources.slice(resources.indexOf("getParentNoteDocumentUrl"));
+    const gateAt = fn.indexOf("requireEntitledMission(");
+    const signAt = fn.indexOf("createSignedUrl(");
+    expect(gateAt).toBeGreaterThan(-1);
+    expect(gateAt).toBeLessThan(signAt);
+    // A service-role URL would bypass the bucket policy, which is the
+    // independent second check on family ownership.
+    expect(fn).not.toContain("createAdminClient");
+    expect(fn).not.toContain("SERVICE_ROLE");
+  });
+
+  it("the path sits under the mission id, so the existing policy covers it", () => {
+    // The bucket policy matches (storage.foldername(name))[1] against the
+    // entitled mission id. A path anywhere else would be unreachable.
+    expect(seedDoc).toContain("m.id || '/six-names-parent-note.pdf'");
+  });
+
+  it("For Parents redirects to the document, and falls back to the text", () => {
+    expect(parentsPage).toContain("getParentNoteDocumentUrl");
+    expect(parentsPage).toMatch(/if \(documentUrl\) redirect\(documentUrl\)/);
+    // The text note is still rendered when there is no document.
+    expect(parentsPage).toContain("<ParentNote content={home.parentNote} />");
+  });
+
+  it("redirect() is outside the try, so a redirect is never read as a failure", () => {
+    /*
+     * redirect() throws by design. Inside the try that loads the page it would
+     * be caught and reported as "We couldn't load this note."
+     */
+    const tryStart = parentsPage.indexOf("try {");
+    const catchEnd = parentsPage.indexOf("}", parentsPage.indexOf("} catch"));
+    const redirectAt = parentsPage.indexOf("redirect(documentUrl)");
+    expect(redirectAt).toBeGreaterThan(catchEnd);
+    expect(redirectAt).toBeGreaterThan(tryStart);
   });
 });
 
@@ -567,6 +723,40 @@ describe("the mission card follows the public site's anatomy", () => {
     const covers = code("src/features/missions/covers.ts");
     expect(covers).toContain("mission.cover_image");
     expect(covers).toContain("/missions/six-names.jpg");
+  });
+
+  it("the cover keeps its description when the src comes from the database", () => {
+    /*
+     * REGRESSION: found during staging QA. Once `cover_image` was seeded, the
+     * resolver returned `alt: ""` and the photograph became undescribed on
+     * staging while still described locally — the same image, silent for a
+     * screen-reader user in the one environment that mattered.
+     *
+     * The column supplies a path, never a description, so the written one has
+     * to be looked up by slug regardless of which path produced the src.
+     */
+    const fromDb = resolveMissionCover({
+      slug: "six-names",
+      title: "Six Names",
+      cover_image: "/missions/six-names.jpg",
+    });
+    const fromMap = resolveMissionCover({
+      slug: "six-names",
+      title: "Six Names",
+      cover_image: null,
+    });
+    expect(fromDb?.src).toBe("/missions/six-names.jpg");
+    expect(fromDb?.alt).toBe(fromMap?.alt);
+    expect(fromDb?.alt).toMatch(/kraft cards/);
+
+    // A mission with a cover but no written description stays undescribed
+    // rather than getting an invented one.
+    const unknown = resolveMissionCover({
+      slug: "not-a-real-mission",
+      title: "X",
+      cover_image: "/missions/x.jpg",
+    });
+    expect(unknown?.alt).toBe("");
   });
 
   it("does not invent artwork for missions that have none", () => {

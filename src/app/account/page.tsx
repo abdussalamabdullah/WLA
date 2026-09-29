@@ -48,7 +48,7 @@ export default async function AccountPage() {
             <span>{childCount}</span>
             <Link
               href="/account/children"
-              className="text-[length:var(--text-label)] underline decoration-[var(--color-border-strong)] underline-offset-4"
+              className="inline-flex min-h-[var(--target-min)] items-center text-[length:var(--text-label)] underline decoration-[var(--color-border-strong)] underline-offset-4 hover:decoration-[var(--color-primary)]"
             >
               Manage
             </Link>
@@ -62,7 +62,7 @@ export default async function AccountPage() {
           <dd>
             <Link
               href="/forgot-password"
-              className="text-[length:var(--text-label)] underline decoration-[var(--color-border-strong)] underline-offset-4"
+              className="inline-flex min-h-[var(--target-min)] items-center text-[length:var(--text-label)] underline decoration-[var(--color-border-strong)] underline-offset-4 hover:decoration-[var(--color-primary)]"
             >
               Change password
             </Link>

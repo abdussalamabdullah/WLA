@@ -138,10 +138,21 @@ old title had a printable worksheet sharing a name with an unbuilt feature.
 Retitled in `six_names_v2_kit.sql`; the storage path is unchanged, because it
 is the same file.
 
-**Outstanding:** `six-names-child-mission.pdf` is still absent from
-`supabase/seed/assets/six-names/`. The resource row exists and the Kit degrades
-to its unavailable state. The Child Mission _document_ now exists but no
-print-ready PDF has been supplied, and one was not generated — see D-39.
+All five printables now exist in `supabase/seed/assets/six-names/`. The Child
+Mission PDF was supplied by the client on 2026-09-27 (8 pages, matching the
+document the mission was authored from). While it was outstanding no substitute
+was generated — the row was seeded and the Kit degraded honestly to its
+unavailable state, per D-39.
+
+The **parent note** is also supplied as a PDF. It lives in the same private
+bucket under the mission's folder — not in `public/`, and not as a
+`mission_resources` row, which would list adult guidance among the child's
+printables. For Parents mints a signed URL and redirects to it, falling back to
+the text note for any mission without a document. Verified live: the entitled
+family sees the object, a non-entitled family and anonymous callers see none.
+
+The remaining launch dependency is uploading the assets to Storage at the
+seeded paths and flipping `published`.
 
 ## Security
 

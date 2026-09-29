@@ -36,6 +36,7 @@ export default async function MyMissionsPage({
     return (
       <main className="wla-container py-[var(--space-2xl)]">
         <ErrorState
+          as="h1"
           title="We couldn't load your missions."
           body="Please sign in and try again."
         />

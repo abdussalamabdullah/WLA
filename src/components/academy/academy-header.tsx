@@ -95,13 +95,13 @@ export function AcademyHeader({
             </span>
             <Link
               href={`/academy/missions/${mission.slug}`}
-              className="text-[length:var(--text-small)] underline decoration-[var(--color-border-strong)] underline-offset-4 hover:decoration-[var(--color-primary)]"
+              className="inline-flex min-h-[var(--target-min)] items-center text-[length:var(--text-small)] underline decoration-[var(--color-border-strong)] underline-offset-4 hover:decoration-[var(--color-primary)]"
             >
               Mission Home
             </Link>
             <Link
               href={`/academy/missions/${mission.slug}/kit`}
-              className="text-[length:var(--text-small)] underline decoration-[var(--color-border-strong)] underline-offset-4 hover:decoration-[var(--color-primary)]"
+              className="inline-flex min-h-[var(--target-min)] items-center text-[length:var(--text-small)] underline decoration-[var(--color-border-strong)] underline-offset-4 hover:decoration-[var(--color-primary)]"
             >
               Mission Kit
             </Link>
@@ -116,7 +116,7 @@ export function AcademyHeader({
             />
             <Link
               href="/account"
-              className="text-[length:var(--text-small)] underline decoration-[var(--color-border-strong)] underline-offset-4"
+              className="inline-flex min-h-[var(--target-min)] items-center text-[length:var(--text-small)] underline decoration-[var(--color-border-strong)] underline-offset-4 hover:decoration-[var(--color-primary)]"
             >
               Account
             </Link>

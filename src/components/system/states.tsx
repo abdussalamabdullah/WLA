@@ -42,14 +42,23 @@ export function EmptyState({
   title,
   body,
   action,
+  as: Heading = "h2",
 }: {
   title: string;
   body?: string;
   action?: { label: string; href: string };
+  /**
+   * WCAG 1.3.1 / 2.4.6. These states are usually one region among several, so
+   * h2 is the right default — but an early return renders them as the ENTIRE
+   * page, and a page whose only heading is an h2 leaves a screen-reader user
+   * navigating by heading with no top level to land on. Those call sites pass
+   * `as="h1"`.
+   */
+  as?: "h1" | "h2";
 }) {
   return (
     <div className="flex flex-col items-start gap-[var(--space-m)] py-[var(--space-3xl)]">
-      <h2 className="text-[length:var(--text-h2)]">{title}</h2>
+      <Heading className="text-[length:var(--text-h2)]">{title}</Heading>
       {body && (
         <p className="wla-measure text-[var(--color-text-muted)]">{body}</p>
       )}
@@ -75,17 +84,20 @@ export function ErrorState({
   title = "Something went wrong.",
   body = "Please try again.",
   onRetry,
+  as: Heading = "h2",
 }: {
   title?: string;
   body?: string;
   onRetry?: () => void;
+  /** See EmptyState — an early return owns the page, so it owns the h1. */
+  as?: "h1" | "h2";
 }) {
   return (
     <div
       role="alert"
       className="flex flex-col items-start gap-[var(--space-m)] py-[var(--space-2xl)]"
     >
-      <h2 className="text-[length:var(--text-h3)]">{title}</h2>
+      <Heading className="text-[length:var(--text-h3)]">{title}</Heading>
       <p className="wla-measure text-[var(--color-text-muted)]">{body}</p>
       {onRetry && (
         <Button variant="secondary" onClick={onRetry}>
@@ -103,13 +115,16 @@ export function ErrorState({
 export function UnavailableState({
   title = "This isn't available right now.",
   onRetry,
+  as: Heading = "h2",
 }: {
   title?: string;
   onRetry?: () => void;
+  /** See EmptyState. */
+  as?: "h1" | "h2";
 }) {
   return (
     <div className="flex flex-col items-start gap-[var(--space-m)] py-[var(--space-2xl)]">
-      <h2 className="text-[length:var(--text-h3)]">{title}</h2>
+      <Heading className="text-[length:var(--text-h3)]">{title}</Heading>
       <p className="wla-measure text-[var(--color-text-muted)]">
         Your mission progress is safe.
       </p>

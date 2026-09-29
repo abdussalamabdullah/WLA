@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import { ErrorState } from "@/components/system/states";
 
 /**
@@ -11,8 +12,29 @@ import { ErrorState } from "@/components/system/states";
  *
  * The reassurance matters: mission state is server-authoritative, so a render
  * failure genuinely has not lost their place, and saying so is true.
+ *
+ * OPS-01: the child sees none of this, and we still have to. The boundary
+ * reports itself — name and Next's opaque digest only, never the message —
+ * so a failure here is observable without the interface ever explaining it.
  */
-export default function AcademyError({ reset }: { error: Error; reset: () => void }) {
+export default function AcademyError({
+  error,
+  reset,
+}: {
+  error: Error & { digest?: string };
+  reset: () => void;
+}) {
+  useEffect(() => {
+    void fetch("/api/log", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ boundary: "academy", digest: error.digest }),
+      keepalive: true,
+    }).catch(() => {
+      // Reporting a failure must never cause one.
+    });
+  }, [error.digest]);
+
   return (
     <main className="wla-container py-[var(--space-2xl)]">
       <ErrorState

@@ -88,6 +88,8 @@ export type MissionHomeData = {
   status: MissionStatus;
   resources: MissionResourceRow[];
   parentNote: string | null;
+  /** Whether For Parents will serve a document rather than the text note. */
+  hasParentNoteDocument: boolean;
 };
 
 /**
@@ -114,7 +116,7 @@ export async function getMissionHome(
       .order("sort_order", { ascending: true }),
     supabase
       .from("mission_parent_notes")
-      .select("content")
+      .select("content, document_path")
       .eq("mission_id", mission.id)
       .maybeSingle(),
   ]);
@@ -125,5 +127,6 @@ export async function getMissionHome(
     status: progress?.status ?? "not_started",
     resources: resources ?? [],
     parentNote: note?.content ?? null,
+    hasParentNoteDocument: Boolean(note?.document_path),
   };
 }
