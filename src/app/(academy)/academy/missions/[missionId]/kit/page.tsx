@@ -48,7 +48,7 @@ export default async function MissionKitPage({
     if (error instanceof AccessError) notFound();
     return (
       <main className="wla-container py-[var(--space-2xl)]">
-        <ErrorState title="We couldn't load the Mission Kit." />
+        <ErrorState as="h1" title="We couldn't load the Mission Kit." />
       </main>
     );
   }
@@ -61,7 +61,7 @@ export default async function MissionKitPage({
       <main className="wla-container py-[var(--space-2xl)] md:py-[var(--space-3xl)]">
         <Link
           href={`/academy/missions/${mission.slug}`}
-          className="text-[length:var(--text-label)] underline decoration-[var(--color-border-strong)] underline-offset-4 hover:decoration-[var(--color-primary)]"
+          className="inline-flex min-h-[var(--target-min)] items-center text-[length:var(--text-label)] underline decoration-[var(--color-border-strong)] underline-offset-4 hover:decoration-[var(--color-primary)]"
         >
           ← {mission.title}
         </Link>

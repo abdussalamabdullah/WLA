@@ -74,7 +74,7 @@ export function ChildForm({ child }: { child?: ChildProfileRow }) {
         </Button>
         <Link
           href="/account/children"
-          className="text-[length:var(--text-small)] underline decoration-[var(--color-border-strong)] underline-offset-4"
+          className="inline-flex min-h-[var(--target-min)] items-center text-[length:var(--text-small)] underline decoration-[var(--color-border-strong)] underline-offset-4 hover:decoration-[var(--color-primary)]"
         >
           Cancel
         </Link>

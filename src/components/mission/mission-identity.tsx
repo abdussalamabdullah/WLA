@@ -48,12 +48,15 @@ export function MissionIdentity({
         </p>
       )}
       {/*
-        The mission's own sentence, set the way the site sets a hook line:
-        Fraunces rather than the surrounding Karla. It is the one moment on
-        Mission Home that speaks in the brand's editorial voice.
+        The mission's own sentence, in KARLA.
+
+        It was set in Fraunces to echo the public site's hook line, but this is
+        a paragraph of explanation rather than an editorial statement, and the
+        serif made it compete with the title directly above it. Karla keeps the
+        Lab tagline above as the one display-voice line on the screen.
       */}
       {mission.description && (
-        <p className="wla-measure mt-[var(--space-l)] font-[family-name:var(--font-serif)] text-[length:var(--text-body-lg)] leading-[var(--leading-normal)]">
+        <p className="wla-measure mt-[var(--space-l)] text-[length:var(--text-body-lg)] leading-[var(--leading-normal)]">
           {mission.description}
         </p>
       )}

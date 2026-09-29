@@ -45,7 +45,7 @@ export default async function PurchasePage({
       <div className="mx-auto w-full max-w-[34rem] py-[var(--space-2xl)]">
         <Link
           href={`/missions/${mission.slug}`}
-          className="text-[length:var(--text-label)] underline decoration-[var(--color-border-strong)] underline-offset-4"
+          className="inline-flex min-h-[var(--target-min)] items-center text-[length:var(--text-label)] underline decoration-[var(--color-border-strong)] underline-offset-4 hover:decoration-[var(--color-primary)]"
         >
           ← Back to {mission.title}
         </Link>

@@ -73,17 +73,28 @@ export default async function ActiveMissionPage({
         mission={{ title: mission.title, slug: mission.slug }}
       />
       <main className="wla-container-narrow py-[var(--space-2xl)]">
-      <div>
-        {screen ? (
-          <MissionRunner
-            missionSlug={mission.slug}
-            screen={screen}
-            state={state}
-          />
-        ) : (
-          <NotReady title={mission.title} homeHref={base} />
-        )}
-      </div>
+        <div>
+          {/*
+            The page's h1, for assistive technology only.
+
+            Active Mission is deliberately the quietest surface (UI/UX §17):
+            the mission's name already sits in the header, and repeating it as
+            a visible heading would compete with the screen's own job. But a
+            page still needs exactly one h1, and several screens — every
+            handoff and every reflection — carry no title of their own.
+          */}
+          <h1 className="sr-only">{mission.title}</h1>
+
+          {screen ? (
+            <MissionRunner
+              missionSlug={mission.slug}
+              screen={screen}
+              state={state}
+            />
+          ) : (
+            <NotReady title={mission.title} homeHref={base} />
+          )}
+        </div>
       </main>
     </>
   );

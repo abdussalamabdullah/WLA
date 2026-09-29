@@ -143,10 +143,29 @@ Fraunces question and a right-aligned chevron.
 
 **Two action treatments, used consistently:**
 
-- Primary — olive pill, 48 px tall, cream label, arrow in the text:
-  `Try a Free Mission →`
+- Primary — olive pill, arrow in the text: `Try a Free Mission →`
 - Everything else — an underlined text link, also with the arrow:
   `Explore the 5 Labs →`
+
+The primary CTA, measured from the hero at full resolution:
+
+| Property               | Value                                                   |
+| ---------------------- | ------------------------------------------------------- |
+| Height                 | **48 px**                                               |
+| Width (for that label) | 201.5 px                                                |
+| Corner radius          | half the height — a **true pill**                       |
+| Horizontal padding     | **28 px**                                               |
+| Fill                   | **`#5F6A4F`** (client-supplied; sampled `#5f6a4f`)      |
+| Fill on hover          | **`#49523B`** (client-supplied)                         |
+| Label                  | **`#F4F0E6`** (client-supplied), Karla 500 at **16 px** |
+
+The label size was derived from text **width**, not cap height: Karla at 500
+sets "Try a Free Mission" in 131.8 px and the site's button measures 132.5 px,
+a 0.5% match. At 18 px it is 148 px — 12% too wide, which is what made the
+Academy's button read as a different control. 16 px is the one step that is not
+on the type scale above, and it exists only for this.
+
+Contrast on the button: **5.04:1** at rest, **7.23:1** on hover.
 
 There is no outline-button variant anywhere in the page body; the only bordered
 control is `My Missions` in the header. The Academy's `secondary` variant —

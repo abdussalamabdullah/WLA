@@ -33,7 +33,17 @@ export function ScreenFrame({
 }) {
   return (
     <div className="flex flex-col gap-[var(--space-l)]">
-      {title && <h1 className="text-[length:var(--text-h1)]">{title}</h1>}
+      {/*
+        h2, not h1 (WCAG 1.3.1 / 2.4.6).
+
+        The page's h1 is the mission itself, rendered once by Active Mission —
+        which matters because several screens legitimately have NO title at
+        all: every handoff, and every reflection. Those pages previously had no
+        h1 anywhere, so a screen-reader user navigating by heading had nothing
+        to land on. Making the mission the h1 gives every screen a top level,
+        whether or not the screen names itself.
+      */}
+      {title && <h2 className="text-[length:var(--text-h1)]">{title}</h2>}
 
       {body && (
         <div className="wla-measure flex flex-col gap-[var(--space-m)] text-[length:var(--text-body)]">

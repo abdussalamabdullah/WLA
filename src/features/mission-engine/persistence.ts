@@ -2,6 +2,7 @@ import "server-only";
 
 import { requireEntitledMission } from "@/lib/permissions";
 import { recordEvent } from "@/lib/analytics/events";
+import { logError } from "@/lib/observability/logger";
 import {
   applyInteraction,
   resolveNextScreen,
@@ -145,6 +146,7 @@ export async function startMission(
   if (!wasAlreadyStarted) {
     await recordEvent({
       name: "mission_started",
+      childId: child.id,
       missionId: mission.id,
       progressId: data.id,
     });
@@ -330,6 +332,11 @@ export async function recordInteraction(
       p_trail: [] as unknown as Json,
     });
     if (error || !data) {
+      // OPS-01. Identifiers only — never state, responses or screen content.
+      logError("mission_completion_failed", error, {
+        missionId: mission.id,
+        progressId: progress.id,
+      });
       throw new MissionPersistenceError(
         "We couldn't finish saving this mission. Please try again.",
       );
@@ -337,6 +344,7 @@ export async function recordInteraction(
 
     await recordEvent({
       name: "mission_completed",
+      childId,
       missionId: mission.id,
       progressId: progress.id,
     });
@@ -364,6 +372,11 @@ export async function recordInteraction(
   if (error || !data) {
     // D-18: do not advance. persist_mission_state is one transaction, so the
     // state, the response and the position are all unchanged.
+    logError("mission_persist_failed", error, {
+      missionId: mission.id,
+      progressId: progress.id,
+      interaction: interaction.kind,
+    });
     throw new MissionPersistenceError();
   }
 

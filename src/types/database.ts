@@ -44,6 +44,11 @@ export type ProfileRow = {
   id: string;
   email: string;
   name: string | null;
+  /**
+   * CMS-01 gate. Set by hand in the dashboard; no interface writes it, and it
+   * grants catalogue editing only — never access to a family's mission data.
+   */
+  is_admin: boolean;
   created_at: string;
   updated_at: string;
 };
@@ -113,6 +118,11 @@ export type MissionParentNoteRow = {
   id: string;
   mission_id: string;
   content: string;
+  /**
+   * Optional print-ready note in the private bucket, under the mission id.
+   * Served only as a short-lived signed URL. NULL = text only.
+   */
+  document_path: string | null;
   updated_at: string;
 };
 
@@ -209,6 +219,7 @@ export type Database = {
         Row: ProfileRow;
         Insert: Pick<ProfileRow, "id" | "email"> &
           Partial<Pick<ProfileRow, "name">>;
+        // `is_admin` is deliberately absent: it is not an editable field.
         Update: Partial<Pick<ProfileRow, "email" | "name">>;
         Relationships: [];
       };
@@ -287,6 +298,35 @@ export type Database = {
        * The ONLY path to screen content. mission_screens has no client read
        * policy — see the screen_access migration.
        */
+      /** ANALYTICS-01. Child id is an authorisation input, never stored. */
+      record_mission_event: {
+        Args: { p_child_id: string; p_mission_id: string; p_name: string };
+        Returns: undefined;
+      };
+      /** CMS-01 admin dashboard. Refuses unless `is_admin()`. */
+      admin_mission_stats: {
+        Args: { p_stale_days?: number };
+        Returns: {
+          mission_id: string;
+          slug: string;
+          title: string;
+          version: number;
+          published: boolean;
+          price_minor: number | null;
+          currency: string;
+          is_free: boolean;
+          entitlements: number;
+          starts: number;
+          completions: number;
+          in_progress: number;
+          dropped_off: number;
+        }[];
+      };
+      /** D-17 made visible in the editor. Refuses unless `is_admin()`. */
+      admin_mission_version_usage: {
+        Args: { p_mission_id: string };
+        Returns: { version: number; runs: number; complete: number }[];
+      };
       get_current_mission_screen: {
         Args: { p_child_id: string; p_mission_id: string };
         Returns: {

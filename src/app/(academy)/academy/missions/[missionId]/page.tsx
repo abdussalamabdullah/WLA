@@ -2,7 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { AcademyChrome } from "@/components/academy/academy-chrome";
 import { notFound } from "next/navigation";
-import { Button } from "@/components/ui/button";
+import { ButtonLink } from "@/components/ui/button";
 import { StartMissionButton } from "@/components/mission/start-mission-button";
 import { ErrorState } from "@/components/system/states";
 import { MissionIdentity } from "@/components/mission/mission-identity";
@@ -37,6 +37,7 @@ export default async function MissionHomePage({
     return (
       <main className="wla-container py-[var(--space-2xl)]">
         <ErrorState
+          as="h1"
           title="Choose a child first."
           body="Mission access belongs to a child profile."
         />
@@ -58,6 +59,7 @@ export default async function MissionHomePage({
     return (
       <main className="wla-container py-[var(--space-2xl)]">
         <ErrorState
+          as="h1"
           title="We couldn't load this mission."
           body="Your mission progress is safe. Please try again."
         />
@@ -110,9 +112,9 @@ export default async function MissionHomePage({
             {/* 2. The strongest action. Nothing below may compete with it. */}
             <div className="mt-[var(--space-xl)]">
               {status === "complete" ? (
-                <Link href={`${base}/trail`}>
-                  <Button size="large">View Mission Trail →</Button>
-                </Link>
+                <ButtonLink href={`${base}/trail`} size="large">
+                  View Mission Trail →
+                </ButtonLink>
               ) : (
                 <StartMissionButton
                   missionSlug={mission.slug}
@@ -168,6 +170,13 @@ export default async function MissionHomePage({
               <h2 className="text-[length:var(--text-h3)]">For Parents</h2>
               <p className="mt-[var(--space-xs)] text-[var(--color-text-muted)]">
                 A short note about helping your child get started.
+                {/*
+                  Say what opens. A link that turns out to be a PDF is a small
+                  surprise for anyone, and a larger one for someone on a phone
+                  or using a screen reader. Shown only where a document
+                  actually exists, so a text-only note is never mislabelled.
+                */}
+                {home.hasParentNoteDocument && " Opens as a PDF."}
               </p>
               <Link
                 href={`${base}/parents`}

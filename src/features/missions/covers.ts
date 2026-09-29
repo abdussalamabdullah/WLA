@@ -37,8 +37,24 @@ export type MissionCover = { src: string; alt: string };
 export function resolveMissionCover(
   mission: Pick<MissionRow, "slug" | "title" | "cover_image">,
 ): MissionCover | null {
+  const supplied = SUPPLIED_COVER[mission.slug];
+
+  /*
+   * The column wins for WHICH image; the description is looked up separately.
+   *
+   * Found in staging QA: once `cover_image` was seeded, this returned
+   * `alt: ""` and the photograph lost its description — the same image was
+   * described for a screen-reader user locally and silent on staging. The
+   * column holds a path, not a description, so there is nothing in it to
+   * describe the image with; the written one lives here and should be used
+   * whichever path supplied the src.
+   *
+   * A mission with a cover_image and no entry here still yields `alt: ""`,
+   * which is correct rather than lazy: an undescribed decorative image is
+   * better than an invented description, and the title always sits beside it.
+   */
   if (mission.cover_image) {
-    return { src: mission.cover_image, alt: "" };
+    return { src: mission.cover_image, alt: supplied?.alt ?? "" };
   }
-  return SUPPLIED_COVER[mission.slug] ?? null;
+  return supplied ?? null;
 }

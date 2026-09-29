@@ -83,3 +83,41 @@ export async function getMissionKit(
     url: urlByPath.get(resource.storage_path) ?? null,
   }));
 }
+
+/**
+ * A signed URL for the mission's parent note document, if it has one.
+ *
+ * Same authorisation as the Mission Kit — `requireEntitledMission` first, then
+ * the bucket policy re-checking entitlement against the object's own path
+ * using the caller's session. The document sits under the mission's folder in
+ * the same private bucket, so it is covered by the existing policy with no new
+ * grant of any kind.
+ *
+ * Returns null when the mission has no document, or when the file is missing
+ * from Storage. Both cases fall back to the text note rather than erroring:
+ * Architecture §8 requires For Parents to stay available, and a parent who
+ * cannot open a PDF should still get the guidance.
+ */
+export async function getParentNoteDocumentUrl(
+  childId: string,
+  missionIdOrSlug: string,
+): Promise<string | null> {
+  const { mission, supabase } = await requireEntitledMission(
+    childId,
+    missionIdOrSlug,
+  );
+
+  const { data: note } = await supabase
+    .from("mission_parent_notes")
+    .select("document_path")
+    .eq("mission_id", mission.id)
+    .maybeSingle();
+
+  if (!note?.document_path) return null;
+
+  const { data, error } = await supabase.storage
+    .from("mission-resources")
+    .createSignedUrl(note.document_path, SIGNED_URL_TTL_SECONDS);
+
+  return error ? null : (data?.signedUrl ?? null);
+}

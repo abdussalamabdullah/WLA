@@ -28,9 +28,10 @@ export function EvidenceItem({
         {isPhysical ? "You keep this" : "Saved here"}
       </p>
 
-      <h3 className="mt-[var(--space-xs)] text-[length:var(--text-h3)]">
+      {/* h2, not h3: a Trail entry is a section of the Mission Trail page. Jumping h1 → h3 skips a level (WCAG 1.3.1). */}
+      <h2 className="mt-[var(--space-xs)] text-[length:var(--text-h3)]">
         {evidence.title}
-      </h3>
+      </h2>
 
       {evidence.description && (
         <p className="wla-measure mt-[var(--space-xs)] text-[var(--color-text-muted)]">

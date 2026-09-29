@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { EmptyState } from "@/components/system/states";
-import { Button } from "@/components/ui/button";
+import { ButtonLink } from "@/components/ui/button";
 import { getFreeMissions } from "@/features/commerce/queries";
 import { LAB_LABEL } from "@/features/missions/labs";
 import { formatMissionMeta } from "@/lib/utils";
@@ -27,9 +27,9 @@ export default async function TryFreePage() {
       <main className="wla-container py-[var(--space-4xl)]">
         <Intro />
         <div className="mt-[var(--space-xl)] flex flex-wrap items-center gap-[var(--space-l)]">
-          <Link href="/signup">
-            <Button size="large">Create an account →</Button>
-          </Link>
+          <ButtonLink href="/signup" size="large">
+            Create an account →
+          </ButtonLink>
           <Link
             href="/login"
             className="inline-flex min-h-[var(--target-min)] items-center text-[length:var(--text-small)] font-medium underline decoration-[var(--color-border-strong)] underline-offset-4 hover:decoration-[var(--color-primary)]"
@@ -72,9 +72,9 @@ export default async function TryFreePage() {
                 </p>
               </div>
               {/* Same route as a paid mission — the server decides which path */}
-              <Link href={`/purchase/${mission.slug}`}>
-                <Button>Get it free</Button>
-              </Link>
+              <ButtonLink href={`/purchase/${mission.slug}`}>
+                Get it free
+              </ButtonLink>
             </li>
           ))}
         </ul>

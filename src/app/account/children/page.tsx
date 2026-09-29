@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { EmptyState, ErrorState } from "@/components/system/states";
-import { Button } from "@/components/ui/button";
+import { ButtonLink } from "@/components/ui/button";
 import { RemoveChild } from "@/components/profile/remove-child";
 import { listChildren } from "@/features/children/queries";
 
@@ -34,9 +34,7 @@ export default async function ChildrenPage() {
             Each child has their own missions, progress and Mission Trail.
           </p>
         </div>
-        <Link href="/account/children/new">
-          <Button>Add a profile</Button>
-        </Link>
+        <ButtonLink href="/account/children/new">Add a profile</ButtonLink>
       </div>
 
       {children.length === 0 ? (
@@ -66,7 +64,7 @@ export default async function ChildrenPage() {
               <div className="flex items-center gap-[var(--space-l)]">
                 <Link
                   href={`/account/children/${child.id}`}
-                  className="text-[length:var(--text-small)] underline decoration-[var(--color-border-strong)] underline-offset-4"
+                  className="inline-flex min-h-[var(--target-min)] items-center text-[length:var(--text-small)] underline decoration-[var(--color-border-strong)] underline-offset-4 hover:decoration-[var(--color-primary)]"
                 >
                   Edit
                 </Link>

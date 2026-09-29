@@ -47,6 +47,7 @@ export class AccessError extends Error {
       | "not_your_child"
       | "not_entitled"
       | "not_this_childs_record"
+      | "not_admin"
       | "not_found",
   ) {
     super(message);
@@ -227,4 +228,38 @@ export async function requireOwnedEvidence(
     );
   }
   return { evidence, supabase };
+}
+
+/**
+ * CMS-01 — the internal admin gate.
+ *
+ * A SEPARATE AXIS FROM THE FAMILY CHAIN ABOVE. Everything else in this module
+ * answers "may this parent reach this child's record". This answers "may this
+ * account edit catalogue content", and the two never substitute for each
+ * other: an admin gets no additional access to any family's mission data,
+ * because none of the child-scoped functions consult `is_admin`.
+ *
+ * The flag lives on `profiles.is_admin` and is set by hand in the Supabase
+ * dashboard. There is deliberately no self-service route to becoming an admin
+ * and no interface anywhere that writes this column — it is not an editable
+ * field, and a content editor must not be able to promote themselves.
+ *
+ * This check is the SECOND line, not the first. Every admin table already
+ * carries an `is_admin()` RLS policy, so a write refused here would be refused
+ * again at the database. Both exist so that a mistake in either one is not
+ * sufficient on its own.
+ */
+export async function requireAdmin() {
+  const { supabase, user } = await requireParent();
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("id, email, is_admin")
+    .eq("id", user.id)
+    .maybeSingle();
+
+  if (!profile?.is_admin) {
+    throw new AccessError("Not an administrator.", "not_admin");
+  }
+  return { supabase, user, profile };
 }

@@ -51,13 +51,23 @@
    * copy. Use --color-text-action for small text links instead.
    */
   --color-primary: var(--wla-olive);
-  --color-primary-hover: #4f5941; /* DERIVED */
   /*
-   * MEASURED. The site's button label is a near-white warm tint, not the
-   * canvas cream — which is what keeps it at 5.36:1 on olive rather than the
-   * 4.76:1 the canvas colour would give.
+   * SUPPLIED by the client, 2026-09-27. The previous hover (#4f5941) was
+   * derived rather than given and read lighter and greener than the site's.
    */
-  --color-primary-text: #fbf7ec;
+  --color-primary-hover: #49523b;
+  /*
+   * SUPPLIED by the client, 2026-09-27.
+   *
+   * This was the visible difference in the button treatment. The value here
+   * was #fbf7ec — a near-white warm tint sampled from the screenshot's
+   * brightest pixel, which is what antialiasing produces at a glyph's centre
+   * rather than the colour the label is actually set in. Near-white reads
+   * harder and brighter on olive than the site's softer cream does.
+   *
+   * Contrast on the button: 5.04:1 at rest, 7.23:1 on hover. Both clear AA.
+   */
+  --color-primary-text: #f4f0e6;
   --color-focus: var(--wla-clay); /* DERIVED */
   --color-accent: var(--wla-clay);
   /* Small text actions ("View Mission →"). Charcoal, not olive — see the
@@ -129,7 +139,16 @@
   --text-body-lg: 1.25rem; /* 20px — the deck under a heading */
   --text-body: 1.125rem; /* 18px — MEASURED */
   --text-small: 0.9375rem; /* 15px — MEASURED. Metadata, supporting text */
-  --text-label: 0.875rem; /* 14px — buttons, labels */
+  --text-label: 0.875rem; /* 14px — small labels */
+  /*
+   * 16px — MEASURED, and the one step that is not on the scale above.
+   *
+   * Derived from text WIDTH rather than cap height, which is the robust
+   * measurement: Karla at weight 500 sets "Try a Free Mission" in 131.8px, and
+   * the site's hero CTA measures 132.5px. At 18px it would be 148px — 12% too
+   * wide, which is what made the button read as a different control.
+   */
+  --text-button: 1rem;
   --text-eyebrow: 0.75rem; /* 12px — MEASURED. Footer group headings; the
                               only place the site sets caps */
 

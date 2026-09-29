@@ -1,0 +1,41 @@
+-- ============================================================================
+-- An administrator could read every mission screen, including concealed
+-- content, straight from the client API.
+--
+-- FOUND BY LIVE EXECUTION, 2026-09-28, during the security regression:
+--
+--     GET /rest/v1/mission_screens?select=screen_key   (as an admin)
+--     -> 48 rows, including `evidence` with its revealed body
+--
+-- Migration 0002 added, for CMS-01:
+--
+--     create policy "admins manage mission screens" on mission_screens
+--       for all using (is_admin()) with check (is_admin());
+--
+-- That was written when "editable content" had not yet been scoped. It has
+-- since been (D-48): the internal admin edits the mission CATALOGUE and
+-- Mission Detail, and deliberately cannot reach screens at all, because Tech
+-- Spec §18 rules out a no-code mission builder. So the policy grants a
+-- capability nothing uses — and what it grants is the exact thing the rest of
+-- the Academy is built to prevent.
+--
+-- WHY IT MATTERS MORE THAN IT LOOKS
+--
+-- `mission_screens` has no client read policy precisely so that future
+-- content, unused branches and Evidence cannot leak; 0007 removed every other
+-- read policy and `get_current_mission_screen` became the only path. This
+-- policy quietly reopened that door for one class of account — and WLA staff
+-- are likely to be parents too, so the same person could hold both roles.
+--
+-- Screens are authored by migrations and seeds, which run as the table owner
+-- and are not subject to RLS. Removing this policy therefore costs nothing:
+-- no interface reads or writes mission_screens through the client API.
+--
+-- The catalogue, resources and parent-note policies are deliberately LEFT IN
+-- PLACE. Those carry no concealed content: resource rows are titles and
+-- storage paths (the files themselves are gated separately by the bucket
+-- policy), and a parent note is adult guidance that is never hidden from an
+-- entitled family.
+-- ============================================================================
+
+drop policy if exists "admins manage mission screens" on mission_screens;

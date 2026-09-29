@@ -1,8 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
-import Link from "next/link";
-import { Button } from "@/components/ui/button";
+import { Button, ButtonLink } from "@/components/ui/button";
 import { FormError } from "@/components/ui/field";
 import { acquireMissionAction } from "@/features/commerce/actions";
 import { emptyFormState } from "@/features/auth/schemas";
@@ -45,12 +44,12 @@ export function PurchaseForm({
           Add a child profile first — missions belong to a child, not to the
           account.
         </p>
-        <Link
+        <ButtonLink
           href="/account/children/new"
           className="mt-[var(--space-m)] inline-block"
         >
-          <Button>Add a profile</Button>
-        </Link>
+          Add a profile
+        </ButtonLink>
       </div>
     );
   }

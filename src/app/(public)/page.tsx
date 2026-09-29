@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Button } from "@/components/ui/button";
+import { ButtonLink } from "@/components/ui/button";
 
 /**
  * STUB. Public-site copy is owned by the Public Website Master, and the Brief
@@ -42,9 +42,9 @@ export default function HomePage() {
         large buttons side by side would read as two equal choices.
       */}
       <div className="mt-[var(--space-2xl)] flex flex-wrap items-center gap-[var(--space-l)]">
-        <Link href="/try-free">
-          <Button size="large">Try a Free Mission →</Button>
-        </Link>
+        <ButtonLink href="/try-free" size="large">
+          Try a Free Mission →
+        </ButtonLink>
         <Link
           href="/missions"
           className="inline-flex min-h-[var(--target-min)] items-center text-[length:var(--text-small)] font-medium underline decoration-[var(--color-border-strong)] underline-offset-4 hover:decoration-[var(--color-primary)]"

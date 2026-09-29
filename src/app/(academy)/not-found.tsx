@@ -1,5 +1,4 @@
-import Link from "next/link";
-import { Button } from "@/components/ui/button";
+import { ButtonLink } from "@/components/ui/button";
 
 /**
  * Academy not-found — reached when a mission is missing OR the active child is
@@ -12,13 +11,18 @@ import { Button } from "@/components/ui/button";
 export default function AcademyNotFound() {
   return (
     <main className="wla-container py-[var(--space-3xl)]">
-      <h1 className="text-[length:var(--text-h1)]">We couldn&rsquo;t find that.</h1>
-      <p className="mt-[var(--space-m)] wla-measure text-[var(--color-text-muted)]">
+      <h1 className="text-[length:var(--text-h1)]">
+        We couldn&rsquo;t find that.
+      </h1>
+      <p className="wla-measure mt-[var(--space-m)] text-[var(--color-text-muted)]">
         It may have moved, or it may not be one of this child&rsquo;s missions.
       </p>
-      <Link href="/academy/my-missions" className="mt-[var(--space-l)] inline-block">
-        <Button>Back to My Missions</Button>
-      </Link>
+      <ButtonLink
+        href="/academy/my-missions"
+        className="mt-[var(--space-l)] inline-block"
+      >
+        Back to My Missions
+      </ButtonLink>
     </main>
   );
 }
