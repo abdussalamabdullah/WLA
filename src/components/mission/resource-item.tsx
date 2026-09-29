@@ -1,5 +1,5 @@
 import { cn } from "@/lib/utils";
-import type { MissionResourceRow } from "@/types/database";
+
 
 /**
  * MISSION KIT RESOURCE — Architecture §7, UI/UX §30–§31.
@@ -11,25 +11,41 @@ import type { MissionResourceRow } from "@/types/database";
  * progress. Nothing here may write progress, and nothing here may be wired to
  * a handler that does.
  */
+/**
+ * One Kit item, for either actor.
+ *
+ * `href` is a signed, short-lived URL for a parent and a link to the
+ * re-authorising handler for a child (D-64). Never a permanent public URL
+ * (Tech Spec §47), and never a storage path.
+ */
+export type KitItem = {
+  id: string;
+  title: string;
+  description: string | null;
+  type: string;
+  canView: boolean;
+  canPrint: boolean;
+  canDownload: boolean;
+  href: string | null;
+};
+
 export function ResourceItem({
-  resource,
-  url,
+  item,
   unavailable = false,
 }: {
-  resource: MissionResourceRow;
-  /** Signed, short-lived URL. Never a permanent public URL (Tech Spec §47). */
-  url: string | null;
+  item: KitItem;
   unavailable?: boolean;
 }) {
-  const disabled = unavailable || !url;
+  const disabled = unavailable || !item.href;
+  const url = item.href;
 
   return (
     <li className="border-b border-[var(--color-border)] py-[var(--space-l)] last:border-b-0">
       {/* h2, not h3: a Kit resource is a section of the Mission Kit page, whose h1 is "Mission Kit". Jumping h1 → h3 skips a level (WCAG 1.3.1). */}
-      <h2 className="text-[length:var(--text-h3)]">{resource.title}</h2>
-      {resource.description && (
+      <h2 className="text-[length:var(--text-h3)]">{item.title}</h2>
+      {item.description && (
         <p className="wla-measure mt-[var(--space-xs)] text-[length:var(--text-small)] text-[var(--color-text-muted)]">
-          {resource.description}
+          {item.description}
         </p>
       )}
 
@@ -41,14 +57,14 @@ export function ResourceItem({
         </p>
       ) : (
         <ul className="mt-[var(--space-sm)] flex flex-wrap gap-[var(--space-l)]">
-          {resource.can_view && (
-            <ResourceAction href={url} label="View" target="_blank" />
+          {item.canView && (
+            <ResourceAction href={url!} label="View" target="_blank" />
           )}
-          {resource.can_print && (
-            <ResourceAction href={url} label="Print" target="_blank" />
+          {item.canPrint && (
+            <ResourceAction href={url!} label="Print" target="_blank" />
           )}
-          {resource.can_download && (
-            <ResourceAction href={url} label="Download" download />
+          {item.canDownload && (
+            <ResourceAction href={url!} label="Download" download />
           )}
         </ul>
       )}

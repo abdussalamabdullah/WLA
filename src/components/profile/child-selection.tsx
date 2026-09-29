@@ -20,10 +20,10 @@ export function ChildSelection({
   const [isPending, startTransition] = useTransition();
 
   return (
-    <div className="py-[var(--space-2xl)]">
+    <div>
       <h1 className="text-[length:var(--text-h1)]">Whose missions?</h1>
       <p className="wla-measure mt-[var(--space-s)] text-[var(--color-text-muted)]">
-        Choose a child to see the missions they can access.
+        Choose a child to see their missions.
       </p>
 
       <ul className="mt-[var(--space-xl)] grid gap-[var(--space-m)] sm:grid-cols-2 lg:grid-cols-3">

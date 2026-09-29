@@ -6,6 +6,8 @@ import {
   markVisited,
   resolveNextScreen,
   resolveResumeScreen,
+  screenAfterInteraction,
+  applyInteraction,
   type MissionScreen,
 } from "../index";
 
@@ -177,3 +179,38 @@ function nextBySequence(
   const i = ordered.findIndex((s) => s.screenKey === currentKey);
   return ordered[i + 1]?.screenKey ?? null;
 }
+
+describe("a reveal unlocks in place (Six Names Evidence)", () => {
+  /*
+   * Found in staging QA: opening Evidence advanced to the next handoff, so the
+   * child never saw what was revealed. The reveal must keep the child on the
+   * screen; the screen's own Continue (a visit) is what advances.
+   */
+  const evidence: MissionScreen = {
+    screenKey: "evidence",
+    type: "reveal",
+    title: "Evidence",
+    body: null,
+    sequence: 140,
+    configuration: {
+      concealedPrompt: "What was the list for?",
+      revealLabel: "Open Evidence",
+      revealedBody: "The names belonged to pupils whose records needed checking.",
+      condition: { type: "child_action" },
+      next: "handoff_step11",
+    },
+  };
+
+  it("revealing keeps the child on the screen, now revealed", () => {
+    const state = applyInteraction(emptyMissionState, { kind: "reveal", screenKey: "evidence" });
+    expect(screenAfterInteraction({ kind: "reveal", screenKey: "evidence" }, evidence, "handoff_step11", state))
+      .toBe("evidence");
+    expect(isRevealed(evidence, state)).toBe(true);
+  });
+
+  it("Continue on the revealed screen then advances to its next", () => {
+    const state = applyInteraction(emptyMissionState, { kind: "reveal", screenKey: "evidence" });
+    expect(screenAfterInteraction({ kind: "visit", screenKey: "evidence" }, evidence, null, state))
+      .toBe("handoff_step11");
+  });
+});

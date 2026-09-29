@@ -74,9 +74,25 @@ describe("Mission Kit storage access", () => {
     expect(kit).toContain("url: urlByPath.get(resource.storage_path) ?? null");
   });
 
-  it("the Kit page no longer hard-codes url={null}", () => {
+  it("the Kit page fetches real URLs rather than stubbing them", () => {
     expect(kitPage).not.toContain("url={null}");
-    expect(kitPage).toContain("getMissionKit");
+    /*
+     * The Kit now serves two actors (D-63/D-64), so it goes through the facade
+     * rather than calling getMissionKit directly: a parent gets signed URLs
+     * minted with their own session, a child gets links to the re-authorising
+     * handler. The guard's point is unchanged — the page must not render
+     * placeholder nulls.
+     */
+    expect(kitPage).toContain("getKitFor");
+  });
+
+  it("a child's Kit links go through the authorising handler, never a signed URL", () => {
+    const play = read("src/features/academy/play.ts");
+    expect(play).toContain("`/api/kit/${r.id}`");
+    // and the handler decides in the database, not in the route
+    const route = read("src/app/api/kit/[resourceId]/route.ts");
+    expect(route).toContain("child_session_resource_path");
+    expect(route).not.toMatch(/p_child_id/);
   });
 
   it("the bucket is private and entitlement-scoped in RLS", () => {
@@ -209,7 +225,7 @@ describe("system states are reachable", () => {
     );
     expect(kitPage).toContain("No materials for this mission");
     expect(kitPage).toContain("aren't available right now");
-    expect(kitPage).toContain("kit.every((item) => item.url === null)");
+    expect(kitPage).toContain("kit.items.every((item) => item.href === null)");
   });
 });
 
@@ -249,19 +265,41 @@ describe("Academy chrome renders once, and quietly in Active Mission", () => {
     ).toThrow();
   });
 
+  /*
+   * The LMS brief gave the Academy an application shell (sidebar + identity),
+   * so "chrome" is now one of TWO things: <AcademyShell> for the collection
+   * and mission surfaces, or <AcademyChrome variant="quiet" /> for Active
+   * Mission. The invariant is unchanged and is what this asserts: exactly one
+   * per page, never both stacked.
+   */
   it("every Academy page renders exactly one chrome", () => {
     for (const page of pages) {
       const body = read(page);
-      const usages = body.match(/<AcademyChrome[^>]*\/>/g) ?? [];
-      expect(usages, page).toHaveLength(1);
+      const chrome = body.match(/<AcademyChrome[^>]*\/>/g) ?? [];
+      const shell = body.match(/<AcademyShell>/g) ?? [];
+      expect(chrome.length + shell.length, `${page} must render exactly one chrome`)
+        .toBeGreaterThanOrEqual(1);
+      expect(chrome.length > 0 && shell.length > 0, `${page} stacks two chromes`)
+        .toBe(false);
     }
   });
 
+  /*
+   * Active Mission keeps the QUIET chrome and must never gain the sidebar.
+   * Architecture §9 and UI/UX §33–§35 make it the quietest surface in the
+   * product; a persistent nine-item sidebar beside the one thing a child is
+   * meant to be doing is the opposite of that.
+   */
   it("only Active Mission uses the quiet variant", () => {
     for (const page of pages) {
       const quiet = read(page).includes('variant="quiet"');
       expect(quiet, page).toBe(page.includes("/active/"));
     }
+  });
+
+  it("Active Mission never gains the application shell", () => {
+    const active = read("src/app/(academy)/academy/missions/[missionId]/active/page.tsx");
+    expect(active).not.toContain("AcademyShell");
   });
 });
 
@@ -461,7 +499,7 @@ describe("design refinements hold", () => {
     for (const file of [
       "src/components/mission/evidence-item.tsx",
       "src/components/mission/mission-status.tsx",
-      "src/components/mission/mission-card.tsx",
+      "src/components/academy/mission-collection.tsx",
       "src/components/mission/screens/index.tsx",
       "src/app/(academy)/academy/missions/[missionId]/complete/page.tsx",
     ]) {
@@ -664,35 +702,30 @@ describe("the parent note document", () => {
 });
 
 // ─────────────────────────────────────── Academy design: state & structure ──
-describe("the mission card follows the public site's anatomy", () => {
-  const card = code("src/components/mission/mission-card.tsx");
+describe("the collection card follows the approved anatomy", () => {
+  const card = code("src/components/academy/mission-collection.tsx");
+  const home = code("src/app/(academy)/academy/missions/[missionId]/page.tsx");
 
-  it("is not a box", () => {
+  it("status is never encoded in the card's SURFACE", () => {
     /*
-     * MEASURED (docs/DESIGN-LANGUAGE §6): on the public site a mission is a
-     * photograph, a title, a meta row and a description, with no border, no
-     * fill, no padding box and no shadow anywhere near it.
-     *
-     * The Academy used to draw a bordered, filled card and encode status in
-     * its SURFACE — in-progress sat on sage. That device went with the box.
-     * This guard exists so it does not quietly come back: reintroducing a
-     * border or fill on the card root is what would make the Academy stop
-     * looking like WLA.
+     * The Academy once drew status into the card's background — in-progress
+     * sat on sage — which made status a colour (Architecture §20) and made the
+     * grid noisy. The LMS brief approved a compact bordered card (D-66), so
+     * the card now HAS a border and a fill; what must not come back is that
+     * border or fill VARYING by status.
      */
     expect(card).not.toMatch(/SURFACE\s*:\s*Record<MissionStatus/);
     const root = card.slice(card.indexOf("<Link"), card.indexOf("</Link>"));
     const rootClasses = root.slice(0, root.indexOf(">"));
-    expect(rootClasses).not.toMatch(/\bborder\b|\bbg-\[|shadow/);
+    expect(rootClasses).not.toMatch(/item\.status|status ===/);
   });
 
-  it("status survives the loss of the surface", () => {
-    /*
-     * Architecture §20 — status must never depend on colour alone, and with
-     * the sage surface gone it now depends on nothing but text: the badge
-     * and the action wording. Both are mandatory.
-     */
-    expect(card).toContain("MissionStatusBadge");
-    expect(card).toContain("STATUS_ACTION[status]");
+  it("the collection card derives its action from status, never from the route", () => {
+    // D-65 — the locked pairing.
+    expect(card).toContain("STATUS_ACTION[item.status]");
+    expect(card).toMatch(/not_started:\s*"Start Mission"/);
+    expect(card).toMatch(/in_progress:\s*"Continue Mission"/);
+    expect(card).toMatch(/complete:\s*"View Mission"/);
   });
 
   it("a completed mission is not dimmed or archived-looking", () => {
@@ -702,24 +735,27 @@ describe("the mission card follows the public site's anatomy", () => {
     );
   });
 
-  it("shows delivery type in the dot-separated meta, as §21 requires", () => {
-    expect(card).toContain("mission.delivery_type");
-    // One line of facts, not a second row. The separator is rendered with
-    // spacing by MetaList so the parts read as separate facts, matching the
-    // site — rather than joined into one run-on string.
-    expect(card).toContain("MetaList");
-    expect(code("src/components/ui/section.tsx")).toContain(
-      "mx-[var(--space-meta)]",
-    );
+  it("the card carries exactly what the brief enumerates, and no more", () => {
+    /*
+     * Brief §9 lists the card's contents — image, title, Lab, age range,
+     * status, one action — and then says "Do not add unnecessary metadata".
+     * Delivery type was on the old card and is deliberately NOT here; it still
+     * appears on Mission Home, where there is room for it to mean something.
+     */
+    expect(card).toContain("labLabel");
+    expect(card).toMatch(/Ages \{item\.minAge\}/);
+    expect(card).toContain("STATUS_LABEL");
+    expect(card, "delivery type is not card metadata").not.toContain("delivery_type");
+    expect(home, "Mission Home still shows delivery type").toContain("MissionIdentity");
   });
 
-  it("renders the supplied mission photograph", () => {
+  it("renders the supplied mission photograph, optimised", () => {
     /*
      * The image IS the card on the public site, so a card without one is a
-     * different component. The Six Names artwork was supplied on 2026-09-27.
+     * different component. `next/image` because the grid renders up to twenty.
      */
-    expect(card).toContain("resolveMissionCover");
     expect(card).toContain("next/image");
+    expect(card).toContain("coverImage");
     const covers = code("src/features/missions/covers.ts");
     expect(covers).toContain("mission.cover_image");
     expect(covers).toContain("/missions/six-names.jpg");
@@ -772,11 +808,29 @@ describe("the mission card follows the public site's anatomy", () => {
      *
      * The cover block must therefore be a plain conditional with no else.
      */
+    /*
+     * Narrowed to IMAGE stand-ins. The bare word "placeholder" also matches
+     * `placeholder="Search missions"`, which is an ordinary input attribute
+     * and has nothing to do with inventing artwork — a guard that fails on
+     * that is measuring the wrong thing.
+     */
     expect(card).not.toMatch(
-      /placeholder|fallbackImage|defaultCover|unsplash/i,
+      /placeholderImage|fallbackImage|defaultCover|unsplash|placeholder\s*=\s*["'`](?!Search)/i,
     );
-    expect(card).toContain("{cover && (");
-    expect(card).not.toContain(") : (");
+    // The cover renders only when one exists — no `else`, no tinted panel.
+    expect(card).toContain("if (!src) return null;");
+    expect(card).toContain("{item.coverImage && <Cover");
+    // And the same on the Continue strip, which had its own 84px stand-in.
+    const myMissions = code("src/app/(academy)/academy/my-missions/page.tsx");
+    expect(myMissions).toContain("{i.coverImage && (");
+    expect(myMissions).not.toMatch(/size-\[84px\][^>]*bg-\[var\(--color-surface-sage\)\]/);
+    /*
+     * Scoped to the Cover function. The rule is that the COVER has no `else`
+     * branch — a blanket check over the file also catches the filtered-list
+     * ternary, which is unrelated and legitimate.
+     */
+    const cover = card.slice(card.indexOf("function Cover("));
+    expect(cover.slice(0, cover.indexOf("\n}"))).not.toContain(") : (");
   });
 
   it("the Lab icons are the supplied assets, not redrawn ones", () => {
@@ -789,6 +843,12 @@ describe("the mission card follows the public site's anatomy", () => {
      * namespace, which the supplied files did not carry — so that is asserted
      * too, since a missing xmlns fails silently in the browser.
      */
+    // LAB_LABEL is applied on the page, which maps it into the card's props;
+    // the card itself receives a resolved `labLabel`.
+    expect(code("src/app/(academy)/academy/my-missions/page.tsx"))
+      .toContain("LAB_LABEL[mission.lab]");
+    expect(card).toContain("labLabel");
+
     const labs = code("src/features/missions/labs.ts");
     for (const lab of [
       "challenge",
@@ -805,7 +865,6 @@ describe("the mission card follows the public site's anatomy", () => {
       expect(svg.toUpperCase()).toContain("#5F6A4F");
     }
     // The meta row still reads correctly without them.
-    expect(card).toContain("LAB_LABEL[mission.lab]");
   });
 });
 
@@ -849,5 +908,91 @@ describe("My Missions ordering", () => {
     for (const forbidden of ["searchTerm", "filterBy", "query:", "ilike"]) {
       expect(queries).not.toContain(forbidden);
     }
+  });
+});
+
+describe("public Mission Detail exists only for a published mission", () => {
+  it("asks the database for a published row and 404s otherwise", () => {
+    const page = code("src/app/(public)/missions/[slug]/page.tsx");
+    expect(page).toMatch(/\.eq\("published", true\)/);
+    expect(page).toMatch(/if \(!mission\) notFound\(\)/);
+    // the heading comes from the row, never from the URL
+    expect(page).not.toMatch(/\{slug\}<\/h1>/);
+  });
+});
+
+describe("a child can find their own way in (D-58)", () => {
+  it("the parent sign-in page — where every Academy redirect lands — links to child sign in", () => {
+    expect(code("src/app/(auth)/login/page.tsx")).toMatch(/href="\/child\/login"/);
+  });
+  it("the parent's code panel links to it rather than printing a path", () => {
+    const panel = code("src/components/child/child-access-panel.tsx");
+    expect(panel).toMatch(/<Link href="\/child\/login"/);
+    expect(panel).not.toMatch(/<strong>\/child\/login<\/strong>/);
+  });
+});
+
+describe("the Academy error boundary can actually recover", () => {
+  it("retries with a re-fetch (retry), not a client-only re-render (reset)", () => {
+    const boundary = code("src/app/(academy)/error.tsx");
+    expect(boundary).toMatch(/onRetry=\{\(\) => retry\(\)\}/);
+    expect(boundary).not.toMatch(/\breset\b/);
+    expect(boundary).toMatch(/as="h1"/);
+  });
+});
+
+describe("the completion page only speaks to a completed mission (D-65)", () => {
+  it("redirects to Mission Home unless the status is complete", () => {
+    const page = code("src/app/(academy)/academy/missions/[missionId]/complete/page.tsx");
+    expect(page).toMatch(/if \(home\.status !== "complete"\) redirect\(base\)/);
+    // and the redirect is not inside the try, where it would be caught
+    expect(page.indexOf('redirect(base)')).toBeGreaterThan(page.indexOf("throw error;"));
+  });
+});
+
+describe("no page swallows its own notFound() or redirect()", () => {
+  /*
+   * notFound() and redirect() work by THROWING. Inside a try whose catch
+   * renders an error state, the 404 became "We couldn't load this mission.
+   * Please try again." (found in staging QA on Mission Home, Kit and Trail).
+   * This walks every page and route file and rejects either call lexically
+   * inside a try block.
+   */
+  const walk = (dir: string): string[] =>
+    readdirSync(join(repo, dir), { withFileTypes: true }).flatMap((d) =>
+      d.isDirectory() ? walk(`${dir}/${d.name}`) : /\.(tsx?|jsx?)$/.test(d.name) ? [`${dir}/${d.name}`] : [],
+    );
+
+  function tryBodies(src: string): string[] {
+    const out: string[] = [];
+    let i = 0;
+    while ((i = src.indexOf("try {", i)) !== -1) {
+      let depth = 0, j = i + 4;
+      for (; j < src.length; j++) {
+        if (src[j] === "{") depth++;
+        else if (src[j] === "}" && --depth === 0) break;
+      }
+      out.push(src.slice(i, j));
+      i = j;
+    }
+    return out;
+  }
+
+  it("keeps every notFound()/redirect() outside try blocks in src/app", () => {
+    const offenders: string[] = [];
+    for (const f of walk("src/app")) {
+      for (const body of tryBodies(code(f))) {
+        if (/\b(notFound|redirect)\(/.test(body)) offenders.push(f);
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+});
+
+describe("a signed-out visitor to My Missions is sent to a way back in", () => {
+  it("redirects to child or parent sign-in instead of a dead-end message", () => {
+    const page = code("src/app/(academy)/academy/my-missions/page.tsx");
+    expect(page).toMatch(/redirect\(\(await getChildToken\(\)\) \? "\/child\/login" : "\/login\?next=\/academy\/my-missions"\)/);
+    expect(page).not.toMatch(/Please sign in to see your missions/);
   });
 });

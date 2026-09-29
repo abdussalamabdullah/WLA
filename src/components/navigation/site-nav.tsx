@@ -51,7 +51,17 @@ export function SiteNav() {
           shows the logo here, and type standing in for it read as a different
           typeface sitting next to the genuine article on every other surface.
         */}
-        <Link href="/" className="flex items-center">
+        <Link
+          href="/"
+          /*
+           * WCAG 2.5.8 — the wordmark is a standalone navigation link, so it
+           * needs a 44px hit area even though the artwork is 22px tall. It
+           * measured 63x22 at 390px, which the inline-in-text exception does
+           * not cover: it is not inside a sentence. The min-height enlarges
+           * the target without changing how the logo looks.
+           */
+          className="inline-flex min-h-[var(--target-min)] items-center"
+        >
           <Image
             src={wlaLogo}
             alt="Within Lab Academy"

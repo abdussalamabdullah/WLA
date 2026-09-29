@@ -16,13 +16,18 @@ import { ErrorState } from "@/components/system/states";
  * OPS-01: the child sees none of this, and we still have to. The boundary
  * reports itself — name and Next's opaque digest only, never the message —
  * so a failure here is observable without the interface ever explaining it.
+ *
+ * RETRY, NOT RESET. In this Next version `reset()` re-renders WITHOUT
+ * re-fetching, so after a server-side failure (an unreachable database, see
+ * ServiceUnavailableError) "Try Again" just showed the same error. `retry()`
+ * re-fetches. The fallback replaces the page, so it owns the h1.
  */
 export default function AcademyError({
   error,
-  reset,
+  retry,
 }: {
   error: Error & { digest?: string };
-  reset: () => void;
+  retry: () => void;
 }) {
   useEffect(() => {
     void fetch("/api/log", {
@@ -40,7 +45,8 @@ export default function AcademyError({
       <ErrorState
         title="Something went wrong."
         body="Your mission progress is safe. Please try again."
-        onRetry={reset}
+        onRetry={() => retry()}
+        as="h1"
       />
     </main>
   );

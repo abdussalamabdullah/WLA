@@ -1,5 +1,7 @@
 import "server-only";
 
+import { cache } from "react";
+
 import { requireParent, requireOwnedChild } from "@/lib/permissions";
 import type { ChildProfileRow } from "@/types/database";
 
@@ -8,7 +10,12 @@ import type { ChildProfileRow } from "@/types/database";
  * through lib/permissions — never directly from a route or component.
  */
 
-export async function listChildren(): Promise<ChildProfileRow[]> {
+/**
+ * Deduped per request: the Academy shell needs the list for the switcher and
+ * `resolveActiveChild` needs it to decide the active child, so an un-memoised
+ * version ran the whole query twice on every Academy page.
+ */
+export const listChildren = cache(async (): Promise<ChildProfileRow[]> => {
   const { supabase, user } = await requireParent();
 
   const { data } = await supabase
@@ -18,7 +25,7 @@ export async function listChildren(): Promise<ChildProfileRow[]> {
     .order("created_at", { ascending: true });
 
   return data ?? [];
-}
+});
 
 /** Single child. Throws AccessError if it is not this parent's. */
 export async function getChild(childId: string): Promise<ChildProfileRow> {

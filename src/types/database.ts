@@ -101,6 +101,7 @@ export type MissionScreenRow = {
 };
 
 export type MissionResourceRow = {
+  version: number;
   id: string;
   mission_id: string;
   title: string;
@@ -115,6 +116,7 @@ export type MissionResourceRow = {
 };
 
 export type MissionParentNoteRow = {
+  version: number;
   id: string;
   mission_id: string;
   content: string;
@@ -199,6 +201,55 @@ export type MissionEvidenceRow = {
   created_at: string;
 };
 
+// ------------------------------------------------- LMS additions (D-56–D-60) --
+
+export type MissionVersionStatus =
+  | "draft"
+  | "in_review"
+  | "published"
+  | "archived";
+
+export type MissionVersionRow = {
+  id: string;
+  mission_id: string;
+  version: number;
+  status: MissionVersionStatus;
+  completion_rule: Json | null;
+  notes: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+  submitted_at: string | null;
+  published_at: string | null;
+  archived_at: string | null;
+};
+
+/**
+ * What a PARENT may read about a child's access code.
+ *
+ * `code_hash` and `code_lookup` are deliberately absent from this type as well
+ * as from the column grants — the shape of the type and the shape of the grant
+ * agree, so a query for a withheld column fails to compile rather than at
+ * runtime.
+ */
+export type ChildAccessCredentialRow = {
+  id: string;
+  child_id: string;
+  created_at: string;
+  last_used_at: string | null;
+  expires_at: string | null;
+  revoked_at: string | null;
+};
+
+export type ChildSessionRow = {
+  id: string;
+  child_id: string;
+  created_at: string;
+  last_seen_at: string;
+  expires_at: string;
+  revoked_at: string | null;
+};
+
 // -------------------------------------------------------------- database --
 
 /** Generated columns a caller never supplies. */
@@ -269,6 +320,26 @@ export type Database = {
         | "amount_minor"
         | "currency"
       >;
+      mission_versions: {
+        Row: MissionVersionRow;
+        Insert: Pick<MissionVersionRow, "mission_id" | "version"> &
+          Partial<Pick<MissionVersionRow, "status" | "completion_rule" | "notes">>;
+        // Status moves through set_mission_version_status, never a direct write.
+        Update: Partial<Pick<MissionVersionRow, "notes">>;
+        Relationships: [];
+      };
+      child_access_credentials: {
+        Row: ChildAccessCredentialRow;
+        Insert: never;
+        Update: never;
+        Relationships: [];
+      };
+      child_sessions: {
+        Row: ChildSessionRow;
+        Insert: never;
+        Update: never;
+        Relationships: [];
+      };
     };
     Views: { [_ in never]: never };
     /**
@@ -339,8 +410,349 @@ export type Database = {
           next_sequence_key: string | null;
         }[];
       };
+
+      // --- mission versioning (D-57) ---
+      create_mission_version: {
+        Args: { p_mission_id: string; p_from_version?: number | null };
+        Returns: MissionVersionRow;
+      };
+      set_mission_version_status: {
+        Args: {
+          p_mission_id: string;
+          p_version: number;
+          p_status: MissionVersionStatus;
+        };
+        Returns: MissionVersionRow;
+      };
+      validate_mission_version: {
+        Args: { p_mission_id: string; p_version: number };
+        Returns: {
+          code: string;
+          blocking: boolean;
+          screen_key: string | null;
+          detail: string;
+        }[];
+      };
+      admin_draft_screens: {
+        Args: { p_mission_id: string; p_version: number };
+        Returns: {
+          id: string;
+          screen_key: string;
+          type: ScreenTypeDb;
+          title: string | null;
+          body: string | null;
+          sequence: number;
+          configuration: Json;
+        }[];
+      };
+      admin_mission_versions: {
+        Args: { p_mission_id: string };
+        Returns: {
+          version: number;
+          status: MissionVersionStatus;
+          completion_rule: Json | null;
+          screens: number;
+          runs: number;
+          complete: number;
+          created_at: string;
+          published_at: string | null;
+        }[];
+      };
+
+      // --- admin LMS surfaces (brief §18–§23) ---
+      admin_overview: {
+        Args: Record<string, never>;
+        Returns: {
+          parents: number; children: number; active_learners: number;
+          starts: number; completions: number; published_missions: number;
+          draft_missions: number; orders: number;
+        }[];
+      };
+      admin_activity: {
+        Args: { p_limit?: number };
+        Returns: {
+          kind: string; happened_at: string;
+          subject: string | null; detail: string | null;
+        }[];
+      };
+      admin_parents: {
+        Args: { p_search?: string | null; p_limit?: number };
+        Returns: {
+          id: string; email: string; name: string | null; is_admin: boolean;
+          joined_at: string; children: number; entitlements: number; orders: number;
+        }[];
+      };
+      admin_children: {
+        Args: { p_search?: string | null; p_limit?: number };
+        Returns: {
+          id: string; display_name: string; birth_year: number | null;
+          parent_email: string; missions: number; in_progress: number;
+          complete: number; last_activity_at: string | null;
+          access_code_status: string; code_last_used_at: string | null;
+        }[];
+      };
+      admin_orders: {
+        Args: { p_limit?: number };
+        Returns: {
+          id: string; created_at: string; parent_email: string;
+          child_name: string; mission_title: string;
+          amount_minor: number; currency: string; state: string;
+        }[];
+      };
+      admin_analytics: {
+        Args: Record<string, never>;
+        Returns: {
+          mission_id: string; slug: string; title: string;
+          published_version: number | null; entitlements: number;
+          starts: number; completions: number; in_progress: number;
+          quiet_14d: number; completion_rate: number;
+        }[];
+      };
+      create_mission: {
+        Args: {
+          p_slug: string; p_title: string; p_lab: WlaLab;
+          p_min_age: number; p_max_age: number;
+        };
+        Returns: MissionRow;
+      };
+      delete_mission_if_unused: {
+        Args: { p_mission_id: string };
+        Returns: boolean;
+      };
+
+      // --- mission authoring (D-56) ---
+      admin_upsert_screen: {
+        Args: {
+          p_mission_id: string; p_version: number; p_screen_key: string;
+          p_type: ScreenTypeDb; p_title: string | null; p_body: string | null;
+          p_sequence: number; p_configuration: Json;
+        };
+        Returns: MissionScreenRow;
+      };
+      admin_delete_screen: {
+        Args: { p_mission_id: string; p_version: number; p_screen_key: string };
+        Returns: undefined;
+      };
+      admin_move_screen: {
+        Args: {
+          p_mission_id: string; p_version: number;
+          p_screen_key: string; p_direction: "up" | "down";
+        };
+        Returns: undefined;
+      };
+      admin_set_completion_rule: {
+        Args: { p_mission_id: string; p_version: number; p_rule: Json };
+        Returns: undefined;
+      };
+      admin_preview_screen: {
+        Args: { p_mission_id: string; p_version: number; p_screen_key?: string | null };
+        Returns: {
+          screen_key: string; type: ScreenTypeDb; title: string | null;
+          body: string | null; sequence: number; configuration: Json;
+          next_sequence_key: string | null;
+        }[];
+      };
+
+      // --- Kit and Parent Note authoring (D-63) ---
+      admin_draft_resources: {
+        Args: { p_mission_id: string; p_version: number };
+        Returns: {
+          id: string; title: string; description: string | null;
+          type: ResourceType; storage_path: string; can_view: boolean;
+          can_print: boolean; can_download: boolean; sort_order: number;
+        }[];
+      };
+      admin_upsert_resource: {
+        Args: {
+          p_mission_id: string; p_version: number; p_id: string | null;
+          p_title: string; p_description: string | null; p_type: ResourceType;
+          p_storage_path: string; p_can_view: boolean; p_can_print: boolean;
+          p_can_download: boolean; p_sort_order: number;
+        };
+        Returns: MissionResourceRow;
+      };
+      admin_delete_resource: {
+        Args: { p_mission_id: string; p_version: number; p_id: string };
+        Returns: undefined;
+      };
+      admin_move_resource: {
+        Args: {
+          p_mission_id: string; p_version: number;
+          p_id: string; p_direction: "up" | "down";
+        };
+        Returns: undefined;
+      };
+      admin_draft_parent_note: {
+        Args: { p_mission_id: string; p_version: number };
+        Returns: { content: string; document_path: string | null }[];
+      };
+      admin_save_parent_note: {
+        Args: {
+          p_mission_id: string; p_version: number;
+          p_content: string; p_document_path: string | null;
+        };
+        Returns: undefined;
+      };
+      effective_mission_version: {
+        Args: { p_child_id: string; p_mission_id: string };
+        Returns: number;
+      };
+      mission_kit_for_child: {
+        Args: { p_child_id: string; p_mission_id: string };
+        Returns: {
+          id: string; title: string; description: string | null;
+          type: ResourceType; storage_path: string; can_view: boolean;
+          can_print: boolean; can_download: boolean; sort_order: number;
+        }[];
+      };
+      child_session_kit: {
+        Args: { p_token: string; p_mission_slug: string };
+        Returns: {
+          id: string; title: string; description: string | null;
+          type: ResourceType; storage_path: string; can_view: boolean;
+          can_print: boolean; can_download: boolean; sort_order: number;
+        }[];
+      };
+      child_session_resource_path: {
+        Args: { p_token: string; p_resource_id: string };
+        Returns: string | null;
+      };
+
+      // --- child access (D-58) ---
+      generate_child_access_code: { Args: { p_child_id: string }; Returns: string };
+      revoke_child_access_code: { Args: { p_child_id: string }; Returns: undefined };
+      redeem_child_code: {
+        Args: { p_code: string };
+        Returns: {
+          outcome: "ok" | "invalid_code" | "rate_limited";
+          token: string | null;
+          child_id: string | null;
+          display_name: string | null;
+          expires_at: string | null;
+        }[];
+      };
+      verify_child_session: {
+        Args: { p_token: string };
+        Returns: {
+          child_id: string;
+          display_name: string;
+          birth_year: number | null;
+          expires_at: string;
+        }[];
+      };
+      revoke_child_session: { Args: { p_token: string }; Returns: undefined };
+
+      // --- child-session mission access (D-59) ---
+      child_session_missions: {
+        Args: { p_token: string };
+        Returns: {
+          mission_id: string;
+          slug: string;
+          title: string;
+          description: string | null;
+          lab: WlaLab;
+          min_age: number;
+          max_age: number;
+          duration: string | null;
+          delivery_type: MissionDelivery;
+          cover_image: string | null;
+          status: MissionStatus;
+          current_screen_key: string | null;
+          last_activity_at: string | null;
+          mission_version: number | null;
+        }[];
+      };
+      child_session_mission: {
+        Args: { p_token: string; p_mission_slug: string };
+        Returns: {
+          mission_id: string;
+          slug: string;
+          title: string;
+          description: string | null;
+          lab: WlaLab;
+          min_age: number;
+          max_age: number;
+          duration: string | null;
+          delivery_type: MissionDelivery;
+          cover_image: string | null;
+          status: MissionStatus;
+          mission_version: number | null;
+          progress_id: string | null;
+          current_screen_key: string | null;
+          completion_rule: Json | null;
+        }[];
+      };
+      child_session_start_mission: {
+        Args: { p_token: string; p_mission_id: string };
+        Returns: MissionProgressRow;
+      };
+      child_session_current_screen: {
+        Args: { p_token: string; p_mission_id: string };
+        Returns: {
+          screen_key: string;
+          type: ScreenTypeDb;
+          title: string | null;
+          body: string | null;
+          sequence: number;
+          configuration: Json;
+          next_sequence_key: string | null;
+        }[];
+      };
+      child_session_persist_state: {
+        Args: {
+          p_token: string;
+          p_progress_id: string;
+          p_state: Json;
+          p_screen_key?: string | null;
+          p_response_key?: string | null;
+          p_response_value?: Json;
+        };
+        Returns: MissionProgressRow;
+      };
+      child_session_complete_mission: {
+        Args: {
+          p_token: string;
+          p_progress_id: string;
+          p_state: Json;
+          p_trail?: Json;
+        };
+        Returns: MissionProgressRow;
+      };
+      child_session_record_event: {
+        Args: { p_token: string; p_mission_id: string; p_name: string };
+        Returns: undefined;
+      };
+      child_session_state: {
+        Args: { p_token: string; p_progress_id: string };
+        Returns: Json;
+      };
+      child_session_trail: {
+        Args: { p_token: string; p_mission_slug: string };
+        Returns: {
+          id: string;
+          type: EvidenceType;
+          title: string;
+          description: string | null;
+          created_at: string;
+        }[];
+      };
+      child_session_resources: {
+        Args: { p_token: string; p_mission_slug: string };
+        Returns: {
+          id: string;
+          title: string;
+          description: string | null;
+          type: ResourceType;
+          storage_path: string;
+          can_view: boolean;
+          can_print: boolean;
+          can_download: boolean;
+          sort_order: number;
+        }[];
+      };
     };
     Enums: {
+      mission_version_status: MissionVersionStatus;
       mission_status: MissionStatus;
       entitlement_source: EntitlementSource;
       entitlement_status: EntitlementStatus;

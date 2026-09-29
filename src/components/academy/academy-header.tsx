@@ -55,6 +55,7 @@ export function AcademyHeader({
       <div
         className={cn(
           "flex items-center justify-between gap-[var(--space-m)]",
+          quiet && "flex-wrap gap-y-0",
           quiet ? "min-h-[64px]" : "min-h-[80px]",
           quiet ? "wla-container-narrow" : "wla-container",
         )}
@@ -70,7 +71,17 @@ export function AcademyHeader({
           Academy screen. Height is fixed and width auto so the 575×164 ratio
           is never distorted.
         */}
-        <Link href="/academy/my-missions" className="flex items-center">
+        <Link
+          href="/academy/my-missions"
+          /*
+           * WCAG 2.5.8 — the wordmark is a standalone navigation link, so it
+           * needs a 44px hit area even though the artwork is 22px tall. It
+           * measured 63x22 at 390px, which the inline-in-text exception does
+           * not cover: it is not inside a sentence. The min-height enlarges
+           * the target without changing how the logo looks.
+           */
+          className="inline-flex min-h-[var(--target-min)] items-center"
+        >
           <Image
             src={wlaLogo}
             alt="Within Lab Academy"
@@ -84,28 +95,39 @@ export function AcademyHeader({
           />
         </Link>
 
-        {/* §35 — mission identity and the two ways out, in the header. */}
+        {/*
+          §35 — mission identity and the two ways out, in the header.
+
+          At phone width the title and both links did not fit beside the
+          logo: the nav wrapped onto two lines and the logo floated against
+          its middle (seen in the 390px render). So below `sm` the links
+          share the logo's row and the title takes its own line under them;
+          from `sm` up it reads as before — logo, then title and links on the
+          right. One element each, reordered, so nothing is announced twice.
+        */}
         {quiet && mission && (
-          <nav
-            aria-label="Mission"
-            className="flex flex-wrap items-baseline gap-[var(--space-l)]"
-          >
-            <span className="font-[family-name:var(--font-serif)] text-[length:var(--text-h3)]">
+          <>
+            <span className="order-last basis-full pb-[var(--space-s)] font-[family-name:var(--font-serif)] text-[length:var(--text-h3)] leading-[var(--leading-tight)] sm:order-none sm:ml-auto sm:basis-auto sm:pb-0">
               {mission.title}
             </span>
-            <Link
-              href={`/academy/missions/${mission.slug}`}
-              className="inline-flex min-h-[var(--target-min)] items-center text-[length:var(--text-small)] underline decoration-[var(--color-border-strong)] underline-offset-4 hover:decoration-[var(--color-primary)]"
+            <nav
+              aria-label="Mission"
+              className="flex items-center gap-[var(--space-l)]"
             >
-              Mission Home
-            </Link>
-            <Link
-              href={`/academy/missions/${mission.slug}/kit`}
-              className="inline-flex min-h-[var(--target-min)] items-center text-[length:var(--text-small)] underline decoration-[var(--color-border-strong)] underline-offset-4 hover:decoration-[var(--color-primary)]"
-            >
-              Mission Kit
-            </Link>
-          </nav>
+              <Link
+                href={`/academy/missions/${mission.slug}`}
+                className="inline-flex min-h-[var(--target-min)] items-center text-[length:var(--text-small)] underline decoration-[var(--color-border-strong)] underline-offset-4 hover:decoration-[var(--color-primary)]"
+              >
+                Mission Home
+              </Link>
+              <Link
+                href={`/academy/missions/${mission.slug}/kit`}
+                className="inline-flex min-h-[var(--target-min)] items-center text-[length:var(--text-small)] underline decoration-[var(--color-border-strong)] underline-offset-4 hover:decoration-[var(--color-primary)]"
+              >
+                Mission Kit
+              </Link>
+            </nav>
+          </>
         )}
 
         {!quiet && (

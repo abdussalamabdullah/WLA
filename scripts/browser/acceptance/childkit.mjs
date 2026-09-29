@@ -1,0 +1,30 @@
+import { launch, uiLogin, ACCOUNTS, sleep, chk, summary } from "./cdp.mjs";
+const P = await launch({ port: 9530 }), C = await launch({ port: 9531 });
+await P.viewport(1512, 950); await C.viewport(1512, 950);
+await uiLogin(P, ...ACCOUNTS.parent);
+await P.goto("/account/children", 500);
+const adaHref = await P.eval("([...document.querySelectorAll('a')].find(a=>/Edit/.test(a.innerText) && a.closest('li')?.innerText.includes('Ada'))||{}).getAttribute?.('href')");
+await P.goto(adaHref, 600);
+const hadCode = /A code is active/.test(await P.text());
+await P.click(/^(create a code|make a new code)$/i, { selector: "button" }); await P.waitText(/new code\. Write it down/i, 30000);
+const code = await P.eval("(document.body.innerText.match(/\\b[A-Z0-9]{4}-[A-Z0-9]{4}\\b/)||[])[0]");
+await C.goto("/child/login", 300); await C.fill("input[name=code]", code);
+await C.click(/continue/i, { selector: "button[type=submit]" }); await C.waitUrl(/\/academy/, 40000);
+await C.goto("/academy/missions/six-names/kit", 800);
+const links = await C.eval("[...document.querySelectorAll('main a')].map(a=>a.getAttribute('href')).filter(h=>/\\/api\\/kit\\//.test(h))");
+chk("child's Kit links go through /api/kit/<id> (no signed URL in the page)", links.length >= 5 && !(await C.eval("document.documentElement.outerHTML")).includes("/object/sign/"), JSON.stringify(links.slice(0, 2)));
+const cookies = (await C.getCookies()).map((c) => `${c.name}=${c.value}`).join("; ");
+const r = await fetch("http://localhost:3100" + links[0], { redirect: "manual", headers: { cookie: cookies } });
+chk("child session: /api/kit/<id> → 302 to a signed URL", r.status === 302 && /\/object\/sign\/mission-resources\//.test(r.headers.get("location") || ""), `${r.status}`);
+const pdf = await fetch(r.headers.get("location"));
+chk("the signed URL serves the PDF", pdf.ok && /pdf/.test(pdf.headers.get("content-type") || ""), `${pdf.status}`);
+const forged = await fetch("http://localhost:3100/api/kit/00000000-0000-0000-0000-000000000000", { redirect: "manual", headers: { cookie: cookies } });
+chk("a forged resource id → 404", forged.status === 404, String(forged.status));
+const noCookie = await fetch("http://localhost:3100" + links[0], { redirect: "manual" });
+chk("the same link without a session → 404", noCookie.status === 404, String(noCookie.status));
+// restore Ada's access state
+await P.goto(adaHref, 600);
+if (!hadCode) { await P.click(/^turn off this code$/i, { selector: "button" }); await sleep(2000); await P.goto(adaHref, 600); chk("Ada's code turned back off (state restored)", /No code yet/.test(await P.text())); }
+const after = await fetch("http://localhost:3100" + links[0], { redirect: "manual", headers: { cookie: cookies } });
+chk("after the code is turned off, the child's Kit link → 404", after.status === 404, String(after.status));
+await P.close(); await C.close(); process.exit(summary() ? 1 : 0);

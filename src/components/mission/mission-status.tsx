@@ -14,10 +14,16 @@ export const STATUS_LABEL: Record<MissionStatus, string> = {
   complete: "Complete",
 };
 
-/** Locked pairing — Architecture §4. */
+/**
+ * Locked pairing — Architecture §4, wording per the LMS brief §9 (D-65).
+ *
+ * The lock is that the action is derived from STATUS and never from the route
+ * the learner arrived by. The words themselves were reconciled when the brief
+ * and the locked table disagreed.
+ */
 export const STATUS_ACTION: Record<MissionStatus, string> = {
-  not_started: "Open Mission",
-  in_progress: "Continue",
+  not_started: "Start Mission",
+  in_progress: "Continue Mission",
   complete: "View Mission",
 };
 

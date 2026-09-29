@@ -3,8 +3,8 @@ import { AcademyChrome } from "@/components/academy/academy-chrome";
 import { notFound, redirect } from "next/navigation";
 import { ErrorState } from "@/components/system/states";
 import { MissionRunner } from "@/components/mission/mission-runner";
-import { resolveActiveChild } from "@/features/children/active-child";
-import { getMissionStage } from "@/features/mission-engine/persistence";
+import { resolveAcademyActor } from "@/features/academy/actor";
+import { getStageFor } from "@/features/academy/play";
 import { AccessError } from "@/lib/permissions";
 
 /**
@@ -32,14 +32,16 @@ export default async function ActiveMissionPage({
 }) {
   const { missionId } = await params;
 
-  const active = await resolveActiveChild().catch(() => null);
-  if (!active || active.status !== "ok") notFound();
+  const actor = await resolveAcademyActor();
+  if (actor.kind !== "parent" && actor.kind !== "child") notFound();
 
   let stage;
   try {
-    stage = await getMissionStage(active.childId, missionId);
+    stage = await getStageFor(actor, missionId);
   } catch (error) {
     if (error instanceof AccessError) notFound();
+    // The child path signals a missing entitlement by throwing plainly.
+    if (error instanceof Error && error.message === "not_entitled") notFound();
     return (
       <main className="wla-container-narrow py-[var(--space-2xl)]">
         <ErrorState

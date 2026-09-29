@@ -1,10 +1,10 @@
 import Link from "next/link";
-import { AcademyChrome } from "@/components/academy/academy-chrome";
+import { AcademyShell } from "@/components/academy/academy-shell";
 import { notFound } from "next/navigation";
 import { EmptyState, ErrorState } from "@/components/system/states";
 import { EvidenceItem } from "@/components/mission/evidence-item";
-import { resolveActiveChild } from "@/features/children/active-child";
-import { getMissionTrail } from "@/features/mission-trail/queries";
+import { resolveAcademyActor } from "@/features/academy/actor";
+import { getTrailFor } from "@/features/academy/play";
 import { AccessError } from "@/lib/permissions";
 
 export const metadata = { title: "Mission Trail" };
@@ -25,12 +25,12 @@ export default async function MissionTrailPage({
 }) {
   const { missionId } = await params;
 
-  const active = await resolveActiveChild().catch(() => null);
-  if (!active || active.status !== "ok") notFound();
+  const actor = await resolveAcademyActor();
+  if (actor.kind !== "parent" && actor.kind !== "child") notFound();
 
   let trail;
   try {
-    trail = await getMissionTrail(active.childId, missionId);
+    trail = await getTrailFor(actor, missionId);
   } catch (error) {
     if (error instanceof AccessError) notFound();
     return (
@@ -40,9 +40,11 @@ export default async function MissionTrailPage({
     );
   }
 
+  // Outside the try — notFound() throws, and the catch would swallow it.
+  if (!trail) notFound();
+
   return (
-    <>
-      <AcademyChrome />
+    <AcademyShell>
       <main className="wla-container-narrow py-[var(--space-2xl)]">
         <Link
           href={`/academy/missions/${missionId}`}
@@ -71,6 +73,6 @@ export default async function MissionTrailPage({
           </ul>
         )}
       </main>
-    </>
+    </AcademyShell>
   );
 }

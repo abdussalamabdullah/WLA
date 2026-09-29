@@ -1,6 +1,7 @@
 import {
   emptyMissionState,
   parseScreenConfig,
+  screenConfigByType,
   type CompletionRule,
   type MissionInteraction,
   type MissionStateData,
@@ -58,6 +59,28 @@ export function resolveNextScreen(
   if (config?.next) return config.next;
 
   return nextSequenceKey;
+}
+
+/**
+ * Where does THIS interaction leave the child?
+ *
+ * A reveal unlocks content IN PLACE: the child stays on the screen and sees
+ * what was concealed, then moves on with that screen's own Continue (a
+ * `visit`). Every other interaction advances.
+ *
+ * Found in staging QA: the reveal advanced like everything else, so Six Names'
+ * Evidence was recorded as revealed but never shown — "Open Evidence" went
+ * straight to the next handoff. The server and Learner Preview both call this,
+ * so they cannot disagree about it.
+ */
+export function screenAfterInteraction(
+  interaction: MissionInteraction,
+  current: MissionScreen,
+  nextSequenceKey: string | null,
+  state: MissionStateData,
+): string | null {
+  if (interaction.kind === "reveal") return current.screenKey;
+  return resolveNextScreen(current, nextSequenceKey, state);
 }
 
 /**
@@ -232,3 +255,47 @@ export function applyInteraction(
 }
 
 export { emptyMissionState };
+
+/**
+ * Apply the canonical tracker state a screen declares.
+ *
+ * The Build Brief requires the Academy to persist the tracker state belonging
+ * to the branch the child is on, and to set Clarity to "Purpose clear" when
+ * Evidence is opened. That state is a property of the authored mission, so it
+ * is read from the screen's own configuration, which only ever arrives through
+ * the gated RPC. The browser is never asked for it and cannot influence it.
+ *
+ * Merged, not replaced: Evidence patches Clarity alone and must leave Spread
+ * and Support exactly as the branch left them.
+ *
+ * Generic by construction — this knows that a screen MAY declare canonical
+ * tracker state, never which mission is playing.
+ *
+ * LIVES HERE, NOT IN persistence.ts, because the admin Preview has to apply it
+ * too. Preview runs the real engine with state in memory; if this stayed
+ * private to the server-only module, a preview would show different tracker
+ * values than the mission it is previewing — which is the one thing a preview
+ * must not do. It is pure: no database, no session, no side effects.
+ */
+export function applyCanonicalTracker(
+  state: MissionStateData,
+  screen: MissionScreen,
+): MissionStateData {
+  const schema = screenConfigByType[screen.type];
+  if (!schema) return state;
+
+  const parsed = schema.safeParse(screen.configuration);
+  if (!parsed.success) return state;
+
+  const patch = (parsed.data as { canonicalTracker?: Record<string, string> })
+    .canonicalTracker;
+  if (!patch || Object.keys(patch).length === 0) return state;
+
+  const existing =
+    (state.custom.tracker as Record<string, string> | undefined) ?? {};
+
+  return {
+    ...state,
+    custom: { ...state.custom, tracker: { ...existing, ...patch } },
+  };
+}

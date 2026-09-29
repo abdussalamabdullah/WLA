@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
+import { logWarn } from "@/lib/observability/logger";
 import { clearActiveChild } from "@/features/children/active-child";
 import {
   fieldErrorsFrom,
@@ -72,7 +73,22 @@ export async function signUpAction(
   });
 
   if (error) {
-    return { error: "We couldn't create that account. Please try again." };
+    /*
+     * "Please try again" is wrong advice when retrying cannot help, so the
+     * cases a parent can act on get their own message. Account existence is
+     * never revealed here: `user_already_exists` stays generic.
+     */
+    switch (error.code) {
+      case "email_address_invalid":
+        return { fieldErrors: { email: "That email address can't be used. Try another." } };
+      case "weak_password":
+        return { fieldErrors: { password: "Choose a stronger password." } };
+      case "over_email_send_rate_limit":
+      case "over_request_rate_limit":
+        return { error: "Too many attempts. Please wait a few minutes and try again." };
+      default:
+        return { error: "We couldn't create that account. Please try again." };
+    }
   }
 
   // Email confirmation is on: no session yet, so tell them plainly rather
@@ -103,9 +119,23 @@ export async function signInAction(
   const { error } = await supabase.auth.signInWithPassword(parsed.data);
 
   if (error) {
-    // One message for both wrong-email and wrong-password: naming which was
-    // wrong confirms whether an account exists.
-    return { error: "That email and password don't match." };
+    switch (error.code) {
+      // One message for both wrong-email and wrong-password: naming which was
+      // wrong confirms whether an account exists.
+      case "invalid_credentials":
+        return { error: "That email and password don't match." };
+      // Only reported once the password was right, so it reveals nothing new.
+      case "email_not_confirmed":
+        return { error: "Confirm your email first, using the link we sent you." };
+      case "over_request_rate_limit":
+        return { error: "Too many attempts. Please wait a few minutes and try again." };
+      // Anything else is not the parent's credentials — an outage or a
+      // timeout. Telling them their password is wrong sends them to reset it.
+      default:
+        // OPS-01: the code and status only — never the email.
+        logWarn("sign_in_failed", { code: error.code ?? "none", status: error.status ?? 0 });
+        return { error: "We couldn't sign you in just now. Please try again." };
+    }
   }
 
   redirect(safeNext(formData.get("next")?.toString()));

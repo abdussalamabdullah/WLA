@@ -224,13 +224,45 @@ describe("duplicate-start protection", () => {
 // ─────────────────────────────────────────────── 8. child-scoped authorization ──
 describe("child-scoped authorization", () => {
   it("every entry point goes through requireEntitledMission", () => {
-    for (const fn of ["getMissionStage", "startMission", "recordInteraction"]) {
+    for (const fn of ["getMissionStage", "startMission"]) {
       const body = persistence.slice(
         persistence.indexOf(`export async function ${fn}`),
       );
       const upToNext = body.slice(0, body.indexOf("\nexport ", 10));
       expect(upToNext, fn).toContain("requireEntitledMission(");
     }
+  });
+
+  /*
+   * recordInteraction now reaches the database through a gateway, so that the
+   * reducer, canonical tracker and completion logic are not duplicated for
+   * child sessions (D-59). The parent path must still run the permissions
+   * chain — this follows the one indirection rather than accepting it.
+   */
+  it("the parent gateway still runs the permissions chain", () => {
+    const entry = persistence.slice(
+      persistence.indexOf("export async function recordInteraction("),
+    );
+    const upToNext = entry.slice(0, entry.indexOf("\n/**"));
+    expect(upToNext, "recordInteraction must delegate to parentGateway")
+      .toContain("parentGateway(");
+
+    const gw = persistence.slice(persistence.indexOf("export function parentGateway("));
+    const gwBody = gw.slice(0, gw.indexOf("\nexport ", 10));
+    // Every database operation the gateway performs re-establishes access.
+    expect(
+      gwBody.match(/requireEntitledMission\(/g),
+      "each parent gateway write must re-establish entitlement",
+    ).toHaveLength(2);
+    expect(gwBody).toContain("getMissionStage(childId, missionIdOrSlug)");
+  });
+
+  it("the shared interaction logic never takes a child id directly", () => {
+    const shared = persistence.slice(
+      persistence.indexOf("export async function recordInteractionVia("),
+    );
+    const sig = shared.slice(0, shared.indexOf("{"));
+    expect(sig).not.toContain("childId: string");
   });
 
   it("the database functions re-check ownership independently", () => {

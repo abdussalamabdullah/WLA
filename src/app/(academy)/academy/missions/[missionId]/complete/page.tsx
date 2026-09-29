@@ -1,9 +1,9 @@
 import Link from "next/link";
-import { AcademyChrome } from "@/components/academy/academy-chrome";
-import { notFound } from "next/navigation";
+import { AcademyShell } from "@/components/academy/academy-shell";
+import { notFound, redirect } from "next/navigation";
 import { ButtonLink } from "@/components/ui/button";
-import { resolveActiveChild } from "@/features/children/active-child";
-import { getMissionHome } from "@/features/missions/queries";
+import { resolveAcademyActor } from "@/features/academy/actor";
+import { getMissionHomeFor } from "@/features/academy/collection";
 import { AccessError } from "@/lib/permissions";
 
 export const metadata = { title: "Mission Complete" };
@@ -28,22 +28,29 @@ export default async function MissionCompletePage({
 }) {
   const { missionId } = await params;
 
-  const active = await resolveActiveChild().catch(() => null);
-  if (!active || active.status !== "ok") notFound();
+  const actor = await resolveAcademyActor();
+  if (actor.kind !== "parent" && actor.kind !== "child") notFound();
 
   let home;
   try {
-    home = await getMissionHome(active.childId, missionId);
+    home = await getMissionHomeFor(actor, missionId);
   } catch (error) {
     if (error instanceof AccessError) notFound();
     throw error;
   }
+  if (!home) notFound();
 
   const base = `/academy/missions/${home.mission.slug}`;
 
+  /*
+   * Closure is earned by STATUS, never by the route (D-65). Found in staging
+   * QA: an In Progress child who opened /complete was told "You finished
+   * something". Outside the try above — redirect() throws by design.
+   */
+  if (home.status !== "complete") redirect(base);
+
   return (
-    <>
-      <AcademyChrome />
+    <AcademyShell>
       <main className="wla-container-narrow py-[var(--space-3xl)] md:py-[var(--space-5xl)]">
         <p className="text-[length:var(--text-small)] font-medium text-[var(--color-text-muted)]">
           Complete
@@ -101,6 +108,6 @@ export default async function MissionCompletePage({
           whenever you like. Your Mission Kit and parent note stay there.
         </p>
       </main>
-    </>
+    </AcademyShell>
   );
 }
