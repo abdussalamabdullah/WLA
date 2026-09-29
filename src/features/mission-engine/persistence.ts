@@ -4,11 +4,11 @@ import { requireEntitledMission } from "@/lib/permissions";
 import { recordEvent } from "@/lib/analytics/events";
 import { logError } from "@/lib/observability/logger";
 import {
+  applyCanonicalTracker,
   applyInteraction,
-  resolveNextScreen,
+  screenAfterInteraction,
   type MissionScreen,
 } from "./navigation";
-import { screenConfigByType } from "./schemas";
 import {
   completionRule,
   isMissionComplete,
@@ -179,44 +179,6 @@ export type InteractionResult = {
 };
 
 /**
- * Apply the canonical tracker state a screen declares — server-side.
- *
- * The Build Brief requires the Academy to persist the tracker state belonging
- * to the branch the child is on, and to set Clarity to "Purpose clear" when
- * Evidence is opened. That state is a property of the authored mission, so it
- * is read from the screen's own configuration, which only ever arrives through
- * the gated RPC. The browser is never asked for it and cannot influence it.
- *
- * Merged, not replaced: Evidence patches Clarity alone and must leave Spread
- * and Support exactly as the branch left them.
- *
- * Generic by construction — this knows that a screen MAY declare canonical
- * tracker state, never which mission is playing.
- */
-function applyCanonicalTracker(
-  state: MissionStateData,
-  screen: MissionScreen,
-): MissionStateData {
-  const schema = screenConfigByType[screen.type];
-  if (!schema) return state;
-
-  const parsed = schema.safeParse(screen.configuration);
-  if (!parsed.success) return state;
-
-  const patch = (parsed.data as { canonicalTracker?: Record<string, string> })
-    .canonicalTracker;
-  if (!patch || Object.keys(patch).length === 0) return state;
-
-  const existing =
-    (state.custom.tracker as Record<string, string> | undefined) ?? {};
-
-  return {
-    ...state,
-    custom: { ...state.custom, tracker: { ...existing, ...patch } },
-  };
-}
-
-/**
  * Record one meaningful interaction and advance.
  *
  * Tech Spec §29 defines the save points: choice confirmed, response submitted,
@@ -228,9 +190,88 @@ function applyCanonicalTracker(
  * through the atomic RPC — the child never sees a screen claiming Complete
  * while the backing state is unwritten.
  */
+/**
+ * HOW THIS FUNCTION TALKS TO THE DATABASE — D-59.
+ *
+ * Two actors can now play a mission: a parent with a child selected, and a
+ * child with their own session. They differ ONLY in which database calls
+ * carry the authorisation — the parent path runs the permissions chain and
+ * RLS, the child path passes a session token to `security definer` functions
+ * that derive the child inside the database.
+ *
+ * Everything else — the reducer, the canonical tracker, the screen-match
+ * check, completion evaluation, D-17's pinned rule — is identical, and a
+ * second copy of it for children would be the one thing most likely to rot.
+ * So the three database touchpoints are injected and the logic is shared.
+ */
+export type MissionGateway = {
+  /** The verified child. An authorisation INPUT, never a result. */
+  childId: string;
+  loadStage(): Promise<MissionStage>;
+  persist(args: {
+    progressId: string;
+    state: MissionStateData;
+    screenKey: string | null;
+    responseKey: string | null;
+    responseValue: Json | null;
+  }): Promise<MissionProgressRow | null>;
+  complete(args: {
+    progressId: string;
+    state: MissionStateData;
+  }): Promise<MissionProgressRow | null>;
+  /** Analytics must never become a reason a mission fails (D-50). */
+  recordEvent(name: "mission_started" | "mission_completed", missionId: string, progressId: string): Promise<void>;
+};
+
 export async function recordInteraction(
   childId: string,
   missionIdOrSlug: string,
+  rawInteraction: MissionInteraction,
+): Promise<InteractionResult> {
+  return recordInteractionVia(
+    parentGateway(childId, missionIdOrSlug),
+    rawInteraction,
+  );
+}
+
+/** The parent path: the permissions chain plus RLS, exactly as before. */
+export function parentGateway(
+  childId: string,
+  missionIdOrSlug: string,
+): MissionGateway {
+  return {
+    childId,
+    loadStage: () => getMissionStage(childId, missionIdOrSlug),
+    async persist({ progressId, state, screenKey, responseKey, responseValue }) {
+      const { supabase } = await requireEntitledMission(childId, missionIdOrSlug);
+      const { data, error } = await supabase.rpc("persist_mission_state", {
+        p_progress_id: progressId,
+        p_state: state as unknown as Json,
+        p_screen_key: screenKey,
+        p_response_key: responseKey,
+        p_response_value: responseValue as Json,
+      });
+      if (error) return null;
+      return data as unknown as MissionProgressRow;
+    },
+    async complete({ progressId, state }) {
+      const { supabase } = await requireEntitledMission(childId, missionIdOrSlug);
+      const { data, error } = await supabase.rpc("complete_mission", {
+        p_progress_id: progressId,
+        p_state: state as unknown as Json,
+        p_trail: [] as unknown as Json,
+      });
+      if (error) return null;
+      return data as unknown as MissionProgressRow;
+    },
+    async recordEvent(name, missionId, progressId) {
+      await recordEvent({ name, childId, missionId, progressId });
+    },
+  };
+}
+
+export async function recordInteractionVia(
+  gateway: MissionGateway,
   rawInteraction: MissionInteraction,
 ): Promise<InteractionResult> {
   const parsedInteraction = missionInteraction.safeParse(rawInteraction);
@@ -239,7 +280,7 @@ export async function recordInteraction(
   }
   const interaction = parsedInteraction.data;
 
-  const stage = await getMissionStage(childId, missionIdOrSlug);
+  const stage = await gateway.loadStage();
   const { mission, progress, screen, nextSequenceKey } = stage;
 
   if (!progress) {
@@ -292,9 +333,12 @@ export async function recordInteraction(
     screen,
   );
 
-  const nextScreenKey = resolveNextScreen(screen, nextSequenceKey, nextState);
-
-  const { supabase } = await requireEntitledMission(childId, missionIdOrSlug);
+  const nextScreenKey = screenAfterInteraction(
+    interaction,
+    screen,
+    nextSequenceKey,
+    nextState,
+  );
 
   /*
    * Completion is decided from configuration, never from mission identity.
@@ -325,15 +369,42 @@ export async function recordInteraction(
      * completed with an empty Trail. Hosted validation caught it.
      *
      * `[]` means "derive them"; a non-empty array would override.
+     *
+     * THE COMPLETING RESPONSE IS SAVED FIRST. When the interaction that meets
+     * the rule is itself a written answer (a `response_exists` rule), that
+     * answer used to be dropped: complete() takes no response, so the Trail's
+     * `fromResponse` entry found nothing, its description was NULL, the
+     * evidence insert failed and the whole completion rolled back — the child
+     * saw "That didn't save." on the last step for ever. Found building a QA
+     * mission in the admin UI; Six Names never hit it because it completes on
+     * a content screen. If the save lands and completion then fails, nothing
+     * is lost: the answer is kept and the next attempt completes.
      */
-    const { data, error } = await supabase.rpc("complete_mission", {
-      p_progress_id: progress.id,
-      p_state: nextState as unknown as Json,
-      p_trail: [] as unknown as Json,
+    if (interaction.kind === "response") {
+      const saved = await gateway.persist({
+        progressId: progress.id,
+        state: nextState,
+        screenKey: nextScreenKey ?? screen.screenKey,
+        responseKey: interaction.screenKey,
+        responseValue: (interaction.value ?? null) as Json,
+      });
+      if (!saved) {
+        logError("mission_persist_failed", null, {
+          missionId: mission.id,
+          progressId: progress.id,
+          interaction: interaction.kind,
+        });
+        throw new MissionPersistenceError();
+      }
+    }
+
+    const data = await gateway.complete({
+      progressId: progress.id,
+      state: nextState,
     });
-    if (error || !data) {
+    if (!data) {
       // OPS-01. Identifiers only — never state, responses or screen content.
-      logError("mission_completion_failed", error, {
+      logError("mission_completion_failed", null, {
         missionId: mission.id,
         progressId: progress.id,
       });
@@ -342,12 +413,7 @@ export async function recordInteraction(
       );
     }
 
-    await recordEvent({
-      name: "mission_completed",
-      childId,
-      missionId: mission.id,
-      progressId: progress.id,
-    });
+    await gateway.recordEvent("mission_completed", mission.id, progress.id);
 
     return {
       state: nextState,
@@ -357,22 +423,21 @@ export async function recordInteraction(
     };
   }
 
-  const { data, error } = await supabase.rpc("persist_mission_state", {
-    p_progress_id: progress.id,
-    p_state: nextState as unknown as Json,
-    p_screen_key: nextScreenKey,
-    p_response_key:
-      interaction.kind === "response" ? interaction.screenKey : null,
-    p_response_value:
+  const data = await gateway.persist({
+    progressId: progress.id,
+    state: nextState,
+    screenKey: nextScreenKey,
+    responseKey: interaction.kind === "response" ? interaction.screenKey : null,
+    responseValue:
       interaction.kind === "response"
         ? ((interaction.value ?? null) as Json)
         : null,
   });
 
-  if (error || !data) {
+  if (!data) {
     // D-18: do not advance. persist_mission_state is one transaction, so the
     // state, the response and the position are all unchanged.
-    logError("mission_persist_failed", error, {
+    logError("mission_persist_failed", null, {
       missionId: mission.id,
       progressId: progress.id,
       interaction: interaction.kind,

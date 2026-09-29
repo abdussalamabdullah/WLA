@@ -1,36 +1,39 @@
-import Link from "next/link";
-import Image from "next/image";
 import { redirect } from "next/navigation";
-import wlaLogo from "../../../public/wla-logo-horizontal.png";
 import { requireAdmin, AccessError } from "@/lib/permissions";
 import { logAccessDenied } from "@/lib/observability/logger";
+import { AppShell, type NavItem } from "@/components/app-shell/app-shell";
+import {
+  IconOverview, IconMission, IconBuilder, IconParents, IconChildren,
+  IconOrders, IconActivity, IconAnalytics, IconSettings, IconHelp, IconLogout,
+} from "@/components/app-shell/icons";
 
-export const metadata = { title: "Content" };
+export const metadata = { title: "Academy admin" };
 
 /**
- * THE INTERNAL ADMIN — CMS-01.
+ * THE INTERNAL ADMIN — CMS-01, extended by the LMS brief (§3, §18–§24).
  *
- * Tech Spec §39 forbids both a full custom CMS and an external one, and asks
- * for "the simplest suitable mechanism". This is it: the content already lives
- * in ordinary Postgres tables, so the admin is a small set of forms over those
- * tables and nothing else. No page builder, no block editor, no third party.
+ * Still the simplest suitable mechanism (Tech Spec §39): forms over ordinary
+ * Postgres tables. What the LMS brief added is breadth — nine destinations
+ * instead of one — and the Mission Builder, which is authoring rather than
+ * editing and is the reason D-56 was needed.
  *
- * It is gated here AND by RLS. This layout refuses a non-admin before any
- * child route renders; every admin table additionally carries an `is_admin()`
- * policy, so a request that somehow reached a server action would still be
- * refused at the database.
+ * Gated HERE and at the database. This layout refuses a non-admin before any
+ * child route renders; every admin function additionally begins with
+ * `is_admin()`, so a request that reached a server action directly would still
+ * be refused. Neither is a substitute for the other.
  *
- * Deliberately NOT a dashboard. It uses the same canvas, typefaces and
- * restraint as the Academy, because a tool the client uses weekly should feel
- * like the product it edits rather than like a different piece of software.
+ * Deliberately NOT a SaaS admin template (§26): same canvas, typefaces and
+ * restraint as the Academy, because a tool used weekly should feel like the
+ * product it edits.
  */
 export default async function AdminLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  let profile;
   try {
-    await requireAdmin();
+    ({ profile } = await requireAdmin());
   } catch (error) {
     if (error instanceof AccessError) {
       /*
@@ -45,32 +48,30 @@ export default async function AdminLayout({
     throw error;
   }
 
+  const nav: NavItem[] = [
+    { href: "/admin", label: "Overview", icon: <IconOverview /> },
+    { href: "/admin/missions", label: "Missions", icon: <IconMission />, prefix: true },
+    { href: "/admin/builder", label: "Mission Builder", icon: <IconBuilder />, prefix: true },
+    { href: "/admin/parents", label: "Parents", icon: <IconParents />, prefix: true },
+    { href: "/admin/children", label: "Children", icon: <IconChildren />, prefix: true },
+    { href: "/admin/orders", label: "Orders", icon: <IconOrders /> },
+    { href: "/admin/activity", label: "Activity", icon: <IconActivity /> },
+    { href: "/admin/analytics", label: "Analytics", icon: <IconAnalytics /> },
+    { href: "/admin/settings", label: "Settings", icon: <IconSettings /> },
+  ];
+
+  const utility: NavItem[] = [
+    { href: "/admin/help", label: "Help", icon: <IconHelp /> },
+    { href: "/logout", label: "Log out", icon: <IconLogout /> },
+  ];
+
   return (
-    <>
-      <header className="wla-band-raised border-b border-[var(--color-border)]">
-        <div className="wla-container flex min-h-[80px] flex-wrap items-center justify-between gap-[var(--space-m)]">
-          <div className="flex items-center gap-[var(--space-l)]">
-            <Link href="/admin" className="flex items-center">
-              <Image
-                src={wlaLogo}
-                alt="Within Lab Academy"
-                priority
-                className="h-[26px] w-auto sm:h-[30px]"
-              />
-            </Link>
-            <span className="text-[length:var(--text-small)] text-[var(--color-text-muted)]">
-              Content
-            </span>
-          </div>
-          <Link
-            href="/academy/my-missions"
-            className="inline-flex min-h-[var(--target-min)] items-center text-[length:var(--text-small)] underline decoration-[var(--color-border-strong)] underline-offset-4 hover:decoration-[var(--color-primary)]"
-          >
-            Back to the Academy →
-          </Link>
-        </div>
-      </header>
+    <AppShell
+      nav={nav}
+      utility={utility}
+      identity={{ label: profile.email, meta: "Admin" }}
+    >
       {children}
-    </>
+    </AppShell>
   );
 }

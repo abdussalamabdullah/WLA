@@ -108,16 +108,29 @@ export async function getMissionHome(
     missionIdOrSlug,
   );
 
+  /*
+   * D-63 — both are version-scoped now, so both resolve through the version
+   * this child's run is pinned to. Selecting on mission_id alone would return
+   * one row per version.
+   */
+  const { data: version } = await supabase.rpc("effective_mission_version", {
+    p_child_id: childId,
+    p_mission_id: mission.id,
+  });
+  const effective = version ?? mission.version;
+
   const [{ data: resources }, { data: note }] = await Promise.all([
     supabase
       .from("mission_resources")
       .select("*")
       .eq("mission_id", mission.id)
+      .eq("version", effective)
       .order("sort_order", { ascending: true }),
     supabase
       .from("mission_parent_notes")
       .select("content, document_path")
       .eq("mission_id", mission.id)
+      .eq("version", effective)
       .maybeSingle(),
   ]);
 

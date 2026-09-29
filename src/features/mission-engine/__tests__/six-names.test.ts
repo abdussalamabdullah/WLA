@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import {
   applyInteraction,
@@ -484,6 +484,18 @@ const EXPECTED = {
 
 // ───────────────────────────────────────────────────────── the six routes ──
 
+/** Every .ts/.tsx file under a directory, recursively. */
+function sourceFiles(dir: string): string[] {
+  const abs = join(repo, dir);
+  const out: string[] = [];
+  for (const entry of readdirSync(abs, { withFileTypes: true })) {
+    const p = `${dir}/${entry.name}`;
+    if (entry.isDirectory()) out.push(...sourceFiles(p));
+    else if (/\.tsx?$/.test(entry.name)) out.push(join(repo, p));
+  }
+  return out;
+}
+
 describe("the six valid routes", () => {
   const routes = D1.flatMap((a) => D2.map((b) => [a.id, b.id] as const));
 
@@ -608,15 +620,39 @@ describe("canonical tracker states", () => {
   });
 
   it("the canonical state is applied by the SERVER, never sent by the browser", () => {
-    // The patch is read from the current screen's configuration, which only
-    // ever arrives through the gated RPC.
-    expect(persistence).toContain("function applyCanonicalTracker");
-    expect(persistence).toContain("screenConfigByType[screen.type]");
-    // And it is merged AFTER the child's own interaction, so nothing the
-    // browser sent can overwrite it.
+    /*
+     * The function moved to navigation.ts so the admin Preview can apply the
+     * same one (a preview showing different tracker values than the mission it
+     * previews would be worse than no preview). That does not weaken this
+     * property: the security claim is that the SERVER computes the patch from
+     * the screen's configuration — which only ever arrives through the gated
+     * RPC — and merges it AFTER the child's interaction. Calling the same pure
+     * function in a browser changes nothing, because the server recomputes it
+     * and the server's result is what is persisted.
+     */
+    const navigation = readFileSync(
+      join(repo, "src/features/mission-engine/navigation.ts"),
+      "utf8",
+    );
+    expect(navigation).toContain("export function applyCanonicalTracker");
+    expect(navigation).toContain("screenConfigByType[screen.type]");
+
+    // The server path still applies it, and still applies it last.
+    expect(persistence).toContain("applyCanonicalTracker");
     expect(persistence).toMatch(
       /applyCanonicalTracker\(\s*applyInteraction\(stage\.state, interaction\),/,
     );
+  });
+
+  it("there is exactly ONE canonical-tracker implementation", () => {
+    // A second copy for Preview is the thing most likely to drift.
+    const files = sourceFiles("src").filter((f) => !f.includes("__tests__"));
+    const definitions = files.filter((f) =>
+      /function applyCanonicalTracker\(/.test(readFileSync(f, "utf8")),
+    );
+    expect(definitions.map((f) => f.replace(/.*\/src\//, "src/"))).toEqual([
+      "src/features/mission-engine/navigation.ts",
+    ]);
   });
 
   it("a client cannot forge state through a `custom` interaction", () => {

@@ -26,28 +26,49 @@ const INIT = "supabase/migrations/20260925220000_init.sql";
 describe("1. Parent authentication", () => {
   it("requireParent rejects an unauthenticated caller", () => {
     const src = read("lib/permissions/index.ts");
-    const fn = src.slice(src.indexOf("export async function requireParent"));
+    // `export const requireParent = cache(async () => …` since the per-request
+    // dedupe; the property asserted is unchanged.
+    const fn = src.slice(src.indexOf("export const requireParent"));
     expect(fn).toContain("supabase.auth.getUser()");
     expect(fn).toContain(
       'throw new AccessError("Not signed in.", "unauthenticated")',
     );
   });
 
+  it("the session is revalidated once per REQUEST, never cached across them", () => {
+    /*
+     * `cache()` from React memoises for the lifetime of one request only. If
+     * this ever became `unstable_cache`, a `revalidate` or a module-level
+     * variable, one user's verified session could be served to another.
+     */
+    const src = read("lib/permissions/index.ts");
+    expect(src).toContain('import { cache } from "react"');
+    expect(src).not.toMatch(/unstable_cache|revalidate\s*[:=]|globalThis\./);
+  });
+
   it("throws rather than returning null, so a caller cannot forget the check", () => {
     const src = read("lib/permissions/index.ts");
-    expect(src).not.toMatch(
-      /export async function requireParent[^]*?return null/,
-    );
+    expect(src).not.toMatch(/export const requireParent[^]*?return null/);
   });
 
   it("Supabase Auth owns authentication — no bespoke password handling", () => {
     const src = read("features/auth/actions.ts");
     expect(src).toContain("supabase.auth.signInWithPassword");
     expect(src).toContain("supabase.auth.signUp");
-    // No hand-rolled hashing anywhere.
+    /*
+     * No hand-rolled hashing anywhere in the APPLICATION.
+     *
+     * Comments are stripped first. Child access codes are hashed with bcrypt
+     * (D-58) but that happens inside a `security definer` function in the
+     * database, and several files explain so in prose. Matching prose made
+     * this guard fail on a page that hashes nothing — the opposite of the
+     * failure mode these guards usually have, and just as misleading.
+     */
     for (const file of sourceFiles(root)) {
-      const content = readFileSync(file, "utf8");
-      expect(content).not.toMatch(/\b(bcrypt|scrypt|createHmac\(.*password)/i);
+      const content = readFileSync(file, "utf8")
+        .replace(/\/\*[\s\S]*?\*\//g, " ")
+        .replace(/(^|[^:])\/\/.*$/gm, "$1 ");
+      expect(content, file).not.toMatch(/\b(bcrypt|scrypt|createHmac\(.*password)/i);
     }
   });
 });
@@ -195,6 +216,11 @@ describe("4. Active-child context", () => {
       // Display only: reads the id to show which child is selected. It never
       // queries on it — every child-scoped query re-verifies ownership.
       "components/academy/academy-chrome.tsx",
+      // Same, for the application shell's identity chip and child switcher.
+      "components/academy/academy-shell.tsx",
+      // resolveAcademyActor reads it to decide WHICH actor is present. The id
+      // it returns is an input to the permission chain, never a result of it.
+      "features/academy/actor.ts",
     ];
     for (const file of consumers) {
       const rel = file.replace(root + "/", "");

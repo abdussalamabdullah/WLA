@@ -32,8 +32,28 @@ import type { MissionResourceRow } from "@/types/database";
  */
 const SIGNED_URL_TTL_SECONDS = 60 * 60;
 
+/**
+ * What the Mission Kit actually needs about a resource.
+ *
+ * Deliberately NARROWER than MissionResourceRow: `mission_kit_for_child`
+ * returns exactly this, and widening the type back to the full row would mean
+ * shipping `mission_id`, `version` and `created_at` to a learner screen that
+ * has no use for any of them.
+ */
+export type KitResource = {
+  id: string;
+  title: string;
+  description: string | null;
+  type: MissionResourceRow["type"];
+  storage_path: string;
+  can_view: boolean;
+  can_print: boolean;
+  can_download: boolean;
+  sort_order: number;
+};
+
 export type ResourceWithUrl = {
-  resource: MissionResourceRow;
+  resource: KitResource;
   /** Null when the file is missing from Storage — the UI shows unavailable. */
   url: string | null;
 };
@@ -50,18 +70,41 @@ export async function getMissionKit(
   childId: string,
   missionIdOrSlug: string,
 ): Promise<ResourceWithUrl[]> {
+  return (await getMissionKitWithTitle(childId, missionIdOrSlug)).items;
+}
+
+/**
+ * The Kit AND the mission's title, from ONE pass of the permissions chain.
+ *
+ * The Kit page needs both. Fetching them separately ran
+ * `requireEntitledMission` twice, and each pass calls `auth.getUser()`, which
+ * is a network round trip to GoTrue. Together with the shell's own calls that
+ * put six concurrent auth requests on one page render; GoTrue started
+ * rejecting them and the client retried with backoff, so the Mission Kit took
+ * 25–44 seconds to load. Measured, not guessed: the RPC and the batched
+ * signing are ~0.4s each, and the server log showed AuthRetryableFetchError.
+ */
+export async function getMissionKitWithTitle(
+  childId: string,
+  missionIdOrSlug: string,
+): Promise<{ missionTitle: string; items: ResourceWithUrl[] }> {
   const { mission, supabase } = await requireEntitledMission(
     childId,
     missionIdOrSlug,
   );
 
-  const { data: resources } = await supabase
-    .from("mission_resources")
-    .select("*")
-    .eq("mission_id", mission.id)
-    .order("sort_order", { ascending: true });
+  /*
+   * VERSION-AWARE (D-63). Resources are now scoped to a mission version, so a
+   * plain select on mission_id returns one row per version — the Kit would
+   * show every printable two or three times. `mission_kit_for_child` resolves
+   * the version this child's run is pinned to and returns only that set.
+   */
+  const { data: resources } = await supabase.rpc("mission_kit_for_child", {
+    p_child_id: childId,
+    p_mission_id: mission.id,
+  });
 
-  if (!resources?.length) return [];
+  if (!resources?.length) return { missionTitle: mission.title, items: [] };
 
   /*
    * One batched call rather than N round trips. createSignedUrls returns a
@@ -78,10 +121,13 @@ export async function getMissionKit(
     (signed ?? []).map((s) => [s.path ?? "", s.error ? null : s.signedUrl]),
   );
 
-  return resources.map((resource) => ({
-    resource,
-    url: urlByPath.get(resource.storage_path) ?? null,
-  }));
+  return {
+    missionTitle: mission.title,
+    items: resources.map((resource) => ({
+      resource,
+      url: urlByPath.get(resource.storage_path) ?? null,
+    })),
+  };
 }
 
 /**
@@ -107,10 +153,16 @@ export async function getParentNoteDocumentUrl(
     missionIdOrSlug,
   );
 
+  const { data: version } = await supabase.rpc("effective_mission_version", {
+    p_child_id: childId,
+    p_mission_id: mission.id,
+  });
+
   const { data: note } = await supabase
     .from("mission_parent_notes")
     .select("document_path")
     .eq("mission_id", mission.id)
+    .eq("version", version ?? mission.version)
     .maybeSingle();
 
   if (!note?.document_path) return null;

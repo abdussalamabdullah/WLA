@@ -289,29 +289,27 @@ function Checkbox({
   defaultChecked: boolean;
 }) {
   return (
-    <div className="flex items-start gap-[var(--space-m)]">
-      <input
-        id={name}
-        name={name}
-        type="checkbox"
-        defaultChecked={defaultChecked}
-        /* 24px is the WCAG 2.2 AA floor for a target (2.5.8); size-5 is only 20. */
-        className="mt-0.5 size-6 shrink-0 accent-[var(--color-primary)]"
-        aria-describedby={`${name}-hint`}
-      />
-      <span className="flex flex-col gap-[var(--space-xs)]">
-        <label
-          htmlFor={name}
-          className="text-[length:var(--text-label)] font-medium"
-        >
-          {label}
-        </label>
-        <span
-          id={`${name}-hint`}
-          className="wla-measure text-[length:var(--text-small)] text-[var(--color-text-muted)]"
-        >
-          {hint}
-        </span>
+    <div className="flex flex-col gap-[var(--space-xs)]">
+      {/*
+        The whole row is the target: the box alone is 24px, the WCAG floor,
+        but CLAUDE.md asks for 44px on every interactive element, so the label
+        wraps the box and carries the min-height.
+      */}
+      <label className="inline-flex min-h-[var(--target-min)] cursor-pointer items-center gap-[var(--space-m)] self-start">
+        <input
+          name={name}
+          type="checkbox"
+          defaultChecked={defaultChecked}
+          className="size-6 shrink-0 accent-[var(--color-primary)]"
+          aria-describedby={`${name}-hint`}
+        />
+        <span className="text-[length:var(--text-label)] font-medium">{label}</span>
+      </label>
+      <span
+        id={`${name}-hint`}
+        className="wla-measure pl-[calc(1.5rem+var(--space-m))] text-[length:var(--text-small)] text-[var(--color-text-muted)]"
+      >
+        {hint}
       </span>
     </div>
   );

@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import { createServerClient } from "@supabase/ssr";
 import { publicEnv } from "@/lib/env";
 import type { Database } from "@/types/database";
+import { boundedFetch } from "./fetch";
 
 /**
  * Server client bound to the request's cookies. Runs as the authenticated
@@ -14,6 +15,7 @@ export async function createClient() {
     publicEnv.supabaseUrl,
     publicEnv.supabaseAnonKey,
     {
+      global: { fetch: boundedFetch },
       cookies: {
         getAll() {
           return cookieStore.getAll();

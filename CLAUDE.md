@@ -54,11 +54,22 @@ Switching the active child must switch the **entire** Academy context. Use
 `switchActiveChildAction`, which revalidates the Academy layout. There must be
 no path by which Child A's data appears while Child B is selected.
 
-Do not add signed active-child tokens or child authentication.
+Do not add signed active-child tokens. The ACTIVE-CHILD cookie carries no
+authority and must not gain any.
+
+Children authenticate separately with an access code (D-58), which supersedes
+the earlier ban on child authentication. That is a session scoped to one child
+profile — not a child *account*: no email, no password, no purchases, no family
+management. Child-scoped data is reached only through `child_session_*`
+functions, which derive the child from the token inside the database and never
+take a child id as an argument.
 
 `src/lib/supabase/admin.ts` bypasses RLS. Its only legitimate uses are the
-Stripe webhook and gift redemption. If you reach for it while serving a
-logged-in parent, you are almost certainly doing something wrong.
+Stripe webhook, gift redemption, and signing a Mission Kit file for a child
+session **after** `child_session_resource_path` has authorised it (D-64). In
+that third case it signs a path the database has already decided the child may
+have — it never decides. If you reach for it while serving a logged-in parent,
+you are almost certainly doing something wrong.
 
 ## Locked product behaviour — do not redesign
 
@@ -73,7 +84,7 @@ logged-in parent, you are almost certainly doing something wrong.
 | Mission Control             | Optional, secondary, calm. Never advances the mission, never reveals concealed content, never solves it.                          |
 | Active Mission              | The quietest surface. Cream + charcoal; olive only for the primary action.                                                        |
 | Completion                  | Closure, not performance. No confetti, scores, badges or upsell.                                                                  |
-| Status                      | `Not Started → Open Mission`, `In Progress → Continue`, `Complete → View Mission`. Locked pairing.                                |
+| Status                      | `Not Started → Start Mission`, `In Progress → Continue Mission`, `Complete → View Mission` (D-65). The pairing is locked: the action comes from STATUS, never from the route taken. |
 | Pause/resume                | Normal behaviour, not an edge case. State lives in Supabase, never only in localStorage.                                          |
 
 ## Naming trap

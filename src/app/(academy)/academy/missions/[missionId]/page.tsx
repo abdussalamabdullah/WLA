@@ -1,14 +1,14 @@
 import Image from "next/image";
 import Link from "next/link";
-import { AcademyChrome } from "@/components/academy/academy-chrome";
+import { AcademyShell } from "@/components/academy/academy-shell";
 import { notFound } from "next/navigation";
 import { ButtonLink } from "@/components/ui/button";
 import { StartMissionButton } from "@/components/mission/start-mission-button";
 import { ErrorState } from "@/components/system/states";
 import { MissionIdentity } from "@/components/mission/mission-identity";
 import { resolveMissionCover } from "@/features/missions/covers";
-import { resolveActiveChild } from "@/features/children/active-child";
-import { getMissionHome } from "@/features/missions/queries";
+import { resolveAcademyActor } from "@/features/academy/actor";
+import { getMissionHomeFor } from "@/features/academy/collection";
 import { AccessError } from "@/lib/permissions";
 
 /**
@@ -32,8 +32,8 @@ export default async function MissionHomePage({
 }) {
   const { missionId } = await params;
 
-  const active = await resolveActiveChild().catch(() => null);
-  if (!active || active.status !== "ok") {
+  const actor = await resolveAcademyActor();
+  if (actor.kind !== "parent" && actor.kind !== "child") {
     return (
       <main className="wla-container py-[var(--space-2xl)]">
         <ErrorState
@@ -47,7 +47,7 @@ export default async function MissionHomePage({
 
   let home;
   try {
-    home = await getMissionHome(active.childId, missionId);
+    home = await getMissionHomeFor(actor, missionId);
   } catch (error) {
     // Tech Spec §26: if entitlement fails, do NOT render the mission
     // experience. A 404 also avoids confirming that the mission exists.
@@ -67,7 +67,15 @@ export default async function MissionHomePage({
     );
   }
 
+  // No row means not entitled, or no such mission. Tech Spec §26: do not
+  // render the mission experience, and do not confirm the mission exists.
+  // OUTSIDE the try: notFound() throws, and inside it the catch below turned
+  // the 404 into "We couldn't load this mission. Please try again." — found
+  // in staging QA with an unentitled child session.
+  if (!home) notFound();
+
   const { mission, status } = home;
+  const isChild = actor.kind === "child";
   const base = `/academy/missions/${mission.slug}`;
 
   // Architecture §6 — the three states of the primary action.
@@ -79,9 +87,17 @@ export default async function MissionHomePage({
   const cover = resolveMissionCover(mission);
 
   return (
-    <>
-      <AcademyChrome />
+    <AcademyShell>
       <main>
+        {/* §10 — the way back to the collection, above everything. */}
+        <div className="wla-container pt-[var(--space-l)]">
+          <Link
+            href="/academy/my-missions"
+            className="inline-flex min-h-[var(--target-min)] items-center text-[length:var(--text-label)] underline decoration-[var(--color-border-strong)] underline-offset-4 hover:decoration-[var(--color-primary)]"
+          >
+            ← My Missions
+          </Link>
+        </div>
         {/*
           1. Identity, led by the mission's photograph.
 
@@ -90,7 +106,7 @@ export default async function MissionHomePage({
           so the page opens the way a mission card does rather than with a
           heading floating on empty canvas.
         */}
-        <div className="wla-container wla-split py-[var(--space-2xl)] md:py-[var(--space-3xl)]">
+        <div className="wla-container wla-split py-[var(--space-xl)] md:py-[var(--space-2xl)]">
           {cover && (
             <div className="lg:col-span-5">
               <div className="relative aspect-[4/3] w-full overflow-hidden rounded-[var(--radius-surface)] bg-[var(--color-surface-sage)]">
@@ -166,6 +182,17 @@ export default async function MissionHomePage({
               </Link>
             </section>
 
+            {/*
+              FOR PARENTS IS NOT SHOWN TO A CHILD.
+
+              Architecture §8 makes this adult guidance — how to help, what to
+              watch for, what the mission is really asking. It is not concealed
+              mission content, but it is not addressed to the child either, and
+              a child session has no reason to be handed the parent's note.
+              The route itself refuses a child session as well; this only stops
+              offering it.
+            */}
+            {!isChild && (
             <section className="lg:col-span-6">
               <h2 className="text-[length:var(--text-h3)]">For Parents</h2>
               <p className="mt-[var(--space-xs)] text-[var(--color-text-muted)]">
@@ -185,9 +212,31 @@ export default async function MissionHomePage({
                 Read the parent note →
               </Link>
             </section>
+            )}
           </div>
         </div>
+
+        {/*
+          Mission Board — optional, and beneath everything else (§10).
+          A signposted destination only: see C5. It shows no learner's work.
+        */}
+        <div className="wla-container py-[var(--space-xl)]">
+          <Link
+            href="/academy/mission-board"
+            className="flex items-center justify-between gap-[var(--space-m)] rounded-[var(--radius-surface)] border border-[var(--color-border)] bg-[var(--color-surface)] p-[var(--space-m)] hover:border-[var(--color-border-strong)]"
+          >
+            <span>
+              <span className="block font-[family-name:var(--font-serif)] text-[length:var(--text-h3)]">
+                Mission Board
+              </span>
+              <span className="block text-[length:var(--text-small)] text-[var(--color-text-muted)]">
+                See how other WLA children approached this mission.
+              </span>
+            </span>
+            <span aria-hidden="true" className="text-[var(--color-text-muted)]">→</span>
+          </Link>
+        </div>
       </main>
-    </>
+    </AcademyShell>
   );
 }

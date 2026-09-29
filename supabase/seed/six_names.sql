@@ -178,4 +178,7 @@ After the mission, you could ask:
 $note$
 from missions m
 where m.slug = 'six-names'
-on conflict (mission_id) do nothing;
+-- The parent note is unique per mission VERSION since the Kit/note authoring
+-- migration widened the key. The intent is unchanged — one note per version —
+-- and staging already holds this row, so this only keeps a fresh build working.
+on conflict (mission_id, version) do nothing;

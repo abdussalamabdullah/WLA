@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { AcademyChrome } from "@/components/academy/academy-chrome";
+import { AcademyShell } from "@/components/academy/academy-shell";
 import { notFound } from "next/navigation";
 import {
   EmptyState,
@@ -7,9 +7,8 @@ import {
   UnavailableState,
 } from "@/components/system/states";
 import { ResourceItem } from "@/components/mission/resource-item";
-import { resolveActiveChild } from "@/features/children/active-child";
-import { getMissionHome } from "@/features/missions/queries";
-import { getMissionKit } from "@/features/missions/resources";
+import { resolveAcademyActor } from "@/features/academy/actor";
+import { getKitFor } from "@/features/academy/play";
 import { AccessError } from "@/lib/permissions";
 
 export const metadata = { title: "Mission Kit" };
@@ -32,18 +31,18 @@ export default async function MissionKitPage({
 }) {
   const { missionId } = await params;
 
-  const active = await resolveActiveChild().catch(() => null);
-  if (!active || active.status !== "ok") notFound();
+  const actor = await resolveAcademyActor();
+  if (actor.kind !== "parent" && actor.kind !== "child") notFound();
 
-  let home;
   let kit;
   try {
-    // Kit access is entitlement-gated and mints a short-lived signed URL per
-    // resource; a missing file degrades to its unavailable state (UI/UX §56).
-    [home, kit] = await Promise.all([
-      getMissionHome(active.childId, missionId),
-      getMissionKit(active.childId, missionId),
-    ]);
+    /*
+     * Entitlement-gated for both actors, at the version the child's run is
+     * pinned to (D-63). A parent gets signed URLs minted with their own
+     * session; a child gets links to /api/kit/<id>, which re-authorises on
+     * every click (D-64). A missing file degrades to unavailable (UI/UX §56).
+     */
+    kit = await getKitFor(actor, missionId);
   } catch (error) {
     if (error instanceof AccessError) notFound();
     return (
@@ -53,17 +52,18 @@ export default async function MissionKitPage({
     );
   }
 
-  const { mission } = home;
+  // Outside the try — notFound() throws, and the catch would swallow it.
+  if (!kit) notFound();
+
 
   return (
-    <>
-      <AcademyChrome />
+    <AcademyShell>
       <main className="wla-container py-[var(--space-2xl)] md:py-[var(--space-3xl)]">
         <Link
-          href={`/academy/missions/${mission.slug}`}
+          href={`/academy/missions/${missionId}`}
           className="inline-flex min-h-[var(--target-min)] items-center text-[length:var(--text-label)] underline decoration-[var(--color-border-strong)] underline-offset-4 hover:decoration-[var(--color-primary)]"
         >
-          ← {mission.title}
+          ← {kit.missionTitle}
         </Link>
 
         {/*
@@ -83,12 +83,12 @@ export default async function MissionKitPage({
           </div>
 
           <div className="lg:col-span-7">
-            {kit.length === 0 ? (
+            {kit.items.length === 0 ? (
               <EmptyState
                 title="No materials for this mission"
                 body="This mission doesn't need anything printed."
               />
-            ) : kit.every((item) => item.url === null) ? (
+            ) : kit.items.every((item) => item.href === null) ? (
               /*
                * Every file failed to produce a signed URL — the assets are
                * missing from Storage. UI/UX §56: say it is unavailable, do NOT
@@ -99,18 +99,14 @@ export default async function MissionKitPage({
               <UnavailableState title="These materials aren't available right now." />
             ) : (
               <ul className="border-t border-[var(--color-border)]">
-                {kit.map(({ resource, url }) => (
-                  <ResourceItem
-                    key={resource.id}
-                    resource={resource}
-                    url={url}
-                  />
+                {kit.items.map((item) => (
+                  <ResourceItem key={item.id} item={item} />
                 ))}
               </ul>
             )}
           </div>
         </div>
       </main>
-    </>
+    </AcademyShell>
   );
 }
