@@ -40,7 +40,13 @@ export async function GET(
 ) {
   const { resourceId } = await params;
 
-  const session = await getChildSession();
+  let session;
+  try {
+    session = await getChildSession();
+  } catch {
+    // Unreachable session service (D-98): retryable, and says nothing about the resource.
+    return new NextResponse("Try again", { status: 503, headers: { "Retry-After": "5" } });
+  }
   if (!session) {
     // No session: say nothing about whether the resource exists.
     return new NextResponse("Not found", { status: 404 });

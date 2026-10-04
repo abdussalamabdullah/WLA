@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { resolveAcademyActor } from "@/features/academy/actor";
 import { scanQrFor } from "@/features/academy/play";
 import { logWarn } from "@/lib/observability/logger";
+import { kitAnchor } from "@/components/mission/resource-item";
 
 /**
  * KIT QR CODES — `/q/<mission>/<code>` (Enhancement Plan §5).
@@ -26,7 +27,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   try {
     const d = await scanQrFor(actor, slug, key);
     const base = `/academy/missions/${encodeURIComponent(slug)}`;
-    if (d.to === "kit") return go(`${base}/kit`);
+    // The exact resource: the Kit page, scrolled to it.
+    if (d.to === "kit") return go(`${base}/kit${d.resource ? `#${kitAnchor(d.resource)}` : ""}`);
     if (d.to === "active") return go(`${base}/active`);
     return go(base);
   } catch (error) {

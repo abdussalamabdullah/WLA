@@ -150,7 +150,7 @@ export async function getTrailFor(
   if (actor.kind !== "child") return null;
 
   const supabase = createChildClient();
-  const [{ data: missionRows }, { data: rows }] = await Promise.all([
+  const [{ data: missionRows, error: missionError }, { data: rows, error: trailError }] = await Promise.all([
     supabase.rpc("child_session_mission", {
       p_token: actor.session.token,
       p_mission_slug: missionSlug,
@@ -160,6 +160,8 @@ export async function getTrailFor(
       p_mission_slug: missionSlug,
     }),
   ]);
+  // A failed read must not look like an empty Trail (D-98).
+  if (missionError || trailError) throw new Error("trail_unavailable");
   const m = missionRows?.[0];
   if (!m) return null;
 

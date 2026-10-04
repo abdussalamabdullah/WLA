@@ -52,7 +52,10 @@ export function DataTable({
       tabIndex={0}
       role="region"
       aria-label={caption ?? "Data table"}
-      className="-mx-[var(--space-m)] overflow-x-auto px-[var(--space-m)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus)] sm:mx-0 sm:px-0"
+      // `relative`: screen-reader-only text inside a cell is absolutely
+      // positioned; without a positioned ancestor here it escaped the scroll
+      // region and widened the whole page at 390px.
+      className="relative -mx-[var(--space-m)] overflow-x-auto px-[var(--space-m)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus)] sm:mx-0 sm:px-0"
     >
       <table className="w-full min-w-[640px] border-collapse text-[length:var(--text-small)]">
         {caption && <caption className="sr-only">{caption}</caption>}

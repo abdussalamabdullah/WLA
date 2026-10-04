@@ -61,7 +61,7 @@ const rpc = (fn, tok, body = {}) =>
 async function refuses(label, res, expect) {
   const body = await j(res);
   const text = typeof body === "string" ? body : JSON.stringify(body);
-  const ok = !res.ok && (expect ? text.includes(expect) : true);
+  const ok = !res.ok && (expect ? (expect instanceof RegExp ? expect.test(text) : text.includes(expect)) : true);
   chk(label, ok, ok ? "" : `HTTP ${res.status} ${text.slice(0, 120)}`);
   return body;
 }
@@ -168,7 +168,7 @@ const main = async () => {
       await rpc("child_session_persist_state", null, {
         p_token: sessL.token, p_progress_id: progA[0].id,
         p_state: {}, p_screen_key: "the_list",
-      }), "not_this_childs_record");
+      }), /not_this_childs_record|permission denied/); // D-80: no client may call it at all now
   }
   await refuses("a child cannot open a mission they are not entitled to",
     await rpc("child_session_current_screen", null,

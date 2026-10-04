@@ -1,5 +1,6 @@
 "use server";
 
+import { ChildSessionUnavailableError } from "@/lib/child-session";
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
@@ -80,7 +81,17 @@ export async function recordInteractionAction(
   missionSlug: string,
   interaction: MissionInteraction,
 ): Promise<InteractionOutcome> {
-  const actor = await resolveAcademyActor();
+  let actor;
+  try {
+    actor = await resolveAcademyActor();
+  } catch (error) {
+    // The session service was unreachable (D-98): the child stays exactly
+    // where they are and can try again — they have not been signed out.
+    if (error instanceof ChildSessionUnavailableError) {
+      return { ok: false, retryable: true, message: "We couldn't reach the Academy just now." };
+    }
+    throw error;
+  }
   if (actor.kind !== "parent" && actor.kind !== "child") {
     throw new Error("No active child profile.");
   }

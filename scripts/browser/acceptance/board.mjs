@@ -5,7 +5,6 @@
 import { launch, uiLogin, ACCOUNTS, sleep, chk, summary } from "./cdp.mjs";
 import { readFileSync } from "node:fs";
 const q = JSON.parse(readFileSync("qa-parent.json", "utf8"));
-const { kids } = JSON.parse(readFileSync("qa-kids.json", "utf8"));
 const P = await launch({ port: 9535 }), C = await launch({ port: 9536 }), A = await launch({ port: 9537 });
 await P.viewport(1512, 950); await C.viewport(390, 844); await A.viewport(1512, 950);
 const settle = async (b) => { for (let i = 0; i < 120; i++) { const busy = await b.eval("[...document.querySelectorAll('button')].some(x=>/…$/.test(x.innerText.trim()))").catch(() => true); if (!busy) break; await sleep(250); } await sleep(800); };

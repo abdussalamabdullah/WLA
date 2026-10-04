@@ -184,6 +184,13 @@ account deletion, and Trail export. Nothing else in the Enhancement Plan waits
 on it. The Mission Board inherits the current behaviour below (immediate
 removal on withdrawal or child deletion).
 
+**2026-10-04 (D-96), as built:** the Mission Board keeps nothing a family has
+withdrawn — withdrawal deletes the contribution at once, and child-profile or
+Trail-entry deletion cascades to it. Rejected contributions stay visible to the
+parent (who can withdraw them) and are not shown anywhere else. What remains
+blocked on this policy: retention of PUBLISHED contributions beyond the
+family's own withdrawal, parent-account deletion, and Trail export.
+
 **Current behaviour, unchanged pending your decision:** immediate hard delete
 of a child profile, cascading to entitlements, progress, state, responses and
 Mission Trail evidence. The confirmation names all three data categories.
