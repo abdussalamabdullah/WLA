@@ -506,3 +506,25 @@ exception when check_violation then
   perform chk('an analytics row with a non-allow-listed detail key is refused', true);
 end $$;
 \echo ''
+\echo '=============== MISSION DUPLICATION (0030) ==============='
+reset role; set request.jwt.claim.sub='aaaaaaaa-0000-0000-0000-000000000002'; set role authenticated;
+select chk_raises('a parent cannot duplicate a mission',
+  format($$select admin_duplicate_mission(%L, 'copy-x', 'Copy')$$, :'mid'), 'not_admin');
+reset role; set request.jwt.claim.sub='aaaaaaaa-0000-0000-0000-000000000001'; set role authenticated;
+select admin_duplicate_mission(:'mid', 'six-names-copy', 'Six Names copy', 2) as dup \gset
+reset role;
+select (:'dup'::jsonb->>'id') as dupid \gset
+select chk('the copy is unpublished at a v1 draft',
+  (select not published and version = 1 from missions where id = :'dupid')
+  and (select status = 'draft' from mission_versions where mission_id = :'dupid' and version = 1));
+select chk('the copy has the source version''s screens',
+  (select count(*) from mission_screens where mission_id = :'dupid' and version = 1)
+  = (select count(*) from mission_screens where mission_id = :'mid' and version = 2));
+select chk('the copy''s Kit paths live in its own folder (D-68)',
+  not exists (select 1 from mission_resources where mission_id = :'dupid' and storage_path not like :'dupid' || '/%'));
+select chk('no learner records are copied',
+  not exists (select 1 from mission_progress where mission_id = :'dupid')
+  and not exists (select 1 from mission_entitlements where mission_id = :'dupid'));
+select chk('the source is untouched',
+  (select published = false and version >= 2 from missions where id = :'mid'));
+\echo ''

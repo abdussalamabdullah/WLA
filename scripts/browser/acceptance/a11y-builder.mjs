@@ -12,10 +12,10 @@ await b.goto(`/admin/builder/${SLUG}/1`, 500);
 // one screen from the (fixed) choice template, filled in via the UI
 await b.click(/^add a screen$/i, { selector: "button" }); await sleep(300);
 await b.fill("#screen_key", "decide"); await b.fill("#type", "choice"); await sleep(300);
-const tpl = await b.eval("document.querySelector('#configuration').value");
+const tpl = await b.eval("document.querySelector('#configuration-json').value");
 chk("choice template now includes the required prompt", /"prompt"/.test(tpl));
 const filled = tpl.replace(/"prompt": ""/, '"prompt": "Pick one"').replace(/"id": "", "label": "", "next": ""/, '"id": "a", "label": "A", "next": "decide"').replace(/"id": "", "label": "", "next": ""/, '"id": "b", "label": "B", "next": "decide"');
-await b.fill("#configuration", filled); await b.fill("#title", "Decision");
+await b.fill("#configuration-json", filled); await b.fill("#title", "Decision");
 await b.click(/^add screen$/i, { selector: "button[type=submit]" });
 for (let i = 0; i < 40; i++) { await sleep(500); if (/Screen saved|must|invalid|Expected|couldn/i.test(await b.eval("[...document.querySelectorAll('[role=alert]')].map(x=>x.innerText).join(' ') + (document.body.innerText.includes('Screen saved.')?' Screen saved':'')"))) break; }
 console.log("  form messages:", await b.eval("[...document.querySelectorAll('form [role=alert], form p')].map(x=>x.innerText.trim()).filter(t=>t && t.length<300).join(' || ')"));

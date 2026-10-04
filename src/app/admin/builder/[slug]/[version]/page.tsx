@@ -133,6 +133,7 @@ export default async function BuilderVersionPage({
           }))}
           blocking={blocking}
           paths={paths}
+          definition={qa?.model.definition ?? null}
           advisory={advisory}
           resources={resources.map((r) => ({
             id: r.id, title: r.title, description: r.description,

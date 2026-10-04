@@ -3,6 +3,10 @@
 import { useActionState, useState } from "react";
 import { ScreenEditor, type EditableScreen } from "./screen-editor";
 import { KitEditor, ParentNoteEditor, type DraftResource } from "./kit-editor";
+import { DefinitionEditor } from "./definition-editor";
+import { FlowMap } from "./flow-map";
+import { VocabularyProvider } from "./schema-form";
+import { emptyDefinition, type MissionDefinition } from "@/features/mission-engine/definition";
 import {
   deleteScreenAction,
   moveScreenAction,
@@ -45,6 +49,7 @@ export function BuilderWorkspace({
   noteDocumentPath,
   noteDocumentUrl,
   paths = [],
+  definition = null,
 }: {
   missionId: string;
   slug: string;
@@ -60,6 +65,8 @@ export function BuilderWorkspace({
   noteDocumentUrl: string | null;
   /** Every route the QA simulator played (validator.ts). */
   paths?: { decisions: string[]; screens: string[]; outcome: string; detail: string | null }[];
+  /** The draft's mission definition (F8), for the logic editor and form vocabulary. */
+  definition?: MissionDefinition | null;
 }) {
   const [editing, setEditing] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
@@ -74,8 +81,17 @@ export function BuilderWorkspace({
     problemsByScreen.set(p.screen_key, [...(problemsByScreen.get(p.screen_key) ?? []), p]);
   }
 
+  const def = definition ?? emptyDefinition;
+  const vocabulary = {
+    screens: screens.map((x) => x.screen_key),
+    variables: def.variables.map((v) => v.key),
+    unlocks: def.unlocks.map((u) => u.key),
+    events: def.events.map((e) => e.key),
+    assets: [] as string[],
+  };
+
   return (
-    <>
+    <VocabularyProvider value={vocabulary}>
       {/* ------------------------------------------------------- structure */}
       <section className="mt-[var(--space-xl)]">
         <div className="flex flex-wrap items-baseline justify-between gap-[var(--space-m)]">
@@ -172,6 +188,16 @@ export function BuilderWorkspace({
         )}
       </section>
 
+      {/* ---------------------------------------------------- flow map (§12) */}
+      <FlowMap
+        screens={screens.map((x) => ({ screen_key: x.screen_key, type: x.type, title: x.title, sequence: x.sequence, configuration: x.configuration }))}
+        events={def.events.map((e) => ({ key: e.key, goto: e.goto }))}
+        flagged={blocking.map((p) => p.screen_key).filter((k): k is string => Boolean(k))}
+      />
+
+      {/* ------------------------------------------------- mission logic (F8) */}
+      <DefinitionEditor missionId={missionId} slug={slug} version={version} definition={def} />
+
       {/* --------------------------------------------- Mission Kit, For Parents */}
       <KitEditor
         missionId={missionId} slug={slug} version={version} resources={resources}
@@ -254,7 +280,7 @@ export function BuilderWorkspace({
           status={status} canPublish={blocking.length === 0}
         />
       </section>
-    </>
+    </VocabularyProvider>
   );
 }
 
