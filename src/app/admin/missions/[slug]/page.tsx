@@ -4,7 +4,7 @@ import { getMissionForEdit, getVersionUsage } from "@/features/admin/queries";
 import { adminMissionVersions } from "@/features/admin/lms-queries";
 import { MissionForm } from "@/components/admin/mission-form";
 import { AdminPage, DataTable, Td, StatusTag } from "@/components/admin/admin-page";
-import { VersionActions, DeleteMissionPanel } from "@/components/admin/version-actions";
+import { VersionActions, DeleteMissionPanel, RestoreVersionButton, DuplicateMissionPanel } from "@/components/admin/version-actions";
 
 export async function generateMetadata({
   params,
@@ -101,6 +101,9 @@ export default async function EditMissionPage({
                   >
                     {v.status === "draft" || v.status === "in_review" ? "Edit" : "View"}
                   </Link>
+                  {(v.status === "published" || v.status === "archived") && (
+                    <> · <RestoreVersionButton missionId={mission.id} slug={slug} version={v.version} disabled={hasEditableDraft} /></>
+                  )}
                 </Td>
               </tr>
             ))}
@@ -120,6 +123,9 @@ export default async function EditMissionPage({
       <section className="mt-[var(--space-3xl)] max-w-[40rem]">
         <h2 className="text-[length:var(--text-h3)]">Delete this mission</h2>
         <div className="mt-[var(--space-m)]">
+          <div className="mb-[var(--space-l)]">
+            <DuplicateMissionPanel missionId={mission.id} title={mission.title} />
+          </div>
           <DeleteMissionPanel missionId={mission.id} totalRuns={totalRuns} />
         </div>
       </section>

@@ -4,6 +4,9 @@ import { useActionState, useState } from "react";
 import { saveScreenAction, type BuilderState } from "@/features/admin/builder-actions";
 import { Button } from "@/components/ui/button";
 import { Field, Input, FormError, FormNotice } from "@/components/ui/field";
+import { SchemaForm } from "./schema-form";
+import { screenConfigByType } from "@/features/mission-engine/schemas";
+import { commonScreenConfig } from "@/features/mission-engine/definition";
 
 const initial: BuilderState = {};
 
@@ -149,22 +152,50 @@ export function ScreenEditor({
         />
       </Field>
 
-      <Field
-        label="Configuration"
-        htmlFor="configuration"
-        error={err("configuration")}
-        hint="Choices, branches and reveals live here. It is checked against what the Academy can actually render."
-      >
-        <textarea
-          id="configuration"
-          name="configuration"
-          rows={12}
-          value={config}
-          onChange={(e) => setConfig(e.target.value)}
-          spellCheck={false}
-          className="w-full rounded-[var(--radius-input)] border border-[var(--color-border)] bg-[var(--color-surface)] p-[var(--space-s)] font-mono text-[length:var(--text-small)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus)]"
-        />
-      </Field>
+      {/*
+        The screen's configuration, as forms generated from the SAME schemas
+        the runtime validates against (schema-form.tsx): the type's own fields,
+        then the shared logic (routes, gates, effects, Trail, retry, timer,
+        media, support). Raw JSON stays available under Advanced. Both edit
+        one object, posted unchanged as `configuration`.
+      */}
+      <input type="hidden" name="configuration" value={config} />
+      {(() => {
+        let parsed: Record<string, unknown> | null = null;
+        try { parsed = JSON.parse(config || "{}"); } catch { parsed = null; }
+        const typeSchema = (screenConfigByType as Record<string, unknown>)[type] as Parameters<typeof SchemaForm>[0]["schema"] | undefined;
+        const set = (v: unknown) => setConfig(JSON.stringify(v ?? {}, null, 2));
+        return (
+          <div className="flex flex-col gap-[var(--space-m)]">
+            {err("configuration") && <p className="text-[length:var(--text-small)] text-[var(--color-error)]">{err("configuration")}</p>}
+            {parsed && typeSchema ? (
+              <SchemaForm schema={typeSchema} value={parsed} onChange={set} label={`${type.replace(/_/g, " ")} settings`} />
+            ) : (
+              <p className="text-[length:var(--text-small)] text-[var(--color-text-muted)]">Fix the JSON under Advanced to use the form.</p>
+            )}
+            {parsed && (
+              <details>
+                <summary className="inline-flex min-h-[var(--target-min)] cursor-pointer items-center text-[length:var(--text-label)] font-medium">Logic: routes, conditions, effects, Trail, timing, media, support</summary>
+                <div className="mt-[var(--space-s)]">
+                  <SchemaForm schema={commonScreenConfig} value={parsed} onChange={set} label="Logic" />
+                </div>
+              </details>
+            )}
+            <details>
+              <summary className="inline-flex min-h-[var(--target-min)] cursor-pointer items-center text-[length:var(--text-small)] text-[var(--color-text-muted)]">Advanced: edit as JSON</summary>
+              <label htmlFor="configuration-json" className="sr-only">Configuration as JSON</label>
+              <textarea
+                id="configuration-json"
+                rows={12}
+                value={config}
+                onChange={(e) => setConfig(e.target.value)}
+                spellCheck={false}
+                className="mt-[var(--space-s)] w-full rounded-[var(--radius-input)] border border-[var(--color-border)] bg-[var(--color-surface)] p-[var(--space-s)] font-mono text-[length:var(--text-small)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus)]"
+              />
+            </details>
+          </div>
+        );
+      })()}
 
       <div className="flex gap-[var(--space-s)]">
         <Button type="submit" isLoading={pending} loadingLabel="Saving…">

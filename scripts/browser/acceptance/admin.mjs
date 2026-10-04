@@ -26,7 +26,7 @@ async function addScreen(s) {
   await b.fill("#screen_key", s.key); await b.fill("#sequence", String(s.seq));
   await b.fill("#type", s.type); await sleep(250);
   await b.fill("#title", s.title ?? ""); await b.fill("#body", s.body ?? "");
-  await b.fill("#configuration", JSON.stringify(s.config, null, 2));
+  await b.fill("#configuration-json", JSON.stringify(s.config, null, 2));
   await b.click(/^add screen$/i, { selector: "button[type=submit]" }); await settle();
   const t = await main();
   const ok = /Screen saved\./.test(t);

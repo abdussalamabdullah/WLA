@@ -88,9 +88,15 @@ export async function createVersionAction(_prev: BuilderState, formData: FormDat
   const missionId = String(formData.get("missionId") ?? "");
   const slug = String(formData.get("slug") ?? "");
 
+  // Rollback (§12): a new draft copied from an earlier version — published or
+  // archived — rather than the current one. Nothing earlier is reopened.
+  const fromRaw = String(formData.get("fromVersion") ?? "");
+  const fromVersion = /^\d+$/.test(fromRaw) ? Number(fromRaw) : null;
+
   const { supabase } = await requireAdmin();
   const { data, error } = await supabase.rpc("create_mission_version", {
     p_mission_id: missionId,
+    ...(fromVersion ? { p_from_version: fromVersion } : {}),
   });
   if (error || !data) {
     logWarn("create_version_failed", { missionId, reason: error?.message });
@@ -302,4 +308,89 @@ export async function deleteMissionAction(
 
   revalidatePath("/admin/missions");
   redirect("/admin/missions");
+}
+
+/**
+ * Save the mission definition (F8): variables, unlocks, events, variants,
+ * pools, checkpoints, completion, stages. Parsed against the same schema the
+ * runtime uses, then written through the draft-only RPC, which refuses a
+ * published version (immutability, D-57/D-61).
+ */
+export async function saveDefinitionAction(
+  _prev: BuilderState,
+  formData: FormData,
+): Promise<BuilderState> {
+  const missionId = String(formData.get("missionId") ?? "");
+  const slug = String(formData.get("slug") ?? "");
+  const version = Number(formData.get("version") ?? 0);
+  let raw: unknown;
+  try {
+    raw = JSON.parse(String(formData.get("definition") ?? "{}"));
+  } catch {
+    return { fieldErrors: { definition: "This isn't valid JSON." } };
+  }
+  const { missionDefinition } = await import("@/features/mission-engine/definition");
+  const parsed = missionDefinition.safeParse(raw);
+  if (!parsed.success) {
+    const first = parsed.error.issues[0];
+    return { fieldErrors: { definition: `${first.path.join(".") || "definition"}: ${first.message}` } };
+  }
+  const { supabase } = await requireAdmin();
+  const { error } = await supabase.rpc("admin_set_definition", {
+    p_mission_id: missionId,
+    p_version: version,
+    p_definition: parsed.data as unknown as Json,
+  });
+  if (error) {
+    if (error.message.includes("version_not_editable")) {
+      return { error: "This version is published and can't be changed. Create a new version." };
+    }
+    logWarn("save_definition_failed", { missionId, reason: error.message });
+    return { error: "We couldn't save the mission logic." };
+  }
+  revalidatePath(`/admin/builder/${slug}/${version}`);
+  return { ok: true };
+}
+
+
+/**
+ * Duplicate a mission (§12). The database copies the content (an admin has no
+ * read path to published content, D-61); this copies the Kit files into the
+ * new mission's folder with the admin's own storage permission, because the
+ * family read policy keys on that folder (D-68). Learner records are never
+ * copied. The new mission is unpublished, at v1 draft.
+ */
+export async function duplicateMissionAction(
+  _prev: BuilderState,
+  formData: FormData,
+): Promise<BuilderState> {
+  const sourceId = String(formData.get("missionId") ?? "");
+  const title = String(formData.get("title") ?? "").trim();
+  const slug = String(formData.get("slug") ?? "").trim();
+  if (!title) return { fieldErrors: { title: "Give the copy a name." } };
+  if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(slug)) {
+    return { fieldErrors: { slug: "Lower case letters, numbers and single hyphens." } };
+  }
+  const { supabase } = await requireAdmin();
+  const { data, error } = await supabase.rpc("admin_duplicate_mission", {
+    p_source_id: sourceId,
+    p_slug: slug,
+    p_title: title,
+  });
+  if (error || !data) {
+    if (error?.message.includes("slug_taken")) return { fieldErrors: { slug: "That address is already taken." } };
+    logWarn("duplicate_mission_failed", { sourceId, reason: error?.message });
+    return { error: "We couldn't duplicate this mission." };
+  }
+  const result = data as unknown as { slug: string; files: { from: string; to: string }[] };
+  const failed: string[] = [];
+  for (const f of result.files) {
+    const { error: copyError } = await supabase.storage.from("mission-resources").copy(f.from, f.to);
+    if (copyError) failed.push(f.from);
+  }
+  if (failed.length) {
+    logWarn("duplicate_mission_files_failed", { sourceId, count: failed.length });
+  }
+  revalidatePath("/admin/missions");
+  redirect(`/admin/builder/${result.slug}/1`);
 }
