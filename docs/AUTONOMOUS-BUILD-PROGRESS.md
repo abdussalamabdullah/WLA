@@ -251,3 +251,20 @@ offers in their own session; the parent sees the anonymised copy (name and email
 curates and publishes without seeing the child; the child sees it on the Board with no author, counts or replies,
 and their Trail says so; a sibling who hasn't finished sees nothing; withdrawal removes it from the Board and from
 moderation at once; audits at 390/1512. Fixture hygiene: the script clears the QA parent's leftover contributions.
+
+---
+
+## Phase 10 — Final regression, accessibility and gap audit · COMPLETE
+
+**Regression:** vitest (see report); security regression 165/0 (runners fail on hidden errors, D-92); Six Names SQL
+64/0; staging security 67/0 (one stale expectation updated: D-80 refuses with "permission denied"); staging
+lifecycle 54/0; Six Names browser, all six branches on fresh children: four passed in the full run, two hit a
+pre-existing masked-failure defect on a slow link (D-98), fixed, and both passed 29/29 on fresh children.
+
+**Accessibility (`a11y3.mjs`, 390 / 834 / 1180 landscape / 1512):** parent 24/24; admin 28/28 after fixing
+screen-reader-only text escaping admin table scroll regions (D-98).
+
+**Final plan audit (D-99):** draft persistence through interruption, reduced-motion animation, print-resource
+checklist, exact-resource QR — built and tested (4 unit tests, browser QR anchor 2/2).
+
+**Migrations:** 37 local, 37 staging, in parity. Six Names `published = false`, v2 content untouched.

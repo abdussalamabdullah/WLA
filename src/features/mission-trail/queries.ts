@@ -47,12 +47,14 @@ export async function getMissionTrail(
     missionIdOrSlug,
   );
 
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("mission_evidence")
     .select("*")
     .eq("child_id", child.id) // ← child boundary
     .eq("mission_id", mission.id)
     .order("created_at", { ascending: true });
+  // A failed read must not look like an empty Trail (D-98).
+  if (error) throw new Error("trail_unavailable");
 
   return {
     missionTitle: mission.title,

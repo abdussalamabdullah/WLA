@@ -1,5 +1,6 @@
 "use client";
 
+import { PrintChecklist } from "./print-checklist";
 import { PatternPicker } from "./pattern-picker";
 import Link from "next/link";
 import { AssetManager } from "./asset-manager";
@@ -55,6 +56,7 @@ export function BuilderWorkspace({
   paths = [],
   definition = null,
   assets = { rows: [], resolved: [] },
+  checklist = null,
 }: {
   missionId: string;
   slug: string;
@@ -74,6 +76,8 @@ export function BuilderWorkspace({
   definition?: MissionDefinition | null;
   /** F7 — this draft's media, signed with the admin's own session. */
   assets?: { rows: { key: string; kind: string; storage_path: string; captions_path: string | null }[]; resolved: ResolvedAsset[] };
+  /** Plan §12 print-resource checklist, computed from the draft. */
+  checklist?: ReturnType<typeof import("@/features/admin/print-checklist").printChecklist> | null;
 }) {
   const [editing, setEditing] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
@@ -218,6 +222,7 @@ export function BuilderWorkspace({
       <AssetManager missionId={missionId} slug={slug} version={version} rows={assets.rows} resolved={assets.resolved} />
 
       {/* --------------------------------------------- Mission Kit, For Parents */}
+      {checklist && <PrintChecklist rows={checklist.rows} missing={checklist.missing} />}
       <KitEditor
         missionId={missionId} slug={slug} version={version} resources={resources}
       />

@@ -128,10 +128,32 @@ function Layers({ block }: { block: MediaBlock }) {
   );
 }
 
+/**
+ * Animation never starts on its own (Plan §11: reduced-motion preferences).
+ * A GIF cannot be paused, so it is shown only while the child asks for it;
+ * its text alternative is always there.
+ */
+function Animation({ asset }: { asset: ResolvedAsset }) {
+  const [playing, setPlaying] = useState(false);
+  return (
+    <div className="flex flex-col gap-[var(--space-xs)]">
+      {playing ? <Img asset={asset} /> : <p className="wla-measure rounded-[var(--radius-surface)] bg-[var(--color-surface-raised)] p-[var(--space-m)]">{asset.alt}</p>}
+      <div>
+        <button type="button" aria-pressed={playing} onClick={() => setPlaying(!playing)}
+          className="inline-flex min-h-[var(--target-min)] items-center text-[length:var(--text-small)] underline decoration-[var(--color-border-strong)] underline-offset-4">
+          {playing ? "Stop the animation" : "Play the animation"}
+        </button>
+      </div>
+      <LongDescription asset={asset} />
+    </div>
+  );
+}
+
 function One({ block }: { block: MediaBlock }) {
   const a = block.asset;
   if (block.display === "before_after" && block.compareWith && visual(a)) return <BeforeAfter block={block} />;
   if (block.display === "layers" && block.layers?.length && visual(a)) return <Layers block={block} />;
+  if (a.kind === "animation") return <Animation asset={a} />;
   if (a.kind === "audio") {
     return (
       <div>

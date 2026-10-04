@@ -72,7 +72,8 @@ async function childLogin(code) {
 
 for (const [name, d1, d2] of PLANS) {
   console.log(`\n=========== ${name}: ${d1} → ${d2} ===========`);
-  const kid = kids.find((k) => k.display_name === name);
+  // SUFFIX selects a fresh set of branch children (each child has one run; no replay).
+  const kid = kids.find((k) => k.display_name === name + (process.env.SUFFIX ?? ""));
   const code = await codeFor(kid.id);
   chk(`${name}: parent generated a code in the UI`, /^[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(code || ""), String(code));
   chk(`${name}: child signs in with the code`, await childLogin(code));

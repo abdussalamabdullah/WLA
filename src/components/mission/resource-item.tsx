@@ -29,6 +29,11 @@ export type KitItem = {
   href: string | null;
 };
 
+/** Stable in-page anchor for a Kit resource, from its title. */
+export function kitAnchor(title: string): string {
+  return `resource-${title.toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}`;
+}
+
 export function ResourceItem({
   item,
   unavailable = false,
@@ -40,7 +45,8 @@ export function ResourceItem({
   const url = item.href;
 
   return (
-    <li className="border-b border-[var(--color-border)] py-[var(--space-l)] last:border-b-0">
+    // The anchor a Kit QR code opens (`/q/...` → `#resource-<title>`, Plan §5).
+    <li id={kitAnchor(item.title)} className="scroll-mt-[var(--space-xl)] border-b border-[var(--color-border)] py-[var(--space-l)] last:border-b-0">
       {/* h2, not h3: a Kit resource is a section of the Mission Kit page, whose h1 is "Mission Kit". Jumping h1 → h3 skips a level (WCAG 1.3.1). */}
       <h2 className="text-[length:var(--text-h3)]">{item.title}</h2>
       {item.description && (

@@ -341,6 +341,39 @@ position (D-94).
 
 ---
 
+## 15. Mission Board (D-73, D-96, D-97)
+
+`board_contributions` (0036) holds a scrubbed COPY of one eligible Trail entry
+(digital, with text). Flow: offer (child session → `pending_permission`;
+parent → `pending_moderation`, the offer being the permission) → parent permit
+(Account) → WLA moderation (`/admin/board`: edit, publish, reject, curate,
+label) → browse (`/academy/mission-board`, by mission and Lab, curated first;
+only missions the viewing child has completed). Withdrawal deletes; child or
+entry deletion cascades. No client grants; every function re-checks ownership
+or derives the child from the token; admins never see the child. All
+`child_session_*` functions are VOLATILE (PostgREST runs STABLE ones
+read-only, and the session check writes).
+
+## 16. Pattern Library (D-95) — `patterns.ts`
+
+Eight mission patterns and fourteen thinking prompts. Inserting a pattern
+writes prefixed screens and logic through the normal draft-only functions;
+nothing links back to the pattern afterwards.
+
+## 17. Failing honestly (D-18, D-87, D-94, D-98)
+
+| Situation | What the child sees |
+| --- | --- |
+| Input not accepted by a contract | calm guidance; input kept; nothing moved |
+| Save failed | "That didn't save … try again"; nothing moved |
+| Session service unreachable | retryable "didn't save"; not signed out |
+| Step the run has already left | the real current position; no error |
+| Timer reported a moment early | "Nearly time"; no error |
+| Trail read failed | the Trail error state, never "Nothing here yet" |
+| Analytics row refused | nothing — the save stands (D-90) |
+
+---
+
 ## 11. Extending
 
 * **New interaction type:** a module in `features/mission-engine/interactions/`

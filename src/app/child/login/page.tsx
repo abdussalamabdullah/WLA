@@ -12,7 +12,8 @@ export const metadata = { title: "Enter the Academy" };
  */
 export default async function ChildLoginPage() {
   // Already signed in: don't show a sign-in form to someone who is.
-  const existing = await getChildSession();
+  // On the sign-in page an unreachable check just means "show the form" (D-98).
+  const existing = await getChildSession().catch(() => null);
   if (existing) redirect("/academy/my-missions");
 
   return (

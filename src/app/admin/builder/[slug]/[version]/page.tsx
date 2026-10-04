@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { printChecklist } from "@/features/admin/print-checklist";
 import { notFound } from "next/navigation";
 import { AdminPage, StatusTag, Td, DataTable } from "@/components/admin/admin-page";
 import { BuilderWorkspace } from "@/components/admin/builder-workspace";
@@ -66,6 +67,7 @@ export default async function BuilderVersionPage({
   ]);
   // Mission QA already read and signed this draft's media; reuse it.
   const assets = qa?.media ?? { rows: [], resolved: [] };
+  const checklist = qa ? printChecklist(qa.model, resources.map((r) => ({ title: r.title, type: r.type, can_print: r.can_print }))) : null;
   const qaProblems = qa
     ? qa.issues.map((i) => ({ code: i.code, blocking: i.severity === "blocking", screen_key: i.screenKey, detail: i.detail }))
     : problems;
@@ -137,6 +139,7 @@ export default async function BuilderVersionPage({
           paths={paths}
           definition={qa?.model.definition ?? null}
           assets={assets}
+          checklist={checklist}
           advisory={advisory}
           resources={resources.map((r) => ({
             id: r.id, title: r.title, description: r.description,

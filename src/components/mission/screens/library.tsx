@@ -105,7 +105,51 @@ function LibFrame({
   );
 }
 
-const submit = (p: Props, value: unknown) => p.onAdvance({ kind: "submit", screenKey: p.screen.screenKey, value });
+
+/**
+ * In-progress input survives an accidental reload or a dropped connection
+ * (Plan §11: "preserve interaction state through accidental interruption").
+ * Kept in this browser tab only (sessionStorage), keyed by mission and screen,
+ * cleared when the input is submitted. The saved value is applied after
+ * hydration, so the server and the first client render agree; storage that
+ * is blocked or full simply means nothing is restored.
+ */
+function draftKey(p: Props, name: string) {
+  return `wla-draft:${p.missionSlug}:${p.screen.screenKey}:${name}`;
+}
+function useDraft<T>(p: Props, name: string, initial: T | (() => T)): [T, (v: T | ((prev: T) => T)) => void] {
+  const key = draftKey(p, name);
+  const [value, setValue] = useState<T>(initial);
+  useEffect(() => {
+    let saved: T | undefined;
+    try {
+      const raw = sessionStorage.getItem(key);
+      if (raw) saved = JSON.parse(raw) as T;
+    } catch { /* storage unavailable */ }
+    if (saved !== undefined) queueMicrotask(() => setValue(saved as T));
+  }, [key]);
+  const set = (v: T | ((prev: T) => T)) =>
+    setValue((prev) => {
+      const next = typeof v === "function" ? (v as (prev: T) => T)(prev) : v;
+      try { sessionStorage.setItem(key, JSON.stringify(next)); } catch { /* storage unavailable */ }
+      return next;
+    });
+  return [value, set];
+}
+function clearDrafts(p: Props) {
+  try {
+    const prefix = draftKey(p, "");
+    for (let i = sessionStorage.length - 1; i >= 0; i--) {
+      const k = sessionStorage.key(i);
+      if (k?.startsWith(prefix)) sessionStorage.removeItem(k);
+    }
+  } catch { /* storage unavailable */ }
+}
+
+const submit = (p: Props, value: unknown) => {
+  clearDrafts(p);
+  p.onAdvance({ kind: "submit", screenKey: p.screen.screenKey, value });
+};
 
 /** A small, quiet control button (44px). */
 function SmallButton({ children, className, ...rest }: React.ButtonHTMLAttributes<HTMLButtonElement>) {
@@ -156,7 +200,7 @@ function Segmented({ label, options, value, onChange }: { label: string; options
 
 export function NumericEntryScreen(p: Props) {
   const c = parseScreenConfig("numeric_entry", p.screen.configuration);
-  const [raw, setRaw] = useState("");
+  const [raw, setRaw] = useDraft(p, "raw", "");
   const n = raw.trim() === "" ? NaN : Number(raw.replace(",", "."));
   const id = `num-${p.screen.screenKey}`;
   return (
@@ -174,7 +218,7 @@ export function NumericEntryScreen(p: Props) {
 
 export function CodeEntryScreen(p: Props) {
   const c = parseScreenConfig("code_entry", p.screen.configuration);
-  const [v, setV] = useState("");
+  const [v, setV] = useDraft(p, "text", "");
   const id = `code-${p.screen.screenKey}`;
   return (
     <LibFrame screen={p.screen} prompt={c.prompt} instruction={c.instruction} missionControl={c.missionControl} error={p.error} isPending={p.isPending}
@@ -193,7 +237,7 @@ export function CodeEntryScreen(p: Props) {
 
 export function TokenSequenceScreen(p: Props) {
   const c = parseScreenConfig("token_sequence", p.screen.configuration);
-  const [seq, setSeq] = useState<string[]>([]);
+  const [seq, setSeq] = useDraft<string[]>(p, "seq", []);
   const label = (id: string) => c.tokens.find((t) => t.id === id);
   return (
     <LibFrame screen={p.screen} prompt={c.prompt} instruction={c.instruction} missionControl={c.missionControl} error={p.error} isPending={p.isPending}
@@ -230,8 +274,8 @@ export function TokenSequenceScreen(p: Props) {
 export function ArrangeScreen(p: Props) {
   const c = parseScreenConfig("arrange", p.screen.configuration);
   const initial = useMemo(() => stableShuffle(c.items.map((x) => x.id), p.screen.screenKey), [c.items, p.screen.screenKey]);
-  const [order, setOrder] = useState<string[]>(initial);
-  const [groups, setGroups] = useState<Record<string, string>>({});
+  const [order, setOrder] = useDraft<string[]>(p, "order", initial);
+  const [groups, setGroups] = useDraft<Record<string, string>>(p, "groups", {});
   const [dragging, setDragging] = useState<string | null>(null);
   const item = (id: string) => c.items.find((x) => x.id === id)!;
 
@@ -292,7 +336,7 @@ export function ArrangeScreen(p: Props) {
 export function MatchingScreen(p: Props) {
   const c = parseScreenConfig("matching", p.screen.configuration);
   const right = useMemo(() => stableShuffle(c.right, p.screen.screenKey), [c.right, p.screen.screenKey]);
-  const [pairs, setPairs] = useState<Record<string, string>>({});
+  const [pairs, setPairs] = useDraft<Record<string, string>>(p, "pairs", {});
   const used = new Set(Object.values(pairs));
   const count = Object.keys(pairs).length;
   return (
@@ -360,7 +404,7 @@ const defaults = (controls: Control[]) => Object.fromEntries(controls.map((x) =>
 
 export function AllocateScreen(p: Props) {
   const c = parseScreenConfig("allocate", p.screen.configuration);
-  const [v, setV] = useState<Record<string, number>>(() => defaults(c.controls));
+  const [v, setV] = useDraft<Record<string, number>>(p, "controls", () => defaults(c.controls));
   const sum = Object.values(v).reduce((a, b) => a + b, 0);
   const budgeted = c.mode !== "sliders" && c.total !== undefined;
   const over = budgeted && sum > c.total!;
@@ -385,7 +429,7 @@ export function AllocateScreen(p: Props) {
 export function InventoryScreen(p: Props) {
   const c = parseScreenConfig("inventory", p.screen.configuration);
   const previous = extra<string[]>(p.screen, "carried") ?? [];
-  const [chosen, setChosen] = useState<string[]>(() => previous.filter((x) => c.items.some((i) => i.id === x)));
+  const [chosen, setChosen] = useDraft<string[]>(p, "chosen", () => previous.filter((x) => c.items.some((i) => i.id === x)));
   const toggle = (id: string) => setChosen(chosen.includes(id) ? chosen.filter((x) => x !== id) : chosen.length < c.max ? [...chosen, id] : chosen);
   return (
     <LibFrame screen={p.screen} prompt={c.prompt} instruction={c.instruction} missionControl={c.missionControl} error={p.error} isPending={p.isPending}
@@ -404,7 +448,7 @@ export function InventoryScreen(p: Props) {
 export function SimulationScreen(p: Props) {
   const c = parseScreenConfig("simulation", p.screen.configuration);
   const current = extra<{ runs: number; values: Record<string, number> | null; readouts: string[] }>(p.screen, "current") ?? { runs: 0, values: null, readouts: [] };
-  const [v, setV] = useState<Record<string, number>>(() => current.values ?? defaults(c.controls));
+  const [v, setV] = useDraft<Record<string, number>>(p, "controls", () => current.values ?? defaults(c.controls));
   return (
     <LibFrame screen={p.screen} prompt={c.prompt} instruction={c.instruction} missionControl={c.missionControl} error={p.error} isPending={p.isPending}
       label={c.actionLabel ?? "Continue"} disabled={current.runs < c.minRuns} onSubmit={() => submit(p, { action: "done" })} onAdvance={p.onAdvance}
@@ -432,8 +476,8 @@ export function SimulationScreen(p: Props) {
 
 export function CompareScreen(p: Props) {
   const c = parseScreenConfig("compare", p.screen.configuration);
-  const [pick, setPick] = useState<string | undefined>();
-  const [ratings, setRatings] = useState<Record<string, number>>({});
+  const [pick, setPick] = useDraft<string | undefined>(p, "pick", undefined);
+  const [ratings, setRatings] = useDraft<Record<string, number>>(p, "ratings", {});
   const scale = c.scale.map((label, i) => ({ id: String(i), label }));
   const rated = Object.keys(ratings).length === c.options.length * c.criteria.length;
   const ready = (!c.pick || pick) && (c.mode !== "matrix" || rated);
@@ -480,8 +524,8 @@ export function CompareScreen(p: Props) {
 
 export function HotspotScreen(p: Props) {
   const c = parseScreenConfig("hotspot", p.screen.configuration);
-  const [chosen, setChosen] = useState<string[]>([]);
-  const [notes, setNotes] = useState<Record<string, string>>({});
+  const [chosen, setChosen] = useDraft<string[]>(p, "regions", []);
+  const [notes, setNotes] = useDraft<Record<string, string>>(p, "notes", {});
   const annotate = c.mode === "annotate";
   const toggle = (id: string) => {
     if (annotate) { setNotes(id in notes ? notes : { ...notes, [id]: "" }); return; }
@@ -591,8 +635,8 @@ const pairKey = (a: string, b: string) => (a < b ? `${a}|${b}` : `${b}|${a}`);
 
 export function MapScreen(p: Props) {
   const c = parseScreenConfig("map", p.screen.configuration);
-  const [route, setRoute] = useState<string[]>(c.start ? [c.start] : []);
-  const [links, setLinks] = useState<[string, string][]>([]);
+  const [route, setRoute] = useDraft<string[]>(p, "route", c.start ? [c.start] : []);
+  const [links, setLinks] = useDraft<[string, string][]>(p, "links", []);
   const [from, setFrom] = useState<string | null>(null);
   const node = (id: string) => c.nodes.find((n) => n.id === id)!;
   const allowed = new Set(c.edges.map(([a, b]) => pairKey(a, b)));
@@ -680,7 +724,7 @@ export function MapScreen(p: Props) {
 export function PatternGridScreen(p: Props) {
   const c = parseScreenConfig("pattern_grid", p.screen.configuration);
   const size = c.rows * c.cols;
-  const [grid, setGrid] = useState<string[]>(() => Array.from({ length: size }, (_, i) => c.given[i] || ""));
+  const [grid, setGrid] = useDraft<string[]>(p, "grid", () => Array.from({ length: size }, (_, i) => c.given[i] || ""));
   const [brush, setBrush] = useState<string>(c.palette[0].id);
   const piece = (id: string) => c.palette.find((x) => x.id === id);
   const options = [...c.palette.map((x) => ({ id: x.id, label: `${x.symbol ? `${x.symbol} ` : ""}${x.label}` })), { id: "", label: "Empty" }];
@@ -725,11 +769,11 @@ type Board = {
 export function WorkspaceScreen(p: Props) {
   const c = parseScreenConfig("workspace", p.screen.configuration);
   const board = extra<Board>(p.screen, "board");
-  const [placements, setPlacements] = useState<Record<string, string>>(() => {
+  const [placements, setPlacements] = useDraft<Record<string, string>>(p, "placements", () => {
     const saved = board?.saved.placements ?? {};
     return Object.fromEntries(Object.entries(saved).filter(([o]) => board?.objects.some((x) => x.id === o)));
   });
-  const [links, setLinks] = useState<[string, string][]>(() => board?.saved.links ?? []);
+  const [links, setLinks] = useDraft<[string, string][]>(p, "links", () => board?.saved.links ?? []);
   const [linkA, setLinkA] = useState("");
   const [linkB, setLinkB] = useState("");
   const [dragging, setDragging] = useState<string | null>(null);

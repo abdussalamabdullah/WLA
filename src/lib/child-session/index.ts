@@ -80,7 +80,11 @@ export async function getChildSession(): Promise<ChildSession | null> {
   const { data, error } = await supabase.rpc("verify_child_session", {
     p_token: token,
   });
-  if (error || !data || data.length === 0) return null;
+  // A failed lookup is NOT a signed-out child (D-98): surfacing it as one
+  // dropped children out of a mission mid-step on a network blip. Fail so the
+  // page can say "try again"; only a real "no such session" is null.
+  if (error) throw new ChildSessionUnavailableError(error.message);
+  if (!data || data.length === 0) return null;
 
   const row = data[0];
   return {
@@ -89,6 +93,14 @@ export async function getChildSession(): Promise<ChildSession | null> {
     displayName: row.display_name,
     birthYear: row.birth_year,
   };
+}
+
+/** The session service could not be reached — retryable, not "signed out". */
+export class ChildSessionUnavailableError extends Error {
+  constructor(detail = "") {
+    super(`Child session check failed${detail ? `: ${detail.slice(0, 60)}` : ""}`);
+    this.name = "ChildSessionUnavailableError";
+  }
 }
 
 export class ChildAccessError extends Error {
