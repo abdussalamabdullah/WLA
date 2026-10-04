@@ -17,6 +17,8 @@ export type SupportItem = {
   level?: number;
   kind?: "nudge" | "check" | "materials" | "reword" | "recovery";
   resource?: string;
+  /** Signed URL of optional audio assistance (resolved from "asset:<key>"). */
+  audio?: string;
 };
 
 export type MissionContextValue = {

@@ -1,5 +1,6 @@
 "use client";
 
+import { PatternPicker } from "./pattern-picker";
 import Link from "next/link";
 import { AssetManager } from "./asset-manager";
 import type { ResolvedAsset } from "@/features/mission-engine/media";
@@ -202,6 +203,8 @@ export function BuilderWorkspace({
       />
 
       {/* ------------------------------------------------- mission logic (F8) */}
+      <PatternPicker missionId={missionId} slug={slug} version={version} suggestedPrefix={`part${screens.length ? Math.floor(nextSequence / 100) + 1 : 1}_`} />
+
       <DefinitionEditor missionId={missionId} slug={slug} version={version} definition={def} />
       {def.qr.length > 0 && (
         <p className="mt-[var(--space-s)]">
