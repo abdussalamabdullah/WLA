@@ -216,26 +216,6 @@ export default async function MissionHomePage({
           </div>
         </div>
 
-        {/*
-          Mission Board — optional, and beneath everything else (§10).
-          A signposted destination only: see C5. It shows no learner's work.
-        */}
-        <div className="wla-container py-[var(--space-xl)]">
-          <Link
-            href="/academy/mission-board"
-            className="flex items-center justify-between gap-[var(--space-m)] rounded-[var(--radius-surface)] border border-[var(--color-border)] bg-[var(--color-surface)] p-[var(--space-m)] hover:border-[var(--color-border-strong)]"
-          >
-            <span>
-              <span className="block font-[family-name:var(--font-serif)] text-[length:var(--text-h3)]">
-                Mission Board
-              </span>
-              <span className="block text-[length:var(--text-small)] text-[var(--color-text-muted)]">
-                See how other WLA children approached this mission.
-              </span>
-            </span>
-            <span aria-hidden="true" className="text-[var(--color-text-muted)]">→</span>
-          </Link>
-        </div>
       </main>
     </AcademyShell>
   );

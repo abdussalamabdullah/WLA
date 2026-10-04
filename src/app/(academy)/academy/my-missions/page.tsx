@@ -140,6 +140,25 @@ export default async function MyMissionsPage({
         {continuing.length > 0 && <ContinueSection items={continuing} />}
 
         <MissionCollection items={items} />
+
+        {/*
+          Mission Board — Architecture §16 as amended by the Enhancement Plan
+          (D-73): beneath the child's mission collection, visually secondary to
+          it, and never a step in the mission journey. It used to sit on Mission
+          Home; the plan names this one placement.
+        */}
+        <section aria-labelledby="mission-board-link" className="mt-[var(--space-2xl)] border-t border-[var(--color-border)] pt-[var(--space-l)]">
+          <h2 id="mission-board-link" className="text-[length:var(--text-h3)]">Mission Board</h2>
+          <p className="mt-[var(--space-xs)] wla-measure text-[length:var(--text-small)] text-[var(--color-text-muted)]">
+            Different ways WLA children have approached a mission. Optional.
+          </p>
+          <Link
+            href="/academy/mission-board"
+            className="mt-[var(--space-s)] inline-flex min-h-[var(--target-min)] items-center text-[length:var(--text-label)] underline decoration-[var(--color-border-strong)] underline-offset-4 hover:decoration-[var(--color-primary)]"
+          >
+            Open Mission Board →
+          </Link>
+        </section>
       </Frame>
     </AcademyShell>
   );

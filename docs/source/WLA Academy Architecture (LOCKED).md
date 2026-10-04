@@ -1,5 +1,13 @@
 ## WLA ACADEMY ARCHITECTURE FINAL
 
+> **Amended 2026-10-04 — Academy Enhancement Plan.** `docs/source/WLA Academy Enhancement Plan.md`
+> ("Required Authority Updates") is approved current scope and amends this document in place:
+> Mission Board moves beneath the child's mission collection on My Missions (§2, §16, §23); its
+> permission, anonymisation and moderation model is defined (§16); Child Access Code is an approved
+> limited child-profile route (§3); the Family Mission Guide sits on the account side (§3); My Missions
+> status filtering, Lab filtering and search are current capabilities (§22). Amended passages are
+> marked *[Enhancement Plan]*. Implementation decisions: `docs/DECISIONS.md` D-73 onward.
+
 ## Core Platform Architecture
 
 ## Purpose
@@ -58,7 +66,7 @@ Mission Trail → My Missions
 
 This is the primary flow and should remain visually and functionally clear.
 
-Mission Board sits beneath Mission Home as an optional Academy-wide destination.
+Mission Board sits beneath the child's mission collection on My Missions as an optional Academy-wide destination. *[Enhancement Plan]*
 
 It is not a required step in the mission journey.
 
@@ -89,6 +97,20 @@ This includes:
 · Not Started / In Progress / Complete status; · mission-specific state; · resume position; · saved digital responses; · Mission Trail evidence associated with that child.
 
 One parent account may support more than one child profile.
+
+## Child Access Code *[Enhancement Plan]*
+
+Each child profile may have a Child Access Code: an approved, limited route into that child's own Academy space.
+
+- The parent/guardian creates, changes, resets or turns off the code from child-profile/account controls.
+- Successful code entry routes to that child's My Missions.
+- A code session reaches only that child's permitted Academy experience: their own missions, Mission Home, Active Mission, Mission Kit, Mission Complete, Mission Trail and Mission Board. It never reaches purchases, entitlements, account settings, privacy permissions, other children or For Parents.
+- It is a session scoped to one child profile, not a child account: no email, no password, no purchases.
+- Parent sign-in → select child → My Missions remains the full account route.
+
+## Family Mission Guide *[Enhancement Plan]*
+
+The Family Mission Guide — the recurring family guidance resource — is available from the account page, on the account side of the Academy. It is not part of the child mission experience.
 
 Mission progress should therefore not be stored only against the parent account.
 
@@ -418,9 +440,9 @@ Mission Board is an Academy-wide shared-practice surface.
 
 Mission Board sits:
 
-beneath Mission Home
+My Missions → the child's mission collection → Mission Board *[Enhancement Plan]*
 
-as an optional secondary Academy destination.
+as an optional secondary Academy destination, visually secondary to the child's own missions, with a clear return to My Missions.
 
 It does not interrupt:
 
@@ -446,7 +468,15 @@ Any contribution model must preserve:
 
 - optional participation; · anonymisation; · parent/guardian permission where required; · WLA safeguarding/privacy standards.
 
-Detailed submission and moderation behaviour can be specified when Mission Board is built.
+## Contribution, permission, anonymisation and moderation *[Enhancement Plan]*
+
+- Content is organised and filterable by mission and by Lab.
+- Only eligible Mission Trail evidence may enter the contribution flow. Nothing is shared automatically.
+- Parent/guardian permission is required before any contribution leaves the child's private Trail. A contribution started in a child session waits for that permission.
+- Anonymisation is applied before publication: no child name, no identifying detail, no faces or images of people.
+- WLA moderation is required before anything appears. WLA may curate contrasting approaches.
+- Children browse different ways a mission was approached. There are no likes, comments, counts, rankings or profiles.
+- A parent/guardian may withdraw a contribution at any time; withdrawal and child-profile deletion remove it immediately. Any longer retention period is governed by the retention policy (OPEN-14).
 
 ## 17. Completed Mission Home
 
@@ -465,6 +495,8 @@ It should show:
 It should not automatically restart the mission.
 
 Restart Mission remains a future product decision and should not be assumed in the core architecture.
+
+*[Enhancement Plan — reset vs replay, D-78]* A **reset** is never applied to a real learner's record: reset/retry/retest exist inside a run, per interaction, where the mission configures them, and mission-level reset exists only in authoring preview. A **replay** (a second run of a completed mission) remains deferred; when introduced it must create a new run and leave the completed record unchanged.
 
 ## 18. Shared resource model
 
@@ -550,17 +582,17 @@ Future briefs should inherit shared Academy behaviour rather than repeat it.
 
 The following do not need to be resolved within the core Academy architecture.
 
-## Mission Board submission/moderation detail
+## ~~Mission Board submission/moderation detail~~
 
-Resolve when Mission Board enters build.
+Resolved by the Enhancement Plan — see §16. *[Enhancement Plan]*
 
 ## Mission replay
 
 Resolve after evidence from use.
 
-## My Missions search/filter
+## ~~My Missions search/filter~~
 
-Introduce only when mission volume creates the need.
+Current capability: status filtering, Lab filtering and search (Enhancement Plan; implemented as D-60). *[Enhancement Plan]*
 
 ## Notifications
 
@@ -614,7 +646,7 @@ Start / Continue Mission Mission Kit For Parents
 
 ## Secondary Academy destination
 
-Mission Board — beneath Mission Home
+Mission Board — beneath the child's mission collection on My Missions *[Enhancement Plan]*
 
 ## Core architecture principles
 
@@ -654,9 +686,11 @@ Pause / resume principle — LOCKED
 
 Mission Trail distinction — LOCKED
 
-Mission Board placement — LOCKED
+Mission Board placement — LOCKED (amended: My Missions, beneath the collection) *[Enhancement Plan]*
 
 Account / child ownership model — LOCKED
+
+Child Access Code (limited child-profile route) — LOCKED *[Enhancement Plan]*
 
 Multi-child profile behaviour — LOCKED
 
@@ -666,6 +700,6 @@ Active Mission return behaviour — LOCKED
 
 Functional-route placement for Reviews / Gifts — LOCKED
 
-Deferred: Mission Board contribution mechanics, mission replay, search/filter and notifications.
+Deferred: mission replay and notifications. *[Enhancement Plan: Mission Board contribution mechanics and My Missions search/filter are now current scope.]*
 
 ## Status: Current WLA Academy Architecture authority.
