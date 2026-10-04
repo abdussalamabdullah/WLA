@@ -116,6 +116,10 @@ export type MissionResourceRow = {
 };
 
 /** F7 — media a screen shows, pinned to its version (0032). Never read by a client role. */
+/** Mission Board (0036): no author, no counts — by construction. */
+export type BoardStatus = "pending_permission" | "pending_moderation" | "published" | "rejected";
+export type BoardItem = { mission_slug: string; mission_title: string; lab: WlaLab; text: string; approach: string | null; curated: boolean; published_at: string };
+
 export type MissionAssetKind = "image" | "diagram" | "map" | "animation" | "audio" | "video";
 export type MissionAssetRow = {
   id: string;
@@ -425,6 +429,23 @@ export type Database = {
         Args: { p_mission_id: string; p_version: number };
         Returns: MissionAssetRow[];
       };
+      // Mission Board (0036)
+      board_offer: { Args: { p_child_id: string; p_evidence_id: string }; Returns: string };
+      child_session_board_offer: { Args: { p_token: string; p_evidence_id: string }; Returns: string | null };
+      board_family_contributions: {
+        Args: Record<string, never>;
+        Returns: { id: string; child_id: string; child_name: string; mission_title: string; text: string; status: BoardStatus; created_at: string; evidence_id: string }[];
+      };
+      child_session_board_offers: { Args: { p_token: string }; Returns: { evidence_id: string; status: BoardStatus }[] };
+      board_permit: { Args: { p_id: string; p_allow: boolean }; Returns: undefined };
+      board_withdraw: { Args: { p_id: string }; Returns: undefined };
+      board_published: { Args: { p_child_id: string }; Returns: BoardItem[] };
+      child_session_board: { Args: { p_token: string }; Returns: BoardItem[] };
+      admin_board_queue: {
+        Args: Record<string, never>;
+        Returns: { id: string; mission_title: string; lab: WlaLab; text: string; status: BoardStatus; curated: boolean; approach: string | null; created_at: string; moderated_at: string | null }[];
+      };
+      admin_board_moderate: { Args: { p_id: string; p_action: "publish" | "reject" | "unpublish" | "save"; p_text: string | null; p_curated: boolean | null; p_approach: string | null }; Returns: undefined };
       admin_draft_definition: {
         Args: { p_mission_id: string; p_version: number };
         Returns: Json;

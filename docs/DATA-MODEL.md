@@ -158,6 +158,19 @@ notifications have **no schema** and must not acquire any (Architecture §22).
 
 ---
 
+### 11d. `board_contributions` (added 2026-10-04, migration 0036)
+
+|                   |   |
+| ----------------- | - |
+| **Purpose**       | The Mission Board: an anonymised copy of one eligible Trail entry that a parent permitted and WLA moderates. |
+| **Source**        | Enhancement Plan §9; Architecture §16 as amended; D-73, D-96 |
+| **MVP**           | **Required** by current scope (the Board was deferred until the Enhancement Plan lifted it). |
+| **Existing table?** | Not `mission_evidence`: that is the child's private Trail. The Board holds a separate, scrubbed and moderator-editable COPY, so publishing never changes or exposes the private record, and withdrawal deletes only the copy. |
+| **Child data**    | Child-written text, shared only with parent permission, scrubbed of family names, contact and location detail, and reviewed by WLA before display. No images, no author, no counts. Deleted at once on withdrawal or child deletion; any longer retention is OPEN-14. |
+| **Notes**         | No client grants; families and children reach it only through ownership-checked or token-derived functions; admins never see child identity. |
+
+---
+
 ## Content tables (migration `20260925220100_editable_content.sql`)
 
 Added to satisfy **CMS-01**, which is a Must. Decision D-08 / conflict C3.

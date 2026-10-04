@@ -5,6 +5,7 @@ import { AppShell, type NavItem } from "@/components/app-shell/app-shell";
 import {
   IconOverview, IconMission, IconBuilder, IconParents, IconChildren,
   IconOrders, IconActivity, IconAnalytics, IconSettings, IconHelp, IconLogout,
+  IconBoard,
 } from "@/components/app-shell/icons";
 
 export const metadata = { title: "Academy admin" };
@@ -57,6 +58,7 @@ export default async function AdminLayout({
     { href: "/admin/orders", label: "Orders", icon: <IconOrders /> },
     { href: "/admin/activity", label: "Activity", icon: <IconActivity /> },
     { href: "/admin/analytics", label: "Analytics", icon: <IconAnalytics /> },
+    { href: "/admin/board", label: "Mission Board", icon: <IconBoard /> },
     { href: "/admin/settings", label: "Settings", icon: <IconSettings /> },
   ];
 

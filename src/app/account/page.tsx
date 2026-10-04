@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { BoardPermissions } from "@/components/account/board-permissions";
+import { familyContributions } from "@/features/mission-board/board";
 import { ErrorState } from "@/components/system/states";
 import { Button } from "@/components/ui/button";
 import { signOutAction } from "@/features/auth/actions";
@@ -19,11 +21,12 @@ export const metadata = { title: "Account" };
 export default async function AccountPage() {
   let email: string | undefined;
   let children: { id: string; display_name: string }[] = [];
+  let board: Awaited<ReturnType<typeof familyContributions>> = [];
 
   try {
     const { user } = await requireParent();
     email = user.email;
-    children = await listChildren();
+    [children, board] = await Promise.all([listChildren(), familyContributions()]);
   } catch {
     return (
       <main className="wla-container py-[var(--space-2xl)]">
@@ -86,6 +89,8 @@ export default async function AccountPage() {
           </ul>
         </section>
       )}
+
+      <BoardPermissions rows={board} />
 
       {/*
         Family Mission Guide — account side (Enhancement Plan §1, Architecture
