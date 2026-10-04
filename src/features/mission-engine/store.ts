@@ -7,6 +7,7 @@ import { mergeFromStorage, splitForStorage } from "./variables";
 import type { AnalyticsDraft } from "./contract";
 import type { EvidenceDraft } from "./runtime";
 import type { MissionScreen } from "./navigation";
+import type { ResolvedAsset } from "./media";
 import type { Json, MissionProgressRow } from "@/types/database";
 
 /**
@@ -95,4 +96,40 @@ export async function recordRunEvents(progressId: string, events: AnalyticsDraft
   } catch {
     // Reporting must never break a mission.
   }
+}
+
+/**
+ * F7 — sign the media the CURRENT projected screen needs, at the run's
+ * pinned version. The caller has authorised the run and passes keys taken
+ * from the projection, never from the browser; this signs only those keys,
+ * only for that mission and version, for one hour.
+ */
+export async function signMedia(missionId: string, version: number, keys: string[]): Promise<Map<string, ResolvedAsset>> {
+  const out = new Map<string, ResolvedAsset>();
+  if (!keys.length) return out;
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from("mission_assets")
+    .select("key, kind, storage_path, alt_text, long_description, transcript, captions_path")
+    .eq("mission_id", missionId)
+    .eq("version", version)
+    .in("key", keys);
+  if (error || !data?.length) return out;
+  const paths = [...new Set(data.flatMap((a) => [a.storage_path, a.captions_path].filter((p): p is string => Boolean(p))))];
+  const { data: signed } = await admin.storage.from("mission-media").createSignedUrls(paths, 60 * 60);
+  const url = new Map((signed ?? []).filter((s) => s.signedUrl && s.path).map((s) => [s.path as string, s.signedUrl]));
+  for (const a of data) {
+    const u = url.get(a.storage_path);
+    if (!u) continue;
+    out.set(a.key, {
+      key: a.key,
+      kind: a.kind,
+      url: u,
+      alt: a.alt_text,
+      longDescription: a.long_description,
+      transcript: a.transcript,
+      captionsUrl: a.captions_path ? (url.get(a.captions_path) ?? null) : null,
+    });
+  }
+  return out;
 }

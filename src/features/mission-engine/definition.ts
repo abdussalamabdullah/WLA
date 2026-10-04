@@ -188,7 +188,7 @@ export const commonScreenConfig = z
       })
       .strict()
       .optional(),
-    /** Media blocks by asset key (F7). */
+    /** Media blocks by asset key (F7, media.ts). */
     media: z
       .array(
         z
@@ -196,6 +196,12 @@ export const commonScreenConfig = z
             asset: z.string().min(1),
             when: condition.optional(),
             caption: z.string().optional(),
+            /** inline · zoom (open larger) · before_after (with `compareWith`) · layers (toggle overlays). */
+            display: z.enum(["inline", "zoom", "before_after", "layers"]).default("inline"),
+            compareWith: z.string().min(1).optional(),
+            /** Labels for before_after, e.g. ["Before", "After"]. */
+            labels: z.tuple([z.string(), z.string()]).optional(),
+            layers: z.array(z.object({ asset: z.string().min(1), label: z.string().min(1) }).strict()).optional(),
           })
           .strict(),
       )

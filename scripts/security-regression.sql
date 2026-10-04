@@ -546,3 +546,50 @@ select chk('every library type is a screen_type value',
   (select count(*) from unnest(enum_range(null::screen_type)) t
     where t::text in ('numeric_entry','code_entry','token_sequence','arrange','matching','allocate','inventory','compare','hotspot','sketch','map','pattern_grid','simulation','workspace')) = 14);
 \echo ''
+\echo '=============== MISSION MEDIA (0032) ==============='
+reset role; set request.jwt.claim.sub='aaaaaaaa-0000-0000-0000-000000000001'; set role authenticated;
+select chk_ok('an admin adds media to a draft',
+  format($$select admin_upsert_asset(%L, 1, 'bridge', 'image', %L, 'A bridge', null, null, null)$$, :'dupid', :'dupid' || '/media/bridge.png'));
+select chk_raises('a media path outside the mission is refused',
+  format($$select admin_upsert_asset(%L, 1, 'x', 'image', 'elsewhere/x.png', 'x', null, null, null)$$, :'dupid'), 'asset_path_outside_mission');
+select chk_raises('media cannot be added to a published version',
+  format($$select admin_upsert_asset(%L, 2, 'x', 'image', %L, 'x', null, null, null)$$, :'mid', :'mid' || '/x.png'), 'version_not_editable');
+select chk_raises('published media cannot be read through authoring (D-61)',
+  format($$select * from admin_draft_assets(%L, 2)$$, :'mid'), 'version_not_editable');
+select chk_raises('an admin cannot write the table directly',
+  format($$insert into mission_assets (mission_id, version, key, kind, storage_path) values (%L, 1, 'y', 'image', %L)$$, :'dupid', :'dupid' || '/y.png'), 'permission denied');
+select chk('draft media is readable for the builder',
+  (select count(*) = 1 from admin_draft_assets(:'dupid', 1)));
+select (create_mission_version(:'dupid', 1)).version as dupv2 \gset
+select chk('a new version carries its media',
+  (select count(*) = 1 from admin_draft_assets(:'dupid', :dupv2)));
+select admin_duplicate_mission(:'dupid', 'six-names-copy-2', 'Copy 2', 1) as dup2 \gset
+reset role;
+select (:'dup2'::jsonb->>'id') as dup2id \gset
+select chk('a duplicate carries its media into its own folder',
+  (select count(*) = 1 from mission_assets where mission_id = :'dup2id' and storage_path like :'dup2id' || '/%'));
+select chk('the duplicate lists the media file to copy, in the media bucket',
+  (select bool_or(f->>'bucket' = 'mission-media') from jsonb_array_elements(:'dup2'::jsonb->'files') f));
+insert into storage.objects (bucket_id, name) values ('mission-media', :'dupid' || '/media/bridge.png');
+reset role; set request.jwt.claim.sub='aaaaaaaa-0000-0000-0000-000000000002'; set role authenticated;
+select chk_raises('a parent cannot read the media table',
+  $$select * from mission_assets$$, 'permission denied');
+select chk_raises('a parent cannot author media',
+  format($$select admin_upsert_asset(%L, 1, 'z', 'image', %L, 'z', null, null, null)$$, :'dupid', :'dupid' || '/z.png'), 'not_admin');
+select chk('a parent cannot see media files in storage (learners get server-signed URLs only)',
+  (select count(*) = 0 from storage.objects where bucket_id = 'mission-media'));
+reset role; set request.jwt.claim.sub = ''; set role anon;
+select chk_raises('anon cannot read the media table', $$select * from mission_assets$$, 'permission denied');
+reset role;
+\echo ''
+\echo '=============== ANALYTICS NEVER FAIL A SAVE (0033) ==============='
+reset role; set role service_role;
+select chk_ok('a save with an unlisted analytics event still saves (D-50, D-90)',
+  format($$select engine_save(%L, '{"visitedScreens":["d90"]}', '{}', null, null, null, false, '[]', '[{"name":"not_an_event"},{"name":"screen_entered","detail":{"child":"x"}},{"name":"screen_entered","detail":{"screen_type":"content"}}]')$$, :'ownpid'));
+reset role;
+select chk('the learner state from that save is kept',
+  (select state_data->'visitedScreens' ? 'd90' from mission_state where progress_id = :'ownpid'));
+select chk('only the allowed event was recorded',
+  (select count(*) = 0 from analytics_events where name = 'not_an_event')
+  and (select count(*) = 0 from analytics_events where detail ? 'child'));
+\echo ''

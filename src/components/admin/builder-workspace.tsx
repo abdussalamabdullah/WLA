@@ -1,5 +1,7 @@
 "use client";
 
+import { AssetManager } from "./asset-manager";
+import type { ResolvedAsset } from "@/features/mission-engine/media";
 import { useActionState, useState } from "react";
 import { ScreenEditor, type EditableScreen } from "./screen-editor";
 import { KitEditor, ParentNoteEditor, type DraftResource } from "./kit-editor";
@@ -50,6 +52,7 @@ export function BuilderWorkspace({
   noteDocumentUrl,
   paths = [],
   definition = null,
+  assets = { rows: [], resolved: [] },
 }: {
   missionId: string;
   slug: string;
@@ -67,6 +70,8 @@ export function BuilderWorkspace({
   paths?: { decisions: string[]; screens: string[]; outcome: string; detail: string | null }[];
   /** The draft's mission definition (F8), for the logic editor and form vocabulary. */
   definition?: MissionDefinition | null;
+  /** F7 — this draft's media, signed with the admin's own session. */
+  assets?: { rows: { key: string; kind: string; storage_path: string; captions_path: string | null }[]; resolved: ResolvedAsset[] };
 }) {
   const [editing, setEditing] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
@@ -197,6 +202,8 @@ export function BuilderWorkspace({
 
       {/* ------------------------------------------------- mission logic (F8) */}
       <DefinitionEditor missionId={missionId} slug={slug} version={version} definition={def} />
+
+      <AssetManager missionId={missionId} slug={slug} version={version} rows={assets.rows} resolved={assets.resolved} />
 
       {/* --------------------------------------------- Mission Kit, For Parents */}
       <KitEditor

@@ -134,6 +134,30 @@ notifications have **no schema** and must not acquire any (Architecture §22).
 
 ---
 
+### 11b. `mission_state_private` (added 2026-10-04, migration 0027)
+
+|                   |   |
+| ----------------- | - |
+| **Purpose**       | The server-only half of a run's state: hidden variables, the randomisation seed, fired events, the assigned variant. |
+| **Source**        | Enhancement Plan §3 (hidden variables, variants, randomisation); D-80 |
+| **MVP**           | **Required** by current scope (the Enhancement Plan). |
+| **Existing table?** | Not `mission_state`: families can read their own state, and these values must never reach a client. A column with a column-level grant was rejected because the whole row is read by family queries. |
+| **Child data**    | No personal data — mission mechanics only, keyed on the run. |
+| **Notes**         | No client grants at all; read and written only by `engine_load_run` / `engine_save` (service role). |
+
+### 11c. `mission_assets` (added 2026-10-04, migration 0032)
+
+|                   |   |
+| ----------------- | - |
+| **Purpose**       | Media a screen shows — images, diagrams, maps, animation, audio, video — pinned to a mission version, with alt text, long description, transcript and captions. |
+| **Source**        | Enhancement Plan §7 (F7); §12 asset management; Architecture §20 (accessibility) |
+| **MVP**           | **Required** by current scope. |
+| **Existing table?** | Not `mission_resources`: that is the Mission Kit — what WLA gives the family to print and keep, listed on the Kit page (Brief §17). Screen media is never a file the family browses; folding it in would list every diagram in the Kit. |
+| **Child data**    | None. WLA-authored content only. |
+| **Notes**         | No client grants; admins author through draft-only functions; learners receive server-signed URLs for the current screen only. Immutable once published; copied by new versions and duplicates. Private bucket `mission-media`. |
+
+---
+
 ## Content tables (migration `20260925220100_editable_content.sql`)
 
 Added to satisfy **CMS-01**, which is a Must. Decision D-08 / conflict C3.

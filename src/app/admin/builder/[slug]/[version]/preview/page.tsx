@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { MissionPreview } from "@/components/admin/mission-preview";
 import { requireAdmin } from "@/lib/permissions";
-import { adminDraftScreens } from "@/features/admin/lms-queries";
+import { adminDraftAssets, adminDraftScreens } from "@/features/admin/lms-queries";
 
 export const metadata = { title: "Preview" };
 
@@ -49,10 +49,11 @@ export default async function PreviewPage({
     notFound();
   }
 
-  const [screens, { data: definition }] = await Promise.all([
+  const [screens, { data: definition }, media] = await Promise.all([
     adminDraftScreens(mission.id, version),
     // Draft-only (D-61): the same RPC refuses a published version.
     supabase.rpc("admin_draft_definition", { p_mission_id: mission.id, p_version: version }),
+    adminDraftAssets(mission.id, version),
   ]);
 
   return (
@@ -63,6 +64,7 @@ export default async function PreviewPage({
       backHref={`/admin/builder/${slug}/${version}`}
       completionRule={versionRow.completion_rule}
       definition={definition ?? {}}
+      assets={media.resolved}
       screens={screens.map((s) => ({
         screenKey: s.screen_key,
         type: s.type,

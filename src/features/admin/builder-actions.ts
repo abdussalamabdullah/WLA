@@ -382,10 +382,12 @@ export async function duplicateMissionAction(
     logWarn("duplicate_mission_failed", { sourceId, reason: error?.message });
     return { error: "We couldn't duplicate this mission." };
   }
-  const result = data as unknown as { slug: string; files: { from: string; to: string }[] };
+  const result = data as unknown as { slug: string; files: { bucket?: string; from: string; to: string }[] };
   const failed: string[] = [];
   for (const f of result.files) {
-    const { error: copyError } = await supabase.storage.from("mission-resources").copy(f.from, f.to);
+    // Kit files and notes in mission-resources; media (0032) in mission-media.
+    const bucket = f.bucket === "mission-media" ? "mission-media" : "mission-resources";
+    const { error: copyError } = await supabase.storage.from(bucket).copy(f.from, f.to);
     if (copyError) failed.push(f.from);
   }
   if (failed.length) {

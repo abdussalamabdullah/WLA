@@ -5,6 +5,7 @@ import { MissionControl } from "@/components/mission/mission-control";
 import { ErrorState } from "@/components/system/states";
 import { cn } from "@/lib/utils";
 import { useMissionContext } from "@/components/mission/mission-context";
+import { MediaBlocks } from "@/components/mission/media-blocks";
 
 /**
  * Shared frame for every mission screen.
@@ -32,7 +33,7 @@ export function ScreenFrame({
   children?: React.ReactNode;
   action: React.ReactNode;
 }) {
-  const { notice } = useMissionContext();
+  const { notice, media } = useMissionContext();
   return (
     <div className="flex flex-col gap-[var(--space-l)]">
       {/*
@@ -54,6 +55,8 @@ export function ScreenFrame({
           ))}
         </div>
       )}
+
+      <MediaBlocks blocks={media} />
 
       {children}
 

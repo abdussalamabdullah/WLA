@@ -298,6 +298,33 @@ can be revised.
 
 ---
 
+## 13. Assets and media (F7, D-89) — `media.ts`, `store.signMedia`
+
+`mission_assets` (0032) holds a version's media — image, diagram, map,
+animation, audio, video — with alt text, long description, transcript and
+captions. Private bucket `mission-media`. No client role reads either.
+
+* **Referencing:** a screen's `media: [{asset, display, caption, when,
+  compareWith, labels, layers}]` (display: inline · zoom · before_after ·
+  layers), or the string `"asset:<key>"` anywhere a configuration asks for an
+  image (hotspot image, map background).
+* **Release gating:** the projection drops media whose `when` does not hold;
+  `loadStageVia` then signs (one hour, service role) exactly the keys the
+  projected current screen references, at the run's pinned version.
+  Preview signs draft media with the admin's own session.
+* **Immutability:** rows follow `guard_immutable_mission_version`; published
+  files cannot be deleted; new versions and duplicates copy rows (and the
+  duplicate action copies files).
+* **Accessibility is enforced twice:** at upload (text alternative for
+  visuals, transcript for audio, captions or transcript for video) and by
+  the validator before publish (`missing_alt_text`, `missing_transcript`,
+  `missing_captions`, `missing_asset`).
+* **Rendering:** `components/mission/media-blocks.tsx`, shown by every
+  screen's frame under the body. No autoplay; zoom opens a dialog;
+  before/after is a named choice, not a slider; layers are checkboxes.
+
+---
+
 ## 11. Extending
 
 * **New interaction type:** a module in `features/mission-engine/interactions/`

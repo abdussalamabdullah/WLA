@@ -128,3 +128,37 @@ simple percentage diagram, not a geographic map; simulation readouts are rule-ba
 
 **Next dependency:** F7 assets/media (hotspot and map images become version-pinned assets), then F6 Trail UI,
 mechanics, Mission Board.
+
+---
+
+## Phase 5 — F7 assets and media · COMPLETE
+
+**Implementation:** `mission_assets` + private `mission-media` bucket (0032); draft-only authoring functions;
+version copy and duplication carry media; `media.ts` resolver; `store.signMedia` (current screen, pinned
+version); `MediaBlocks` (inline, zoom, before/after, layers, audio + transcript, video + captions); builder
+Asset Manager with server-side MIME/size checks and required accessibility fields; validator checks every
+`asset:` reference. D-89.
+
+**Defect found and fixed (pre-existing, D-90):** an analytics name or detail key not on the allow-list rolled
+back the learner's entire save. 0033 isolates each event; a unit test keeps engine events and the allow-lists
+in step. The trigger was the new simulation event — caught only by playing as a real learner.
+
+**Migrations:** 0032 `mission_media`, 0033 `engine_save_resilient_analytics`. Local and staging 33/33.
+
+**Tests:** vitest 642; security regression 134/0 (13 media checks; analytics-resilience check mutation-tested).
+
+**Browser QA (staging, production build):**
+- `media.mjs` 20/21 — uploads through the Asset Manager, refusal without alt text, signed URLs, zoom dialog,
+  before/after by named choice, audio transcript, `asset:` image in an interaction, audits at 390/834/1512. The
+  one failure was a staging outage during the first upload (`auth.getUser` ServiceUnavailable in the server
+  log); a probe afterwards saved normally.
+- `learner-library.mjs` **25/25** — the library mission published (kept out of the catalogue), one QA child
+  given a fixture entitlement, every library screen played through the real server path: server grading,
+  no answers/routes/bindings/rules in the page source on full reloads, pause/resume, server-decided simulation
+  readouts, workspace persistence, signed media for the learner, completion, and the recorded state/outcomes/
+  responses/analytics checked in the database.
+
+**Performance note:** the builder re-render after a save fetched and signed draft media twice; now once.
+
+**QA fixtures on staging:** mission `qa-library-mission` (v1 published, `published = false` in the catalogue);
+children `QA Library *` under the QA parent with fixture entitlements; media files under the mission's folder.

@@ -64,6 +64,8 @@ export default async function BuilderVersionPage({
     // version has no read path through the builder (D-61).
     editable ? draftQaReport(mission.id, version) : Promise.resolve(null),
   ]);
+  // Mission QA already read and signed this draft's media; reuse it.
+  const assets = qa?.media ?? { rows: [], resolved: [] };
   const qaProblems = qa
     ? qa.issues.map((i) => ({ code: i.code, blocking: i.severity === "blocking", screen_key: i.screenKey, detail: i.detail }))
     : problems;
@@ -134,6 +136,7 @@ export default async function BuilderVersionPage({
           blocking={blocking}
           paths={paths}
           definition={qa?.model.definition ?? null}
+          assets={assets}
           advisory={advisory}
           resources={resources.map((r) => ({
             id: r.id, title: r.title, description: r.description,
