@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { MissionControl } from "@/components/mission/mission-control";
 import { ErrorState } from "@/components/system/states";
 import { cn } from "@/lib/utils";
+import { useMissionContext } from "@/components/mission/mission-context";
 
 /**
  * Shared frame for every mission screen.
@@ -31,6 +32,7 @@ export function ScreenFrame({
   children?: React.ReactNode;
   action: React.ReactNode;
 }) {
+  const { notice } = useMissionContext();
   return (
     <div className="flex flex-col gap-[var(--space-l)]">
       {/*
@@ -67,6 +69,16 @@ export function ScreenFrame({
       {instruction && (
         <p className="wla-measure border-l-2 border-[var(--color-primary)] pl-[var(--space-m)] font-[family-name:var(--font-serif)] text-[length:var(--text-h3)] font-[var(--weight-semibold)]">
           {instruction}
+        </p>
+      )}
+
+      {/*
+        Input the mission did not accept (D-78): guidance, not an error. It
+        names what to do; it never says "wrong" (Brief §10).
+      */}
+      {notice && (
+        <p role="status" className="wla-measure border-l-2 border-[var(--color-accent)] pl-[var(--space-m)]">
+          <span className="sr-only">Not yet: </span>{notice}
         </p>
       )}
 

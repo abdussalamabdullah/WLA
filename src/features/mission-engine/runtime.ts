@@ -168,8 +168,11 @@ function resetScreenInput(state: MissionStateData, key: string): MissionStateDat
   delete custom[key];
   const workspaces = { ...state.workspaces };
   delete workspaces[key];
+  const outcomes = { ...state.outcomes };
+  delete outcomes[key];
   return {
     ...state,
+    outcomes,
     choices,
     multiChoices,
     custom,

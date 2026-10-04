@@ -59,11 +59,11 @@ const issue = (severity: Severity, category: Category, code: string, screenKey: 
 // ------------------------------------------------------------ simulation ----
 
 /** Every input worth trying on a screen. Contracts may offer their own samples. */
-function sampleInputs(screen: MissionScreen, state: MissionStateData): MissionInteraction[] {
+function sampleInputs(screen: MissionScreen, state: MissionStateData, model: MissionModel): MissionInteraction[] {
   const k = screen.screenKey;
   const c = (screen.configuration ?? {}) as Record<string, unknown>;
-  const contract = contractFor(screen.type) as (ReturnType<typeof contractFor> & { samples?: (s: MissionScreen) => unknown[] }) | null;
-  if (contract?.samples) return contract.samples(screen).map((value) => ({ kind: "submit" as const, screenKey: k, value }));
+  const contract = contractFor(screen.type);
+  if (contract?.samples) return contract.samples(screen, model).map((value) => ({ kind: "submit" as const, screenKey: k, value }));
   switch (screen.type) {
     case "choice":
       return ((c.options as { id: string }[]) ?? []).map((o) => ({ kind: "choice" as const, screenKey: k, optionId: o.id }));
@@ -111,8 +111,12 @@ export function simulate(model: MissionModel, opts: { maxPaths?: number; maxStep
     starts.push(s);
   }
 
-  type Frame = { state: MissionStateData; key: string; screens: string[]; decisions: string[]; steps: number };
-  const stack: Frame[] = starts.map((state) => ({ state, key: first, screens: [first], decisions: [], steps: 0 }));
+  // `stays`: consecutive steps on the same screen. A screen may hold the
+  // child (a reveal opening, a simulation run, a missed code counting towards
+  // its fallback), but repeating that forever proves nothing new.
+  type Frame = { state: MissionStateData; key: string; screens: string[]; decisions: string[]; steps: number; stays: number };
+  const MAX_STAYS = 12;
+  const stack: Frame[] = starts.map((state) => ({ state, key: first, screens: [first], decisions: [], steps: 0, stays: 0 }));
   while (stack.length && reports.length < maxPaths) {
     const f = stack.pop()!;
     const screen = screenByKey(model, f.key);
@@ -124,7 +128,7 @@ export function simulate(model: MissionModel, opts: { maxPaths?: number; maxStep
       reports.push({ decisions: f.decisions, screens: f.screens, outcome: "limit", detail: "Too many steps — a loop with no way out?" });
       continue;
     }
-    const inputs = sampleInputs(screen, f.state);
+    const inputs = sampleInputs(screen, f.state, model);
     let progressed = false;
     for (const input of inputs) {
       let r;
@@ -134,7 +138,14 @@ export function simulate(model: MissionModel, opts: { maxPaths?: number; maxStep
         if (e instanceof EngineRefusal) continue;
         throw e;
       }
-      if (!r.ok) continue;
+      if (!r.ok) {
+        // A miss that counts towards a recovery route is worth following.
+        const fallbackAfter = (screen.configuration as { onNoMatch?: { fallbackAfter?: number } } | null)?.onNoMatch?.fallbackAfter;
+        if (fallbackAfter && f.stays < Math.min(MAX_STAYS, fallbackAfter)) {
+          stack.push({ ...f, state: r.state, steps: f.steps + 1, stays: f.stays + 1 });
+        }
+        continue;
+      }
       progressed = true;
       const decisions = input.kind === "choice" ? [...f.decisions, `${f.key}=${input.optionId}`] : f.decisions;
       if (r.completed) {
@@ -146,12 +157,18 @@ export function simulate(model: MissionModel, opts: { maxPaths?: number; maxStep
         reports.push({ decisions, screens: f.screens, outcome: "dead_end", detail: `Nothing follows "${f.key}" and the mission is not complete.` });
         continue;
       }
+      const stays = next === f.key ? f.stays + 1 : 0;
+      if (next === f.key && f.stays >= 1) {
+        // Already explored staying here once; the other inputs cover moving on.
+        continue;
+      }
       stack.push({
         state: r.state,
         key: next,
         screens: next === f.key ? f.screens : [...f.screens, next],
         decisions,
         steps: f.steps + 1,
+        stays,
       });
     }
     if (!progressed) {
@@ -184,7 +201,7 @@ function childText(s: MissionScreen): string[] {
   const out: string[] = [];
   const walk = (v: unknown, key = "") => {
     if (typeof v === "string") {
-      if (!/^(next|to|otherwise|screenKey|key|id|var|op|type|asset|fromResponse|resource|kind|since)$/.test(key)) out.push(v);
+      if (!/^(next|to|otherwise|screenKey|key|id|var|op|type|asset|fromResponse|resource|kind|since|mode|workspace|storeAs|src|start|end)$/.test(key)) out.push(v);
     } else if (Array.isArray(v)) v.forEach((x) => walk(x, key));
     else if (v && typeof v === "object") for (const [k, x] of Object.entries(v)) if (!["when", "requires", "routes", "effects", "condition"].includes(k)) walk(x, k);
   };
@@ -238,6 +255,17 @@ export function validateMission(model: MissionModel, ctx: ValidationContext = {}
     if ("unlocked" in r && !unlockKeys.has(r.unlocked)) {
       const viaEffect = JSON.stringify(screens.map((s) => s.configuration)).includes(`"key":"${r.unlocked}"`) || JSON.stringify(def.events).includes(`"key":"${r.unlocked}"`);
       if (!viaEffect) issues.push(issue("blocking", "logic", "unlock_without_condition", where, `Waits for unlock "${r.unlocked}", which nothing can ever grant.`));
+    }
+    if ("outcome" in r) {
+      const target = screens.find((x) => x.screenKey === r.outcome);
+      const graded = target && Array.isArray((target.configuration as { outcomes?: unknown } | null)?.outcomes);
+      if (!target) issues.push(issue("blocking", "logic", "unknown_screen_in_condition", where, `A condition refers to "${r.outcome}", which is not a screen in this version.`));
+      else if (!graded) issues.push(issue("blocking", "logic", "outcome_without_grading", where, `Reads the outcome of "${r.outcome}", which has no outcomes.`));
+    }
+    if ("placed" in r) {
+      const [wk, ok] = r.placed.split(".");
+      const ws = def.workspaces.find((w) => w.key === wk);
+      if (!ws || !ws.objects.some((o) => o.id === ok)) issues.push(issue("blocking", "logic", "unknown_workspace_object", where, `Refers to "${r.placed}", which is not an object on a defined board.`));
     }
     if ("event" in r && !def.events.some((e) => e.key === r.event)) {
       issues.push(issue("blocking", "logic", "unknown_event", where, `Refers to event "${r.event}", which is not defined.`));
@@ -414,7 +442,7 @@ export function validateMission(model: MissionModel, ctx: ValidationContext = {}
     if (c.timer && !c.timer.visible) issues.push(issue("advisory", "accessibility", "hidden_timer", s.screenKey, "A timed stage should show the time left."));
 
     // contract-level checks (device fallback, answers present...)
-    const extra = (contract as { lint?: (s: MissionScreen) => Issue[] }).lint?.(s) ?? [];
+    const extra: Issue[] = contract?.lint?.(s, model) ?? [];
     issues.push(...extra);
 
     // Mission Control materials point at real Kit resources
@@ -562,7 +590,7 @@ function simulateGains(model: MissionModel) {
       f.state.firedEvents.forEach((e) => events.add(e));
       const screen = screenByKey(model, f.key);
       if (!screen || f.steps > model.screens.length * 4) continue;
-      for (const input of sampleInputs(screen, f.state)) {
+      for (const input of sampleInputs(screen, f.state, model)) {
         try {
           const r = step(model, f.state, f.key, input, later);
           if (!r.ok) continue;

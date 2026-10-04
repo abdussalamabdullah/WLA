@@ -75,3 +75,56 @@ in the page source: gone.
 `set_mission_version_status` RPC bypasses the semantic (TS) checks but not the structural SQL gate (D-85).
 
 **Next dependency:** Mission Control v2 + central analytics (F5 instrumentation), then F6 Trail UI, F7 assets.
+
+---
+
+## Phase 2 — Mission Control v2 and analytics reporting · COMPLETE
+
+Committed as `2d52d3e` and `2b922ee`: levelled, state-aware support with recovery items and central
+reporting; `admin_mission_insights` (0029) answering the plan's §11 questions from aggregates only.
+
+---
+
+## Phase 3 — Builder (Plan §12) · COMPLETE (pattern library and asset manager follow with F7)
+
+**Implementation:** `schema-form.tsx` generates screen and mission-logic editors from the runtime's own zod
+schemas, with a condition builder that offers the mission's own vocabulary; `definition-editor.tsx` (variables,
+unlocks, events, variants, pools, checkpoints, workspaces, stages, completion; JSON fallback); `flow-map.tsx`
+(every route/option/next/otherwise/event edge; convergence, gating and QA markers; text equivalent); preview
+device frames, state inspector and jump-to-state; rollback (new draft from any version); duplication
+(`admin_duplicate_mission`, 0030, copies in-database with Kit files copied by the action).
+
+**Migrations:** 0030. **Tests:** security regression 114/0 (duplication checks). Commit `293faf5`.
+
+---
+
+## Phase 4 — Interaction library (Plan §4) · COMPLETE
+
+**Objective:** reusable interaction types with shared state, validation, persistence, Trail status and
+conditional progression; the persistent workspace on the same state model.
+
+**Implementation:** 14 types (D-86) — schema, server contract, authoring lint, catalog template and component
+each; graded-input model shared by all checkable types; `state.outcomes`, `{outcome}` and `{placed}` refs;
+definition `workspaces`. Validation failures shown as guidance, not as failed saves (D-87). QA simulation
+follows recovery routes and held screens (D-88).
+
+**Migrations:** `20261004140000_interaction_library` (0031) — enum values; SQL gate learns outcome routes.
+Local 31/31, staging 31/31.
+
+**Tests:** vitest 632 (library 58: every template passes QA and plays to completion; graded matching and
+normalisation; answers/outcomes/routes/bindings/readout rules absent from the projection; 17 forged-input
+refusals; recovery routes; workspace persistence across screens; lint codes). Security regression 118/0.
+Six Names SQL 64/0.
+
+**Browser QA (`library.mjs`, staging data, production build):** a mission with all 18 library screens built
+entirely in the Admin UI (incl. D-79: a freshly created mission's builder loads) and played in Learner
+Preview, each screen audited at 390 / 834 / 1512 (overflow, 44px targets, labels, names, heading order):
+**102/0**. Two real defects found and fixed (workspace QA sampling; nested `storeAs` reaching the page).
+
+**QA fixture created on staging:** mission `qa-library-mission` (unpublished draft, no learners).
+
+**Known limitations:** dragging is mouse-only enhancement (tap/keyboard are the complete path); the map is a
+simple percentage diagram, not a geographic map; simulation readouts are rule-based text, not a numeric model.
+
+**Next dependency:** F7 assets/media (hotspot and map images become version-pinned assets), then F6 Trail UI,
+mechanics, Mission Board.

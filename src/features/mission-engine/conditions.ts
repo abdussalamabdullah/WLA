@@ -29,6 +29,10 @@ export const ref = z.union([
   z.object({ event: z.string().min(1) }).strict(),
   z.object({ attempts: z.string().min(1) }).strict(),
   z.object({ variant: z.literal(true) }).strict(),
+  /** The outcome a graded library screen matched (interactions/). */
+  z.object({ outcome: z.string().min(1) }).strict(),
+  /** The zone an object sits in on a persistent workspace: "workspace.object". */
+  z.object({ placed: z.string().min(1) }).strict(),
   /** Seconds since a server-recorded mark: `start`, `screen:<key>`, `checkpoint:<key>`, `event:<key>`. */
   z.object({ elapsed: z.object({ since: z.string().min(1) }).strict() }).strict(),
 ]);
@@ -78,6 +82,12 @@ export function resolveRef(r: Ref, ctx: EvalContext): unknown {
   if ("unlocked" in r) return s.unlocked.includes(r.unlocked);
   if ("handoff" in r) return s.confirmedHandoffs.includes(r.handoff);
   if ("event" in r) return s.firedEvents.includes(r.event);
+  if ("outcome" in r) return s.outcomes[r.outcome];
+  if ("placed" in r) {
+    const [ws, obj] = r.placed.split(".");
+    const board = s.workspaces[ws] as { placements?: Record<string, string> } | undefined;
+    return board?.placements?.[obj];
+  }
   if ("attempts" in r) return s.attempts[r.attempts] ?? 0;
   if ("variant" in r) return s.variant ?? undefined;
   if ("elapsed" in r) {

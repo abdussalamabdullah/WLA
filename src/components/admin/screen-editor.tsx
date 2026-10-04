@@ -7,47 +7,13 @@ import { Field, Input, FormError, FormNotice } from "@/components/ui/field";
 import { SchemaForm } from "./schema-form";
 import { screenConfigByType } from "@/features/mission-engine/schemas";
 import { commonScreenConfig } from "@/features/mission-engine/definition";
+import { screenCatalog, templateFor } from "@/features/mission-engine/interactions/catalog";
 
 const initial: BuilderState = {};
 
-/** The twelve types the engine's registry can render. Nothing else is
- *  offerable, because nothing else could be shown to a learner. */
-const SCREEN_TYPES = [
-  { value: "content", label: "Content — text the child reads" },
-  { value: "prepare", label: "Prepare — get materials ready" },
-  { value: "handoff", label: "Handoff — go and do something physical" },
-  { value: "choice", label: "Decision — one choice, branches" },
-  { value: "multi_choice", label: "Multi-choice — pick several" },
-  { value: "response", label: "Response — write an answer" },
-  { value: "reflection", label: "Reflection — think back" },
-  { value: "reveal", label: "Reveal — show something held back" },
-  { value: "tracker", label: "Tracker — record a position" },
-  { value: "tracker_confirmation", label: "Tracker confirmation" },
-  { value: "sort_items", label: "Sort — order or group items" },
-  { value: "completion", label: "Completion — the end" },
-];
-
-/**
- * Starter configuration per type, so an author is never faced with an empty
- * JSON box. Each names every field the engine's schema REQUIRES, so once the
- * blanks are filled it saves. A test fills each blank and parses it against
- * `screenConfigByType` — 9 of 12 once shipped with missing or misnamed fields
- * and could not be saved however they were filled in.
- */
-const TEMPLATE: Record<string, string> = {
-  content: `{\n  "next": ""\n}`,
-  prepare: `{\n  "materials": [""],\n  "next": ""\n}`,
-  handoff: `{\n  "location": "",\n  "steps": [""],\n  "returnInstruction": "",\n  "next": ""\n}`,
-  choice: `{\n  "prompt": "",\n  "options": [\n    { "id": "", "label": "", "next": "" },\n    { "id": "", "label": "", "next": "" }\n  ]\n}`,
-  multi_choice: `{\n  "prompt": "",\n  "options": [\n    { "id": "", "label": "" },\n    { "id": "", "label": "" }\n  ],\n  "next": ""\n}`,
-  response: `{\n  "prompt": "",\n  "next": ""\n}`,
-  reflection: `{\n  "prompts": [""],\n  "next": ""\n}`,
-  reveal: `{\n  "concealedPrompt": "",\n  "revealedBody": "",\n  "condition": { "type": "child_action" },\n  "next": ""\n}`,
-  tracker: `{\n  "prompt": "",\n  "dimensions": [{ "id": "", "label": "", "positions": ["", ""] }],\n  "next": ""\n}`,
-  tracker_confirmation: `{\n  "rows": [{ "label": "", "position": "" }],\n  "next": ""\n}`,
-  sort_items: `{\n  "prompt": "",\n  "categories": [{ "id": "", "label": "" }, { "id": "", "label": "" }],\n  "items": [{ "id": "", "text": "", "classification": "" }],\n  "next": ""\n}`,
-  completion: `{\n  "message": "",\n  "trailEntries": []\n}`,
-};
+/** Every type the engine can render, grouped as authors think of them (interactions/catalog.ts). */
+const FAMILIES = [...new Set(screenCatalog.map((e) => e.family))];
+const starter = (type: string) => JSON.stringify(templateFor(type), null, 2);
 
 export type EditableScreen = {
   screen_key: string;
@@ -76,7 +42,7 @@ export function ScreenEditor({
   const [state, action, pending] = useActionState(saveScreenAction, initial);
   const [type, setType] = useState(screen?.type ?? "content");
   const [config, setConfig] = useState(
-    screen ? JSON.stringify(screen.configuration, null, 2) : TEMPLATE.content,
+    screen ? JSON.stringify(screen.configuration, null, 2) : starter("content"),
   );
   const err = (k: string) => state.fieldErrors?.[k];
 
@@ -84,7 +50,7 @@ export function ScreenEditor({
     setType(next);
     // Only replace the configuration when creating; never clobber an author's
     // existing work on an established screen.
-    if (!screen) setConfig(TEMPLATE[next] ?? "{}");
+    if (!screen) setConfig(starter(next));
   }
 
   return (
@@ -132,8 +98,12 @@ export function ScreenEditor({
           onChange={(e) => pickType(e.target.value)}
           className="min-h-[var(--target-min)] w-full rounded-[var(--radius-input)] border border-[var(--color-border)] bg-[var(--color-surface)] px-[var(--space-s)] text-[length:var(--text-label)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus)]"
         >
-          {SCREEN_TYPES.map((t) => (
-            <option key={t.value} value={t.value}>{t.label}</option>
+          {FAMILIES.map((f) => (
+            <optgroup key={f} label={f}>
+              {screenCatalog.filter((e) => e.family === f).map((e) => (
+                <option key={e.type} value={e.type}>{e.label}</option>
+              ))}
+            </optgroup>
           ))}
         </select>
       </Field>

@@ -33,14 +33,21 @@ export function MissionRunner({
 }) {
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | undefined>();
+  const [notice, setNotice] = useState<string | undefined>();
+  // Bumped by a successful retry, so the screen remounts with empty input.
+  const [epoch, setEpoch] = useState(0);
 
   function advance(interaction: MissionInteraction) {
     setError(undefined);
+    setNotice(undefined);
     startTransition(async () => {
       const outcome = await recordInteractionAction(missionSlug, interaction);
       if (!outcome.ok) {
         // Nothing moved. The screen stays mounted with its input intact.
-        setError(outcome.message);
+        if ("notAccepted" in outcome && outcome.notAccepted) setNotice(outcome.message);
+        else setError(outcome.message);
+      } else if (interaction.kind === "retry") {
+        setEpoch((n) => n + 1);
       }
     });
   }
@@ -54,6 +61,7 @@ export function MissionRunner({
     missionSlug,
     mode: "learner",
     support: [],
+    notice,
     report: (name, detail) => {
       void recordMissionEventAction(missionSlug, name, detail);
     },
@@ -62,7 +70,7 @@ export function MissionRunner({
   return (
     <MissionContextProvider value={context}>
     <MissionScreenRenderer
-      key={screen.screenKey}
+      key={`${screen.screenKey}:${epoch}`}
       screen={screen}
       state={state}
       missionSlug={missionSlug}

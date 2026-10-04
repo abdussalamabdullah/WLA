@@ -17,6 +17,7 @@ const SECTIONS: { key: keyof MissionDefinition; title: string; help: string }[] 
   { key: "variants", title: "Variants", help: "Approved versions of the starting situation. Each run gets one, kept for the whole run." },
   { key: "pools", title: "Controlled randomisation", help: "Draw from an approved pool, with weights and exclusions. The draw is kept for the whole run." },
   { key: "checkpoints", title: "Checkpoints and stages", help: "Points to come back to across sessions, and stages that open after a real-world interval." },
+  { key: "workspaces", title: "Workspaces", help: "Boards that persist across screens: evidence, clues, routes, resources, relationships. Objects appear as the mission allows; placements are remembered." },
   { key: "stages", title: "Stage names (for reporting)", help: "Screen key → stage name, so insights group drop-off by stage." },
 ];
 
@@ -36,6 +37,9 @@ export function DefinitionEditor({
   definition: MissionDefinition;
 }) {
   const [value, setValue] = useState<MissionDefinition>(definition);
+  // The JSON text while it is being edited (null = derived from `value`).
+  const [raw, setRaw] = useState<string | null>(null);
+  const [jsonError, setJsonError] = useState<string | null>(null);
   const [state, action, pending] = useActionState(saveDefinitionAction, initial);
   const parsed = missionDefinition.safeParse(value);
   const shape = missionDefinition.shape;
@@ -92,13 +96,36 @@ export function DefinitionEditor({
           )}
         </details>
 
+        <details>
+          <summary className="inline-flex min-h-[var(--target-min)] cursor-pointer items-center text-[length:var(--text-small)] text-[var(--color-text-muted)]">Advanced: edit as JSON</summary>
+          <label htmlFor="definition-json" className="sr-only">Mission logic as JSON</label>
+          <textarea
+            id="definition-json"
+            rows={12}
+            value={raw ?? JSON.stringify(value, null, 2)}
+            onChange={(e) => {
+              setRaw(e.target.value);
+              try {
+                setValue(JSON.parse(e.target.value) as MissionDefinition);
+                setJsonError(null);
+              } catch {
+                setJsonError("Not valid JSON yet.");
+              }
+            }}
+            onBlur={() => { if (!jsonError) setRaw(null); }}
+            spellCheck={false}
+            className="mt-[var(--space-s)] w-full rounded-[var(--radius-input)] border border-[var(--color-border)] bg-[var(--color-surface)] p-[var(--space-s)] font-mono text-[length:var(--text-small)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus)]"
+          />
+          {jsonError && <p className="text-[length:var(--text-small)] text-[var(--color-error)]">{jsonError}</p>}
+        </details>
+
         {!parsed.success && (
           <p className="text-[length:var(--text-small)] text-[var(--color-error)]">
             Not ready to save: {parsed.error.issues[0]?.path.join(".")} — {parsed.error.issues[0]?.message}
           </p>
         )}
         <div>
-          <Button type="submit" isLoading={pending} loadingLabel="Saving…" disabled={!parsed.success}>Save mission logic</Button>
+          <Button type="submit" isLoading={pending} loadingLabel="Saving…" disabled={!parsed.success || Boolean(jsonError)}>Save mission logic</Button>
         </div>
       </form>
     </section>

@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { screenConfigByType, completionRule } from "@/features/mission-engine/schemas";
+import { screenCatalog } from "@/features/mission-engine/interactions/catalog";
+import { libraryTypes } from "@/features/mission-engine/interactions/schemas";
 
 const repo = join(__dirname, "../../../..");
 const read = (p: string) => readFileSync(join(repo, p), "utf8");
@@ -29,8 +31,7 @@ const allSql = () =>
 
 describe("mission builder authors only what the engine can render (D-56)", () => {
   it("offers no screen type the engine has no schema for", () => {
-    const editor = read("src/components/admin/screen-editor.tsx");
-    const offered = [...editor.matchAll(/\{ value: "([a-z_]+)", label:/g)].map((m) => m[1]);
+    const offered = screenCatalog.map((e) => e.type);
 
     expect(offered.length).toBeGreaterThan(0);
     for (const type of offered) {
@@ -39,33 +40,25 @@ describe("mission builder authors only what the engine can render (D-56)", () =>
   });
 
   it("offers every screen type the engine CAN render, so authoring is not silently narrower", () => {
-    const editor = read("src/components/admin/screen-editor.tsx");
-    const offered = new Set(
-      [...editor.matchAll(/\{ value: "([a-z_]+)", label:/g)].map((m) => m[1]),
-    );
+    const offered = new Set(screenCatalog.map((e) => e.type));
     for (const type of Object.keys(screenConfigByType)) {
       expect(offered).toContain(type);
     }
+    const editor = read("src/components/admin/screen-editor.tsx");
+    expect(editor).toContain("screenCatalog");
   });
 
   it("every starter template parses against its own engine schema", () => {
-    const editor = read("src/components/admin/screen-editor.tsx");
-    const block = editor.slice(
-      editor.indexOf("const TEMPLATE"),
-      editor.indexOf("export type EditableScreen"),
-    );
-    const entries = [...block.matchAll(/^\s{2}([a-z_]+): `([\s\S]*?)`,$/gm)];
-    expect(entries.length).toBe(Object.keys(screenConfigByType).length);
-
-    for (const [, type, raw] of entries) {
-      const json = raw.replace(/\\n/g, "\n");
-      const parsed = JSON.parse(json);
-      const schema = screenConfigByType[type as keyof typeof screenConfigByType];
+    expect(screenCatalog.length).toBe(Object.keys(screenConfigByType).length);
+    for (const { type, template } of screenCatalog) {
+      const schema = screenConfigByType[type];
       expect(schema, `no schema for ${type}`).toBeDefined();
-      // A template may legitimately have empty strings a real screen would
-      // fill in; what must hold is that its SHAPE is the schema's shape.
-      const result = schema.safeParse(parsed);
+      // Built-in starters may have blanks a real screen would fill in; what
+      // must hold is that their SHAPE is the schema's shape. Library starters
+      // are complete examples and must parse as they stand.
+      const result = schema.safeParse(template);
       if (!result.success) {
+        expect(libraryTypes as string[], `${type}: ${result.error.issues[0]?.message}`).not.toContain(type);
         const onlyEmptyStrings = result.error.issues.every(
           (i) => i.code === "too_small" || i.message.toLowerCase().includes("expected"),
         );
@@ -310,19 +303,17 @@ describe("every screen template can actually be saved once filled in", () => {
    * for fields the editor never showed them. This fills every blank and
    * parses — it is the schema, not a copy of it, that decides.
    */
-  const src = read("src/components/admin/screen-editor.tsx");
-  const block = src.slice(src.indexOf("const TEMPLATE"), src.indexOf("};", src.indexOf("const TEMPLATE")) + 1);
-  const templates = new Function(`return (${block.slice(block.indexOf("{"))})`)() as Record<string, string>;
-  const offered = [...src.matchAll(/\{ value: "([a-z_]+)", label:/g)].map((m) => m[1]);
+  const offered = screenCatalog.map((e) => e.type);
 
   it("has a template for every screen type the editor offers", () => {
-    expect(Object.keys(templates).sort()).toEqual([...offered].sort());
+    expect(new Set(offered).size).toBe(offered.length);
+    expect([...offered].sort()).toEqual(Object.keys(screenConfigByType).sort());
   });
 
-  for (const type of offered) {
+  for (const { type, template } of screenCatalog) {
     it(`${type}: filled template passes the engine schema`, () => {
-      const filled = JSON.parse(templates[type].replace(/""/g, '"x"'));
-      const result = screenConfigByType[type as keyof typeof screenConfigByType].safeParse(filled);
+      const filled = JSON.parse(JSON.stringify(template).replace(/""/g, '"x"'));
+      const result = screenConfigByType[type].safeParse(filled);
       expect(result.success, result.success ? "" : JSON.stringify(result.error.issues)).toBe(true);
     });
   }

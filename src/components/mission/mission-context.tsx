@@ -24,6 +24,12 @@ export type MissionContextValue = {
   /** Mission Control v2 items for the current screen (projected). */
   support: SupportItem[];
   report: (name: "mission_control_opened" | "kit_opened" | "device_fallback_used", detail?: { level?: number; source?: string }) => void;
+  /**
+   * The last input was not accepted (a contract's validation, D-78): calm
+   * guidance, shown by ScreenFrame. Distinct from a failed save, which is
+   * the screen's `error`. Nothing moved in either case.
+   */
+  notice?: string;
 };
 
 const MissionContext = createContext<MissionContextValue>({

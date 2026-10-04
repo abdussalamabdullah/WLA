@@ -21,6 +21,22 @@ import {
   TrackerConfirmationScreen,
   TrackerScreen,
 } from "@/components/mission/screens";
+import {
+  AllocateScreen,
+  ArrangeScreen,
+  CodeEntryScreen,
+  CompareScreen,
+  HotspotScreen,
+  InventoryScreen,
+  MapScreen,
+  MatchingScreen,
+  NumericEntryScreen,
+  PatternGridScreen,
+  SimulationScreen,
+  SketchScreen,
+  TokenSequenceScreen,
+  WorkspaceScreen,
+} from "@/components/mission/screens/library";
 import type { MissionScreen } from "./navigation";
 import type { MissionInteraction, MissionStateData } from "./schemas";
 
@@ -42,6 +58,21 @@ registerScreens({
   reveal: RevealScreen,
   handoff: HandoffScreen,
   completion: CompletionScreen,
+  // The interaction library (D-86).
+  numeric_entry: NumericEntryScreen,
+  code_entry: CodeEntryScreen,
+  token_sequence: TokenSequenceScreen,
+  arrange: ArrangeScreen,
+  matching: MatchingScreen,
+  allocate: AllocateScreen,
+  inventory: InventoryScreen,
+  compare: CompareScreen,
+  hotspot: HotspotScreen,
+  sketch: SketchScreen,
+  map: MapScreen,
+  pattern_grid: PatternGridScreen,
+  simulation: SimulationScreen,
+  workspace: WorkspaceScreen,
 });
 
 /**

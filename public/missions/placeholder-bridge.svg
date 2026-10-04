@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 240" role="img" aria-label="A simple bridge drawing with a deck, two towers and cables">
+  <rect width="400" height="240" fill="#f6f1e7"/>
+  <rect x="20" y="144" width="360" height="30" fill="#8a8169"/>
+  <rect x="80" y="30" width="40" height="114" fill="#5d5a4e"/>
+  <rect x="280" y="30" width="40" height="114" fill="#5d5a4e"/>
+  <path d="M100 34 Q200 140 300 34" fill="none" stroke="#3b3a33" stroke-width="4"/>
+  <path d="M100 34 L20 144 M300 34 L380 144" stroke="#3b3a33" stroke-width="4"/>
+  <rect x="0" y="174" width="400" height="66" fill="#c9d6c2"/>
+</svg>
