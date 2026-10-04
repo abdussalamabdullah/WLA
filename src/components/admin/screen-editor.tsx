@@ -8,6 +8,7 @@ import { SchemaForm } from "./schema-form";
 import { screenConfigByType } from "@/features/mission-engine/schemas";
 import { commonScreenConfig } from "@/features/mission-engine/definition";
 import { screenCatalog, templateFor } from "@/features/mission-engine/interactions/catalog";
+import { thinkingPrompts } from "@/features/mission-engine/patterns";
 
 const initial: BuilderState = {};
 
@@ -41,6 +42,8 @@ export function ScreenEditor({
 }) {
   const [state, action, pending] = useActionState(saveScreenAction, initial);
   const [type, setType] = useState(screen?.type ?? "content");
+  // A thinking prompt (Plan §7) seeds the title as well; the key remounts the field.
+  const [seed, setSeed] = useState({ n: 0, title: screen?.title ?? "" });
   const [config, setConfig] = useState(
     screen ? JSON.stringify(screen.configuration, null, 2) : starter("content"),
   );
@@ -108,8 +111,28 @@ export function ScreenEditor({
         </select>
       </Field>
 
+      {!screen && (
+        <Field label="Start from a thinking prompt (optional)" htmlFor="thinking-prompt" hint="Brief reflection that fits the mission's rhythm. Recall earlier answers with {{response.screen_key}} or {{choice.screen_key}}.">
+          <select
+            id="thinking-prompt"
+            defaultValue=""
+            onChange={(e) => {
+              const t = thinkingPrompts.find((x) => x.id === e.target.value);
+              if (!t) return;
+              setType(t.type);
+              setConfig(JSON.stringify(t.configuration, null, 2));
+              setSeed((s) => ({ n: s.n + 1, title: t.title }));
+            }}
+            className="min-h-[var(--target-min)] w-full rounded-[var(--radius-input)] border border-[var(--color-border)] bg-[var(--color-surface)] px-[var(--space-s)] text-[length:var(--text-label)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus)]"
+          >
+            <option value="">—</option>
+            {thinkingPrompts.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+          </select>
+        </Field>
+      )}
+
       <Field label="Title" htmlFor="title" error={err("title")}>
-        <Input id="title" name="title" defaultValue={screen?.title ?? ""} />
+        <Input key={seed.n} id="title" name="title" defaultValue={seed.title} />
       </Field>
 
       <Field label="Body" htmlFor="body" error={err("body")}>

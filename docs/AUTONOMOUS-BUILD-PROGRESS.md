@@ -211,3 +211,18 @@ camera fallback; completion with the printed code; structural analytics. **32/32
 today) — typing is always offered; compass headings depend on device calibration; printables use the standard
 Helvetica font for the added fields (the approved base carries WLA typography); QR sheets are printed from draft or
 in-review versions (D-61), and stay valid once published.
+
+---
+
+## Phase 8 — Mission Pattern Library, thinking prompts, audio assistance · COMPLETE
+
+**Implementation (D-95):** `patterns.ts` — the eight Plan §12 patterns (prefixed, editable, recall-aware) and the
+fourteen §7 thinking prompts; builder "Add a mission pattern" (`insertPatternAction`, draft-only, clash-checked)
+and "Start from a thinking prompt" when adding a screen; Mission Control audio assistance (`support[].audio`).
+
+**Tests:** vitest 684 (every pattern parses, passes QA with no blocking issue and plays to an ending; prefixes;
+prompts parse; audio resolution). **Browser QA (`patterns.mjs`, staging):** two patterns inserted through the UI,
+clashing prefix refused, flow map shows the convergence, thinking prompt seeds a screen, Preview plays the predict
+pattern with the child's own prediction recalled: 12/12 across two runs.
+
+**QA fixture on staging:** draft mission `qa-patterns-mission` (unpublished, no learners).

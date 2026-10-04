@@ -124,6 +124,9 @@ export function MissionControl({
                 <p className="wla-measure mt-[var(--space-xs)] text-[var(--color-text-muted)]">
                   {item.body}
                 </p>
+                {item.audio && /^https?:\/\//.test(item.audio) && (
+                  <audio controls preload="none" src={item.audio} aria-label={`Listen: ${item.title}`} className="mt-[var(--space-xs)] w-full" />
+                )}
                 {item.kind === "materials" && ctx.missionSlug && (
                   <Link
                     href={`/academy/missions/${ctx.missionSlug}/kit`}

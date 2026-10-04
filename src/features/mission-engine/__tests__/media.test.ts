@@ -80,3 +80,12 @@ describe("mission QA for media", () => {
     expect(c.filter((x) => /missing_|display_not/.test(x))).toEqual([]);
   });
 });
+
+describe("Mission Control audio assistance (Plan §8)", () => {
+  it("a support item's audio is requested and resolved like any media", () => {
+    const config = { support: [{ title: "Listen", body: "Hear it read aloud.", audio: "asset:help_audio" }] };
+    expect(assetKeysIn(config)).toEqual(["help_audio"]);
+    const r = resolveMedia({ ...sc(config), view: {} }, new Map([["help_audio", A("help_audio", "audio", { transcript: "Hear it." })]]));
+    expect((r.configuration as { support: { audio: string }[] }).support[0].audio).toBe("https://signed/help_audio");
+  });
+});

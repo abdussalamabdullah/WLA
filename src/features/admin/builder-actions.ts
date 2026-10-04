@@ -396,3 +396,61 @@ export async function duplicateMissionAction(
   revalidatePath("/admin/missions");
   redirect(`/admin/builder/${result.slug}/1`);
 }
+
+/**
+ * Plan §12 — insert a Mission Pattern into a draft. The pattern's screens
+ * and logic become ordinary configuration of THIS mission (prefixed keys,
+ * positions after the existing screens); nothing links back to the pattern.
+ * Each screen still goes through admin_upsert_screen and the definition
+ * through admin_set_definition, so the draft-only rules apply unchanged.
+ */
+export async function insertPatternAction(_prev: BuilderState, formData: FormData): Promise<BuilderState> {
+  const { missionPatterns } = await import("@/features/mission-engine/patterns");
+  const { missionDefinition, parseDefinition } = await import("@/features/mission-engine/definition");
+  const missionId = String(formData.get("missionId") ?? "");
+  const slug = String(formData.get("slug") ?? "");
+  const version = Number(formData.get("version") ?? 0);
+  const pattern = missionPatterns.find((p) => p.id === formData.get("pattern"));
+  const prefix = String(formData.get("prefix") ?? "").trim();
+  if (!pattern) return { fieldErrors: { pattern: "Choose a pattern." } };
+  if (!/^[a-z][a-z0-9]*_$/.test(prefix)) return { fieldErrors: { prefix: "Lower case letters and digits, ending in _ (for example part1_)." } };
+
+  const { supabase } = await requireAdmin();
+  const [{ data: existing }, { data: defRaw, error: defErr }] = await Promise.all([
+    supabase.rpc("admin_draft_screens", { p_mission_id: missionId, p_version: version }),
+    supabase.rpc("admin_draft_definition", { p_mission_id: missionId, p_version: version }),
+  ]);
+  if (defErr) return { error: "This version is published and can't be changed. Create a new version." };
+  const rows = (existing ?? []) as { screen_key: string; sequence: number }[];
+  const built = pattern.build(prefix);
+  const clash = built.screens.find((s) => rows.some((r) => r.screen_key === s.key));
+  if (clash) return { fieldErrors: { prefix: `"${clash.key}" already exists — use another prefix.` } };
+
+  const def = parseDefinition(defRaw);
+  const merged = missionDefinition.safeParse({
+    ...def,
+    variables: [...def.variables, ...(built.definition.variables ?? [])],
+    unlocks: [...def.unlocks, ...(built.definition.unlocks ?? [])],
+    events: [...def.events, ...(built.definition.events ?? [])],
+    workspaces: [...def.workspaces, ...(built.definition.workspaces ?? [])],
+  });
+  if (!merged.success) return { error: "The pattern's logic clashes with this mission's (a variable with the same name?). Try another prefix." };
+
+  const start = rows.length ? Math.max(...rows.map((r) => r.sequence)) + 10 : 10;
+  for (const [i, s] of built.screens.entries()) {
+    const { error } = await supabase.rpc("admin_upsert_screen", {
+      p_mission_id: missionId, p_version: version, p_screen_key: s.key, p_type: s.type as never,
+      p_title: s.title, p_body: s.body, p_sequence: start + i * 10, p_configuration: s.configuration as Json,
+    });
+    if (error) {
+      logWarn("insert_pattern_failed", { missionId, reason: error.message });
+      return { error: error.message.includes("version_not_editable") ? "This version is published and can't be changed." : "We couldn't add the pattern." };
+    }
+  }
+  if (built.definition.variables?.length || built.definition.unlocks?.length || built.definition.events?.length || built.definition.workspaces?.length) {
+    const { error } = await supabase.rpc("admin_set_definition", { p_mission_id: missionId, p_version: version, p_definition: merged.data as unknown as Json });
+    if (error) return { error: "The screens were added, but the pattern's logic couldn't be saved." };
+  }
+  revalidatePath(`/admin/builder/${slug}/${version}`);
+  return { ok: true };
+}

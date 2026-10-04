@@ -217,6 +217,8 @@ export const supportItem = z
     when: condition.optional(),
     /** For `materials`: a Mission Kit resource title to point at. */
     resource: z.string().optional(),
+    /** Optional audio assistance (Plan §8): "asset:<key>" of an audio asset with a transcript. */
+    audio: z.string().regex(/^asset:[a-z][a-z0-9_]*$/).optional(),
   })
   .strict();
 
