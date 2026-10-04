@@ -2,7 +2,8 @@
 
 import { useState, useTransition } from "react";
 import { MissionScreenRenderer } from "@/features/mission-engine/renderer";
-import { recordInteractionAction } from "@/features/mission-engine/actions";
+import { recordInteractionAction, recordMissionEventAction } from "@/features/mission-engine/actions";
+import { MissionContextProvider, type MissionContextValue } from "./mission-context";
 import type { MissionScreen } from "@/features/mission-engine/navigation";
 import type {
   MissionInteraction,
@@ -44,7 +45,22 @@ export function MissionRunner({
     });
   }
 
+  /*
+   * Central client analytics (F5): shared components call `report`, this
+   * provider sends it once through the allow-listed server action. The run is
+   * identified on the server, never here (D-76).
+   */
+  const context: MissionContextValue = {
+    missionSlug,
+    mode: "learner",
+    support: [],
+    report: (name, detail) => {
+      void recordMissionEventAction(missionSlug, name, detail);
+    },
+  };
+
   return (
+    <MissionContextProvider value={context}>
     <MissionScreenRenderer
       key={screen.screenKey}
       screen={screen}
@@ -54,5 +70,6 @@ export function MissionRunner({
       isPending={isPending}
       error={error}
     />
+    </MissionContextProvider>
   );
 }

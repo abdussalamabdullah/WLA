@@ -1,4 +1,11 @@
+"use client";
+
 import { createElement } from "react";
+import {
+  MissionContextProvider,
+  useMissionContext,
+  type SupportItem,
+} from "@/components/mission/mission-context";
 import { getScreenComponent, registerScreens } from "./registry";
 import {
   ChoiceScreen,
@@ -69,17 +76,26 @@ export function MissionScreenRenderer({
   isPending?: boolean;
   error?: string;
 }) {
+  const outer = useMissionContext();
   const component = getScreenComponent(screen.type);
   if (!component) return null;
 
-  return createElement(component, {
-    screen,
-    state,
-    missionSlug,
-    onAdvance,
-    isPending,
-    error,
-  });
+  // Mission Control v2 items for THIS screen (already filtered by the
+  // server's projection), made available to every shared component.
+  const support = ((screen.configuration as { support?: SupportItem[] } | null)?.support ?? []);
+
+  return createElement(
+    MissionContextProvider,
+    { value: { ...outer, missionSlug, support } },
+    createElement(component, {
+      screen,
+      state,
+      missionSlug,
+      onAdvance,
+      isPending,
+      error,
+    }),
+  );
 }
 
 /** Can this screen be rendered yet? Lets callers choose their fallback. */
