@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { EmptyState, ErrorState } from "@/components/system/states";
 import { EvidenceItem } from "@/components/mission/evidence-item";
 import { LabIcon } from "@/components/mission/lab-icon";
+import { getOffersFor } from "@/features/mission-board/board";
 import { LAB_LABEL } from "@/features/missions/labs";
 import { resolveAcademyActor } from "@/features/academy/actor";
 import { getTrailFor } from "@/features/academy/play";
@@ -18,7 +19,9 @@ export const metadata = { title: "Mission Trail" };
  * feed or file repository. UI/UX §45: it should read as "a quiet record of
  * practice, not a social feed" — hence a list, not a grid of tiles.
  *
- * No sharing controls: public Trail sharing is out of scope (PRD §5).
+ * No public sharing (PRD §5). The one way out is the moderated Mission Board
+ * (D-73): an eligible entry may be OFFERED — with a parent's permission,
+ * anonymised, and reviewed by WLA before anyone sees it.
  */
 export default async function MissionTrailPage({
   params,
@@ -44,6 +47,7 @@ export default async function MissionTrailPage({
 
   // Outside the try — notFound() throws, and the catch would swallow it.
   if (!trail) notFound();
+  const offers = await getOffersFor(actor).catch(() => new Map());
 
   return (
     <AcademyShell>
@@ -77,7 +81,8 @@ export default async function MissionTrailPage({
               const rel = evidence.related_to ? trail.evidence.find((e) => e.evidence.id === evidence.related_to)?.evidence : null;
               return (
                 <EvidenceItem key={evidence.id} evidence={evidence} url={url}
-                  related={rel ? { id: rel.id, title: rel.title } : null} />
+                  related={rel ? { id: rel.id, title: rel.title } : null}
+                  board={{ status: offers.get(evidence.id) ?? null, actor: actor.kind === "child" ? "child" : "parent", missionSlug: missionId }} />
               );
             })}
           </ul>

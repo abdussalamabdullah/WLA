@@ -1,4 +1,12 @@
-import type { MissionEvidenceRow } from "@/types/database";
+import type { BoardStatus, MissionEvidenceRow } from "@/types/database";
+import { offerToBoardAction } from "@/features/mission-board/actions";
+
+const BOARD_STATUS: Record<BoardStatus, string> = {
+  pending_permission: "Offered to the Mission Board — waiting for a grown-up’s OK",
+  pending_moderation: "Offered to the Mission Board — WLA is reviewing it",
+  published: "On the Mission Board, without your name",
+  rejected: "WLA didn’t add this one to the Mission Board",
+};
 
 /**
  * MISSION TRAIL EVIDENCE — Architecture §15, Brief §27, UI/UX §44.
@@ -27,13 +35,17 @@ export function EvidenceItem({
   evidence,
   url,
   related,
+  board,
 }: {
   evidence: MissionEvidenceRow;
   /** Signed URL for digital evidence. Always null for physical. */
   url: string | null;
   /** The earlier entry this one relates to, when it is on the same Trail. */
   related?: { id: string; title: string } | null;
+  /** Mission Board (D-73): where this entry stands, and who is looking. */
+  board?: { status: BoardStatus | null; actor: "parent" | "child"; missionSlug: string } | null;
 }) {
+  const eligible = evidence.type === "digital" && Boolean(evidence.description?.trim());
   const isPhysical = evidence.type === "physical";
   const during = evidence.source === "mission";
 
@@ -85,6 +97,24 @@ export function EvidenceItem({
           >
             View
           </a>
+        )
+      )}
+      {board && eligible && (
+        board.status ? (
+          <p className="mt-[var(--space-sm)] text-[length:var(--text-small)] text-[var(--color-text-muted)]">{BOARD_STATUS[board.status]}</p>
+        ) : (
+          <form action={offerToBoardAction} className="mt-[var(--space-sm)] flex flex-col items-start gap-[var(--space-xs)]">
+            <input type="hidden" name="evidenceId" value={evidence.id} />
+            <input type="hidden" name="missionSlug" value={board.missionSlug} />
+            <button type="submit" className="inline-flex min-h-[var(--target-min)] items-center text-[length:var(--text-label)] underline decoration-[var(--color-border-strong)] underline-offset-4 hover:decoration-[var(--color-primary)]">
+              Offer this to the Mission Board
+            </button>
+            <span className="wla-measure text-[length:var(--text-small)] text-[var(--color-text-muted)]">
+              {board.actor === "child"
+                ? "A grown-up will be asked first. Your name never goes with it."
+                : "With your permission, a copy without names or details goes to WLA to review. Nothing appears until WLA approves it, and you can take it back at any time."}
+            </span>
+          </form>
         )
       )}
     </li>

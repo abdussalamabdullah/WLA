@@ -624,3 +624,95 @@ reset role;
 select chk('device_input is a screen_type value',
   exists (select 1 from unnest(enum_range(null::screen_type)) t where t::text = 'device_input'));
 \echo ''
+\echo '=============== MISSION BOARD (0036) ==============='
+reset role;
+insert into mission_evidence (id, child_id, mission_id, type, title, description, source)
+values ('eeeeeeee-0000-0000-0000-000000000011', 'bbbbbbbb-0000-0000-0000-000000000001', :'mid', 'digital', 'Identifying', 'ChildA and SiblingB checked it. Mail me at kid@example.com or see https://example.com/x, call 07700 900123, we live near SW1A 1AA.', 'mission'),
+       ('eeeeeeee-0000-0000-0000-000000000012', 'bbbbbbbb-0000-0000-0000-000000000001', :'mid', 'physical', 'Kept at home', 'A drawing', 'completion'),
+       ('eeeeeeee-0000-0000-0000-000000000013', 'bbbbbbbb-0000-0000-0000-000000000001', :'mid', 'digital', 'Child offer', 'I started from the names.', 'mission'),
+       ('eeeeeeee-0000-0000-0000-000000000014', 'bbbbbbbb-0000-0000-0000-000000000002', :'mid', 'digital', 'Sibling offer', 'Mine.', 'mission');
+set role authenticated; set request.jwt.claim.sub = 'aaaaaaaa-0000-0000-0000-000000000003';
+select chk_raises('another family cannot offer a child''s Trail entry',
+  $$select board_offer('bbbbbbbb-0000-0000-0000-000000000001', 'eeeeeeee-0000-0000-0000-000000000011')$$, 'not_your_child');
+set request.jwt.claim.sub = 'aaaaaaaa-0000-0000-0000-000000000002';
+select chk_raises('a sibling''s entry cannot be offered as this child''s',
+  $$select board_offer('bbbbbbbb-0000-0000-0000-000000000001', 'eeeeeeee-0000-0000-0000-000000000014')$$, 'not_eligible');
+select chk_raises('physical evidence is never eligible (nothing is stored)',
+  $$select board_offer('bbbbbbbb-0000-0000-0000-000000000001', 'eeeeeeee-0000-0000-0000-000000000012')$$, 'not_eligible');
+select board_offer('bbbbbbbb-0000-0000-0000-000000000001', 'eeeeeeee-0000-0000-0000-000000000011') as bc1 \gset
+select chk_raises('families cannot read the Board table directly', $$select * from board_contributions$$, 'permission denied');
+reset role;
+select text as scrubbed from board_contributions where id = :'bc1' \gset
+select chk('anonymised: no family names, email, link, phone or postcode in the copy',
+  :'scrubbed' not like '%ChildA%' and :'scrubbed' not like '%SiblingB%' and :'scrubbed' not like '%example.com%'
+  and :'scrubbed' not like '%07700%' and :'scrubbed' not like '%SW1A%' and :'scrubbed' like '%[name]%');
+select chk('a parent''s own offer goes straight to moderation (the offer is the permission)',
+  (select status = 'pending_moderation' and permitted_at is not null from board_contributions where id = :'bc1'));
+-- a child-session offer waits for the parent
+set role authenticated; set request.jwt.claim.sub = 'aaaaaaaa-0000-0000-0000-000000000002';
+select generate_child_access_code('bbbbbbbb-0000-0000-0000-000000000001') as code_b \gset
+reset role; set request.jwt.claim.sub = ''; set role anon;
+select token as tok_b from redeem_child_code(:'code_b') \gset
+select child_session_board_offer(:'tok_b', 'eeeeeeee-0000-0000-0000-000000000013') as bc2 \gset
+select chk_raises('a child cannot offer a sibling''s entry',
+  $$select child_session_board_offer('$$ || :'tok_b' || $$', 'eeeeeeee-0000-0000-0000-000000000014')$$, 'not_eligible');
+select chk('the child sees their own offer and where it stands',
+  exists (select 1 from child_session_board_offers(:'tok_b') o where o.evidence_id = 'eeeeeeee-0000-0000-0000-000000000013' and o.status = 'pending_permission'));
+select chk_ok('the child can open the Board in their own session', format($$select * from child_session_board(%L)$$, :'tok_b'));
+-- PostgREST runs STABLE/IMMUTABLE functions in a READ-ONLY transaction, and
+-- the child-session check writes (it records the session's use). So every
+-- child_session_* function must be VOLATILE, or it fails for real children
+-- while passing here (D-97).
+select chk('every child-session function is VOLATILE (PostgREST would run it read-only)',
+  not exists (select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+              where n.nspname = 'public' and p.proname like 'child\_session\_%' and p.provolatile <> 'v'));
+reset role;
+select chk('a child-session offer waits for parent permission',
+  (select status = 'pending_permission' and permitted_at is null from board_contributions where id = :'bc2'));
+set role authenticated; set request.jwt.claim.sub = 'aaaaaaaa-0000-0000-0000-000000000001';
+select chk('WLA moderation sees what a parent permitted, not what waits for permission',
+  exists (select 1 from admin_board_queue() q where q.id = :'bc1') and not exists (select 1 from admin_board_queue() q where q.id = :'bc2'));
+select chk_raises('nothing un-permitted can be published',
+  format($$select admin_board_moderate(%L, 'publish', null, null, null)$$, :'bc2'), 'not_moderatable');
+set request.jwt.claim.sub = 'aaaaaaaa-0000-0000-0000-000000000003';
+select chk_raises('another family cannot permit it', format($$select board_permit(%L, true)$$, :'bc2'), 'not_your_contribution');
+select chk_raises('a parent cannot moderate', format($$select admin_board_moderate(%L, 'publish', null, null, null)$$, :'bc1'), 'not_admin');
+select chk('another family sees none of this family''s contributions', (select count(*) = 0 from board_family_contributions()));
+set request.jwt.claim.sub = 'aaaaaaaa-0000-0000-0000-000000000002';
+select chk('the parent sees their children''s offers, with the waiting one', (select count(*) = 2 from board_family_contributions()));
+select board_permit(:'bc2', true);
+set request.jwt.claim.sub = 'aaaaaaaa-0000-0000-0000-000000000001';
+select admin_board_moderate(:'bc2', 'publish', 'I started from what the names had in common.', true, 'Started from the evidence');
+reset role;
+select chk('published, edited and curated by WLA',
+  (select status = 'published' and curated and approach = 'Started from the evidence' and text like 'I started from what%' from board_contributions where id = :'bc2'));
+-- browsing is limited to missions the child has completed
+update mission_progress set status = 'not_started' where child_id = 'bbbbbbbb-0000-0000-0000-000000000001' and mission_id = :'mid';
+set role authenticated; set request.jwt.claim.sub = 'aaaaaaaa-0000-0000-0000-000000000002';
+select chk('before completing the mission, its approaches stay hidden (no spoilers)',
+  (select count(*) = 0 from board_published('bbbbbbbb-0000-0000-0000-000000000001')));
+reset role;
+insert into mission_progress (child_id, mission_id, status, mission_version)
+values ('bbbbbbbb-0000-0000-0000-000000000001', :'mid', 'complete', 2)
+on conflict (child_id, mission_id) do update set status = 'complete';
+set role authenticated; set request.jwt.claim.sub = 'aaaaaaaa-0000-0000-0000-000000000002';
+select chk('after completing it, the published approach is there — with no author',
+  (select count(*) = 1 from board_published('bbbbbbbb-0000-0000-0000-000000000001') b where b.curated and b.text like 'I started from what%'));
+set request.jwt.claim.sub = 'aaaaaaaa-0000-0000-0000-000000000003';
+select chk_raises('a parent cannot browse as another family''s child',
+  $$select * from board_published('bbbbbbbb-0000-0000-0000-000000000001')$$, 'not_your_child');
+select chk_raises('another family cannot withdraw it', format($$select board_withdraw(%L)$$, :'bc2'), 'not_your_contribution');
+set request.jwt.claim.sub = 'aaaaaaaa-0000-0000-0000-000000000002';
+select board_withdraw(:'bc2');
+reset role;
+select chk('withdrawal removes it at once', not exists (select 1 from board_contributions where id = :'bc2'));
+-- child-profile deletion removes their contributions
+set role authenticated; set request.jwt.claim.sub = 'aaaaaaaa-0000-0000-0000-000000000002';
+select board_offer('bbbbbbbb-0000-0000-0000-000000000002', 'eeeeeeee-0000-0000-0000-000000000014') as bc3 \gset
+reset role;
+delete from child_profiles where id = 'bbbbbbbb-0000-0000-0000-000000000002';
+select chk('deleting the child removes their contributions', not exists (select 1 from board_contributions where id = :'bc3'));
+set request.jwt.claim.sub = ''; set role anon;
+select chk_raises('anon cannot read the Board table', $$select * from board_contributions$$, 'permission denied');
+reset role;
+\echo ''

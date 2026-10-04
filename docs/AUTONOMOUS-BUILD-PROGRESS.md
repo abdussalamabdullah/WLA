@@ -226,3 +226,28 @@ clashing prefix refused, flow map shows the convergence, thinking prompt seeds a
 pattern with the child's own prediction recalled: 12/12 across two runs.
 
 **QA fixture on staging:** draft mission `qa-patterns-mission` (unpublished, no learners).
+
+---
+
+## Phase 9 — Mission Board (Plan §9, D-73, D-96) · COMPLETE (retention beyond withdrawal: OPEN-14, BLOCKED on policy)
+
+**Implementation:** `board_contributions` (0036) with offer (parent / child session), permit, withdraw, browse
+(parent / child session, completed missions only) and moderation functions; scrub at copy time; Board page with
+mission and Lab filters; Trail "Offer this to the Mission Board" with status; Account "Mission Board" section for
+permission and withdrawal; admin moderation at `/admin/board` (edit, publish, reject, curate, label).
+
+**Defect found and fixed (D-97):** the child's Board reads were STABLE, so PostgREST ran them read-only and the
+child-session check's write failed for every real child — invisible locally. 0037; regression asserts every
+`child_session_*` function is VOLATILE (mutation-tested).
+
+**Migrations:** 0036, 0037. Local and staging 37/37.
+
+**Tests:** security regression 165/0 (24 Board checks: cross-family, sibling, physical-never-eligible, scrub of
+names/email/link/phone/postcode, permission before moderation, admin cannot see child, completion-gated browse,
+withdrawal and child deletion remove at once, no direct table access).
+
+**Browser QA (`board.mjs`, staging): 21/21** — QA mission built in the UI with a digital Trail marker; a child
+offers in their own session; the parent sees the anonymised copy (name and email removed) and permits; WLA edits,
+curates and publishes without seeing the child; the child sees it on the Board with no author, counts or replies,
+and their Trail says so; a sibling who hasn't finished sees nothing; withdrawal removes it from the Board and from
+moderation at once; audits at 390/1512. Fixture hygiene: the script clears the QA parent's leftover contributions.
