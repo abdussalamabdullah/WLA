@@ -153,7 +153,7 @@ export async function loadStageVia(gw: MissionGateway, opts: { device?: string }
     ]);
   }
 
-  const projected = projectCurrent(run.model, run.progress.current_screen_key, run.state, now);
+  const projected = projectCurrent(run.model, run.progress.current_screen_key, run.state, now, { responses: run.responses });
   let screen = projected.screen;
   if (screen) {
     // F7: media for this screen only, at the pinned version.

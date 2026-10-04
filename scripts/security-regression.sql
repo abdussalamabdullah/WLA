@@ -529,8 +529,10 @@ select chk('the source is untouched',
   (select published = false and version >= 2 from missions where id = :'mid'));
 \echo ''
 \echo '=============== INTERACTION LIBRARY (0031) ==============='
-reset role; set request.jwt.claim.sub='aaaaaaaa-0000-0000-0000-000000000001'; set role authenticated;
+reset role;
 select screen_key as anykey from mission_screens where mission_id = :'dupid' and version = 1 and type = 'completion' limit 1 \gset
+select chk('fixture: the copy has a completion screen to route to', :'anykey' <> '');
+set request.jwt.claim.sub='aaaaaaaa-0000-0000-0000-000000000001'; set role authenticated;
 select admin_upsert_screen(:'dupid', 1, 'lib_code', 'code_entry', 'Code', null, 9001,
   jsonb_build_object('prompt', 'Enter it', 'outcomes', jsonb_build_array(jsonb_build_object('id', 'ok', 'match', '{"values":["x"]}'::jsonb, 'next', :'anykey'))));
 select chk('a screen whose only way on is an outcome is not a dead end',
@@ -592,4 +594,29 @@ select chk('the learner state from that save is kept',
 select chk('only the allowed event was recorded',
   (select count(*) = 0 from analytics_events where name = 'not_an_event')
   and (select count(*) = 0 from analytics_events where detail ? 'child'));
+\echo ''
+\echo '=============== CHILD TRAIL v2 (0034) ==============='
+reset role;
+insert into mission_evidence (id, child_id, mission_id, type, title, description, evidence_key, source)
+values ('eeeeeeee-0000-0000-0000-000000000001', 'bbbbbbbb-0000-0000-0000-000000000001', :'mid', 'digital', 'First plan', 'Go left', 'plan', 'mission');
+insert into mission_evidence (child_id, mission_id, type, title, description, evidence_key, source, related_to, relation)
+values ('bbbbbbbb-0000-0000-0000-000000000001', :'mid', 'digital', 'Changed plan', 'Go right', 'plan2', 'mission', 'eeeeeeee-0000-0000-0000-000000000001', 'changed_plan_of');
+insert into mission_evidence (child_id, mission_id, type, title, description)
+values ('bbbbbbbb-0000-0000-0000-000000000002', :'mid', 'digital', 'Sibling secret', 'not yours');
+set role authenticated; set request.jwt.claim.sub = 'aaaaaaaa-0000-0000-0000-000000000002';
+select generate_child_access_code('bbbbbbbb-0000-0000-0000-000000000001') as code_t \gset
+reset role; set request.jwt.claim.sub = ''; set role anon;
+select token as tok_t from redeem_child_code(:'code_t') \gset
+select chk('the child Trail returns how entries relate',
+  exists (select 1 from child_session_trail(:'tok_t', 'six-names') t
+          where t.title = 'Changed plan' and t.relation = 'changed_plan_of'
+            and t.related_to = 'eeeeeeee-0000-0000-0000-000000000001' and t.source = 'mission'));
+select chk('the child Trail never returns a sibling''s entry',
+  not exists (select 1 from child_session_trail(:'tok_t', 'six-names') t where t.title = 'Sibling secret'));
+select chk_raises('a forged token gets no Trail at all',
+  $$select * from child_session_trail('0000deadbeef0000', 'six-names')$$, 'no_child_session');
+reset role; set role service_role;
+select chk('the engine loads the run''s own responses for recall',
+  jsonb_typeof(engine_load_run(:'ownpid')->'responses') = 'object');
+reset role;
 \echo ''

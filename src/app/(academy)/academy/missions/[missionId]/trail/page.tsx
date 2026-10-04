@@ -3,6 +3,8 @@ import { AcademyShell } from "@/components/academy/academy-shell";
 import { notFound } from "next/navigation";
 import { EmptyState, ErrorState } from "@/components/system/states";
 import { EvidenceItem } from "@/components/mission/evidence-item";
+import { LabIcon } from "@/components/mission/lab-icon";
+import { LAB_LABEL } from "@/features/missions/labs";
 import { resolveAcademyActor } from "@/features/academy/actor";
 import { getTrailFor } from "@/features/academy/play";
 import { AccessError } from "@/lib/permissions";
@@ -53,7 +55,11 @@ export default async function MissionTrailPage({
           ← {trail.missionTitle}
         </Link>
 
-        <h1 className="mt-[var(--space-m)] text-[length:var(--text-h1)]">
+        <p className="mt-[var(--space-m)] flex items-center gap-[var(--space-xs)] text-[length:var(--text-label)] text-[var(--color-text-muted)]">
+          <LabIcon lab={trail.lab} size={18} />
+          {LAB_LABEL[trail.lab]}
+        </p>
+        <h1 className="mt-[var(--space-xs)] text-[length:var(--text-h1)]">
           Mission Trail
         </h1>
         <p className="wla-measure mt-[var(--space-s)] text-[var(--color-text-muted)]">
@@ -67,9 +73,13 @@ export default async function MissionTrailPage({
           />
         ) : (
           <ul className="mt-[var(--space-xl)] border-t border-[var(--color-border)]">
-            {trail.evidence.map(({ evidence, url }) => (
-              <EvidenceItem key={evidence.id} evidence={evidence} url={url} />
-            ))}
+            {trail.evidence.map(({ evidence, url }) => {
+              const rel = evidence.related_to ? trail.evidence.find((e) => e.evidence.id === evidence.related_to)?.evidence : null;
+              return (
+                <EvidenceItem key={evidence.id} evidence={evidence} url={url}
+                  related={rel ? { id: rel.id, title: rel.title } : null} />
+              );
+            })}
           </ul>
         )}
       </main>

@@ -816,6 +816,12 @@ export type Database = {
           title: string;
           description: string | null;
           created_at: string;
+          /** Evidence v2 (0034). */
+          evidence_key: string | null;
+          related_to: string | null;
+          relation: MissionEvidenceRow["relation"];
+          source: "completion" | "mission";
+          screen_key: string | null;
         }[];
       };
       child_session_resources: {

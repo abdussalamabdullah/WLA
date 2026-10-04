@@ -43,19 +43,45 @@ function withoutWhen(o: Record<string, unknown>): Record<string, unknown> {
   return copy;
 }
 
-function interpolate(text: string, vars: Record<string, unknown>): string {
-  return text.replace(/\{\{\s*var\.([a-z0-9_.]+)\s*\}\}/g, (_, k: string) => {
-    const v = vars[k];
-    if (v === undefined || v === null) return "";
-    return Array.isArray(v) ? v.join(", ") : String(v);
-  });
+/**
+ * F6 recall: what the child said or chose earlier, by screen key.
+ *   {{response.<screen>}} — their own saved words (text only)
+ *   {{choice.<screen>}}   — the label of the option they chose
+ *   {{multi.<screen>}}    — the labels of the options they selected
+ * The child sees only their own run's values; nothing here can name
+ * another screen's hidden configuration.
+ */
+export type Recall = { responses?: Record<string, unknown> };
+
+function recallText(model: MissionModel, state: MissionStateData, recall: Recall, kind: string, key: string): string {
+  if (kind === "response") {
+    const v = recall.responses?.[key];
+    const text = v && typeof v === "object" && "value" in (v as object) ? (v as { value: unknown }).value : v;
+    return typeof text === "string" ? text : "";
+  }
+  const screen = screenByKey(model, key);
+  const options = ((screen?.configuration as { options?: { id: string; label: string }[] } | null)?.options ?? []);
+  const label = (id: string) => options.find((o) => o.id === id)?.label ?? "";
+  if (kind === "choice") return state.choices[key] ? label(state.choices[key]) : "";
+  if (kind === "multi") return (state.multiChoices[key] ?? []).map(label).filter(Boolean).join(", ");
+  return "";
 }
 
-function deepInterpolate(value: unknown, vars: Record<string, unknown>): unknown {
-  if (typeof value === "string") return interpolate(value, vars);
-  if (Array.isArray(value)) return value.map((v) => deepInterpolate(v, vars));
+function interpolate(text: string, vars: Record<string, unknown>, recalled: (kind: string, key: string) => string): string {
+  return text
+    .replace(/\{\{\s*var\.([a-z0-9_.]+)\s*\}\}/g, (_, k: string) => {
+      const v = vars[k];
+      if (v === undefined || v === null) return "";
+      return Array.isArray(v) ? v.join(", ") : String(v);
+    })
+    .replace(/\{\{\s*(response|choice|multi)\.([a-z0-9_]+)\s*\}\}/g, (_, kind: string, k: string) => recalled(kind, k));
+}
+
+function deepInterpolate(value: unknown, vars: Record<string, unknown>, recalled: (kind: string, key: string) => string): unknown {
+  if (typeof value === "string") return interpolate(value, vars, recalled);
+  if (Array.isArray(value)) return value.map((v) => deepInterpolate(v, vars, recalled));
   if (value && typeof value === "object") {
-    return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, deepInterpolate(v, vars)]));
+    return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, deepInterpolate(v, vars, recalled)]));
   }
   return value;
 }
@@ -82,6 +108,7 @@ export function projectScreen(
   screen: MissionScreen,
   state: MissionStateData,
   now: Date,
+  recall: Recall = {},
 ): ProjectedScreen {
   const ctx = { model, now };
   const common = commonOf(screen);
@@ -115,6 +142,7 @@ export function projectScreen(
   const projected = deepInterpolate(
     { title: screen.title, body: screen.body, configuration: config },
     vars,
+    (kind, key) => recallText(model, state, recall, kind, key),
   ) as { title: string | null; body: string | null; configuration: Record<string, unknown> };
 
   const remaining = timerRemaining(screen, state, now);
@@ -142,10 +170,11 @@ export function projectCurrent(
   currentKey: string | null,
   state: MissionStateData,
   now: Date,
+  recall: Recall = {},
 ): { screen: ProjectedScreen | null; state: MissionStateData } {
   const screen = screenByKey(model, currentKey);
   return {
-    screen: screen ? projectScreen(model, screen, state, now) : null,
+    screen: screen ? projectScreen(model, screen, state, now, recall) : null,
     state: clientState(model, state),
   };
 }

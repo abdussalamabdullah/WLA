@@ -10,9 +10,14 @@ P=/opt/homebrew/bin/psql
 "$R/scripts/local-db.sh" "$PORT" >/dev/null
 
 OUT=$($P -h 127.0.0.1 -p $PORT -U postgres -f "$R/scripts/security-regression.sql" 2>&1)
-echo "$OUT" | grep -E "(PASS|FAIL|===============)" | sed -E "s/^.*NOTICE: +//"
+echo "$OUT" | grep -E "(PASS|FAIL|===============|ERROR:)" | sed -E "s/^.*NOTICE: +//"
 PASS=$(echo "$OUT" | grep -c "NOTICE: *PASS" || true)
 FAIL=$(echo "$OUT" | grep -c "NOTICE: *FAIL" || true)
+# A statement that errors silently drops whatever check it fed. Every error
+# outside chk_raises is therefore a failure (found 2026-10-04: a fixture that
+# read nothing left a check passing for the wrong reason).
+ERRS=$(echo "$OUT" | grep -c "ERROR:" || true)
+FAIL=$((FAIL + ERRS))
 echo ""
 echo "PASS: $PASS   FAIL: $FAIL"
 /opt/homebrew/opt/postgresql@16/bin/pg_ctl -D "${WLA_PGDIR:-/tmp/wla-lms/pg}/$PORT" stop >/dev/null 2>&1 || true

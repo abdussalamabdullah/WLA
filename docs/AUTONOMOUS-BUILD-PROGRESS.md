@@ -162,3 +162,23 @@ in step. The trigger was the new simulation event — caught only by playing as 
 
 **QA fixtures on staging:** mission `qa-library-mission` (v1 published, `published = false` in the catalogue);
 children `QA Library *` under the QA parent with fixture entitlements; media files under the mission's folder.
+
+---
+
+## Phase 6 — F6 Mission Trail v2 and recall · COMPLETE
+
+**Implementation:** Trail entries show date (`<time>`), during-the-mission vs at-the-end, and a link to the
+entry they relate to; the Trail names its Lab; `child_session_trail` v2 (0034) returns the same fields to the
+child session; recall tokens `{{response.x}}` / `{{choice.x}}` / `{{multi.x}}` resolved server-side from the
+run's own responses (`engine_load_run` v2) and in Preview from the preview run; validator recall checks. D-91.
+
+**Harness defect found and fixed (D-92):** SQL runners silently dropped checks whose statements errored; one
+0031 check had passed for the wrong reason. Runners now fail on any hidden error.
+
+**Migrations:** 0034. Local and staging 34/34.
+
+**Tests:** vitest 648; security regression 139/0 (first ever `child_session_trail` checks: relations returned,
+sibling entries never, forged token refused); Six Names SQL 64/0.
+
+**Browser QA (`trail.mjs`, staging):** parent and child-session Trail at 390/1512 — Lab, dates, source,
+physical-entry wording, audits: 12/12 (the code created for the child login was turned off again afterwards).

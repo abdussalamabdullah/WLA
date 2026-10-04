@@ -440,6 +440,18 @@ export function validateMission(model: MissionModel, ctx: ValidationContext = {}
       if (a.kind === "audio" && !a.transcript) issues.push(issue("blocking", "accessibility", "missing_transcript", s.screenKey, `Audio "${a.key}" needs a text equivalent.`));
       if (a.kind === "video" && !a.captions && !a.transcript) issues.push(issue("blocking", "accessibility", "missing_captions", s.screenKey, `Video "${a.key}" needs captions or a transcript.`));
     }
+    // F6 recall: {{response.x}} / {{choice.x}} / {{multi.x}} must name a screen that can supply it.
+    const text = JSON.stringify([s.title, s.body, s.configuration]);
+    for (const [, kind, key] of text.matchAll(/\{\{\s*(response|choice|multi)\.([a-z0-9_]+)\s*\}\}/g)) {
+      const target = screens.find((x) => x.screenKey === key);
+      const fits = target && (kind === "response"
+        ? !["content", "prepare", "handoff", "reveal", "reflection", "tracker_confirmation", "sort_items", "completion"].includes(target.type)
+        : kind === "choice" ? ["choice", "compare"].includes(target.type) : target.type === "multi_choice");
+      if (!target) issues.push(issue("blocking", "logic", "recall_unknown_screen", s.screenKey, `Recalls "${key}", which is not a screen in this version.`));
+      else if (!fits) issues.push(issue("blocking", "logic", "recall_wrong_kind", s.screenKey, `Recalls the ${kind} on "${key}", which doesn't collect one.`));
+      else if (target.sequence >= s.sequence) issues.push(issue("advisory", "logic", "recall_before_answer", s.screenKey, `Recalls "${key}", which comes later — on some routes it may be empty.`));
+    }
+
     for (const m of c.media ?? []) {
       if (m.display === "before_after" && !m.compareWith) issues.push(issue("advisory", "assets", "before_after_without_pair", s.screenKey, `Media "${m.asset}" is set to before/after but has nothing to compare with.`));
       if (m.display === "layers" && !m.layers?.length) issues.push(issue("advisory", "assets", "layers_without_layers", s.screenKey, `Media "${m.asset}" is set to layers but has none.`));
