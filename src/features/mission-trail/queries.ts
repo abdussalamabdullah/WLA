@@ -1,7 +1,7 @@
 import "server-only";
 
 import { requireEntitledMission, requireOwnedChild } from "@/lib/permissions";
-import type { MissionEvidenceRow } from "@/types/database";
+import type { MissionEvidenceRow, WlaLab } from "@/types/database";
 
 /**
  * Signed URL lifetime for digital evidence.
@@ -41,7 +41,7 @@ export type EvidenceWithUrl = {
 export async function getMissionTrail(
   childId: string,
   missionIdOrSlug: string,
-): Promise<{ missionTitle: string; evidence: EvidenceWithUrl[] }> {
+): Promise<{ missionTitle: string; lab: WlaLab; evidence: EvidenceWithUrl[] }> {
   const { child, mission, supabase } = await requireEntitledMission(
     childId,
     missionIdOrSlug,
@@ -56,6 +56,7 @@ export async function getMissionTrail(
 
   return {
     missionTitle: mission.title,
+    lab: mission.lab,
     evidence: await withSignedUrls(supabase, data ?? []),
   };
 }

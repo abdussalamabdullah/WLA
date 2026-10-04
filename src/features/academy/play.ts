@@ -13,6 +13,7 @@ import { loadRun, recordRunEvents, saveRun } from "@/features/mission-engine/sto
 import type { AcademyActor } from "./actor";
 import type {
   MissionEvidenceRow,
+  WlaLab,
   MissionProgressRow,
   MissionRow,
 } from "@/types/database";
@@ -139,7 +140,7 @@ export async function getStageFor(
 export async function getTrailFor(
   actor: AcademyActor,
   missionSlug: string,
-): Promise<{ missionTitle: string; evidence: EvidenceWithUrl[] } | null> {
+): Promise<{ missionTitle: string; lab: WlaLab; evidence: EvidenceWithUrl[] } | null> {
   if (actor.kind === "parent") {
     const { getMissionTrail } = await import("@/features/mission-trail/queries");
     return getMissionTrail(actor.childId, missionSlug);
@@ -162,6 +163,7 @@ export async function getTrailFor(
 
   return {
     missionTitle: m.title,
+    lab: m.lab,
     evidence: (rows ?? []).map((e) => ({
       evidence: {
         id: e.id,
@@ -177,6 +179,11 @@ export async function getTrailFor(
         // not (Architecture §15).
         storage_path: null,
         created_at: e.created_at,
+        evidence_key: e.evidence_key,
+        related_to: e.related_to,
+        relation: e.relation,
+        source: e.source,
+        screen_key: e.screen_key,
       } as unknown as MissionEvidenceRow,
       url: null,
     })),

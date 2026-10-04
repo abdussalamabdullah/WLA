@@ -81,6 +81,8 @@ export function MissionPreview({
   const [stuck, setStuck] = useState<string | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
   const [epoch, setEpoch] = useState(0);
+  // Responses saved in this preview run, for recall ({{response.x}}) — as engine_load_run supplies them for a learner.
+  const [responses, setResponses] = useState<Record<string, unknown>>({});
   const [device, setDevice] = useState<"phone" | "tablet" | "desktop">("desktop");
   const [jumpKey, setJumpKey] = useState<string>(ordered[0]?.screenKey ?? "");
   const [stateText, setStateText] = useState<string>("");
@@ -88,7 +90,7 @@ export function MissionPreview({
 
   const screen = currentKey ? (model.screens.find((s) => s.screenKey === currentKey) ?? null) : null;
   // Render what a child would receive — the projection — not the raw model.
-  const projected = screen ? resolveMedia(projectScreen(model, screen, state, new Date()), assetMap) : null;
+  const projected = screen ? resolveMedia(projectScreen(model, screen, state, new Date(), { responses }), assetMap) : null;
   const childState = clientState(model, state);
 
   function advance(interaction: MissionInteraction) {
@@ -109,6 +111,8 @@ export function MissionPreview({
       return;
     }
     setState(result.state);
+    const saved = result.response;
+    if (saved) setResponses((r) => ({ ...r, [saved.key]: saved.value }));
     if (interaction.kind === "retry") setEpoch((n) => n + 1);
     if (result.completed) {
       setFinished(true);
@@ -153,6 +157,7 @@ export function MissionPreview({
 
   function restart() {
     setState(fresh());
+    setResponses({});
     setCurrentKey(ordered[0]?.screenKey ?? null);
     setVisited(ordered[0] ? [ordered[0].screenKey] : []);
     setFinished(false);

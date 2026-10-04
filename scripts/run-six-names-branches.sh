@@ -10,9 +10,11 @@ P=/opt/homebrew/bin/psql
 "$R/scripts/local-db.sh" "$PORT" --with-fixtures >/dev/null
 
 OUT=$($P -h 127.0.0.1 -p $PORT -U postgres -f "$R/scripts/six-names-branches.sql" 2>&1)
-echo "$OUT" | grep -E "(PASS|FAIL|===============)" | sed -E "s/^.*NOTICE: +//"
+echo "$OUT" | grep -E "(PASS|FAIL|===============|ERROR:)" | sed -E "s/^.*NOTICE: +//"
 PASS=$(echo "$OUT" | grep -c "NOTICE: *PASS" || true)
 FAIL=$(echo "$OUT" | grep -c "NOTICE: *FAIL" || true)
+# An erroring statement silently drops the check it fed: count it as a failure.
+FAIL=$((FAIL + $(echo "$OUT" | grep -c "ERROR:" || true)))
 echo ""
 echo "PASS: $PASS   FAIL: $FAIL"
 /opt/homebrew/opt/postgresql@16/bin/pg_ctl -D "${WLA_PGDIR:-/tmp/wla-lms/pg}/$PORT" stop >/dev/null 2>&1 || true

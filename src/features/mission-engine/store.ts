@@ -28,6 +28,8 @@ export type LoadedRun = {
   model: MissionModel;
   /** Full state, hidden variables included. Never sent to a client as-is. */
   state: MissionStateData;
+  /** This run's own responses by screen key, for recall (F6). */
+  responses: Record<string, unknown>;
 };
 
 export class StoreError extends Error {
@@ -49,12 +51,14 @@ export async function loadRun(progressId: string): Promise<LoadedRun> {
     definition: unknown;
     completion_rule: unknown;
     screens: MissionScreen[];
+    responses?: Record<string, unknown>;
   };
   const model = buildModel({ definition: d.definition, screens: d.screens, completionRule: d.completion_rule });
   return {
     progress: d.progress,
     model,
     state: mergeFromStorage(parseMissionState(d.state), d.private),
+    responses: d.responses ?? {},
   };
 }
 
