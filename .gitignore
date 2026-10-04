@@ -45,3 +45,6 @@ next-env.d.ts
 .agents/
 .claude/skills/
 skills-lock.json
+
+# acceptance QA state (credentials for throwaway QA accounts)
+scripts/browser/acceptance/*.json

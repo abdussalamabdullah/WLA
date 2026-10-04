@@ -1,34 +1,29 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import Link from "next/link";
 import { MissionScreenRenderer } from "@/features/mission-engine/renderer";
-import {
-  applyCanonicalTracker,
-  applyInteraction,
-  screenAfterInteraction,
-  isMissionComplete,
-  type MissionScreen,
-} from "@/features/mission-engine/navigation";
+import type { MissionScreen } from "@/features/mission-engine/navigation";
 import {
   emptyMissionState,
-  completionRule as completionRuleSchema,
   type MissionInteraction,
   type MissionStateData,
 } from "@/features/mission-engine/schemas";
+import { buildModel } from "@/features/mission-engine/definition";
+import { startRun, step } from "@/features/mission-engine/runtime";
+import { clientState, projectScreen } from "@/features/mission-engine/projection";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 /**
  * LEARNER PREVIEW — brief §6.
  *
- * NOT A SECOND RENDERER. This drives `MissionScreenRenderer` — the same
- * component, the same registry, the same screen components a learner sees — and
- * advances with the same pure engine functions the server uses:
- * `applyInteraction`, `applyCanonicalTracker`, `screenAfterInteraction`,
- * `isMissionComplete`. A preview that re-implemented any of those would
- * eventually disagree with the mission it claims to preview, which is the only
- * way a preview can actively mislead.
+ * NOT A SECOND RENDERER, NOT A SECOND ENGINE. This drives
+ * `MissionScreenRenderer` — the same components a learner sees — with the
+ * same runtime the server runs: `startRun` and `step` (runtime.ts), rendering
+ * `projectScreen` (projection.ts), which is exactly what a child's browser
+ * receives. A preview that re-implemented any of that would eventually
+ * disagree with the mission it claims to preview.
  *
  * WHAT IT DELIBERATELY DOES NOT DO
  *   No progress row, no entitlement, no analytics event, no state written
@@ -47,6 +42,7 @@ export function MissionPreview({
   version,
   screens,
   completionRule,
+  definition,
   backHref,
 }: {
   missionTitle: string;
@@ -54,69 +50,63 @@ export function MissionPreview({
   version: number;
   screens: MissionScreen[];
   completionRule: unknown;
+  /** The draft's mission-level definition (F8), read through admin_draft_definition. */
+  definition?: unknown;
   backHref: string;
 }) {
-  const ordered = useMemo(
-    () => [...screens].sort((a, b) => a.sequence - b.sequence),
-    [screens],
+  const model = useMemo(
+    () => buildModel({ definition, screens, completionRule }),
+    [definition, screens, completionRule],
   );
-  const byKey = useMemo(
-    () => new Map(ordered.map((s) => [s.screenKey, s])),
-    [ordered],
-  );
+  const ordered = model.screens;
 
-  const [currentKey, setCurrentKey] = useState<string | null>(
-    ordered[0]?.screenKey ?? null,
-  );
-  const [state, setState] = useState<MissionStateData>(emptyMissionState);
-  const [visited, setVisited] = useState<string[]>(
-    ordered[0] ? [ordered[0].screenKey] : [],
-  );
+  /** A fresh run, exactly as startVia initialises one — seed and all. */
+  const fresh = useCallback(() => {
+    const first = ordered[0]?.screenKey ?? null;
+    const seed = Math.floor(Math.random() * 0x7fffffff);
+    return startRun(model, emptyMissionState, first, new Date(), seed).state;
+  }, [model, ordered]);
+
+  const [currentKey, setCurrentKey] = useState<string | null>(ordered[0]?.screenKey ?? null);
+  const [state, setState] = useState<MissionStateData>(() => fresh());
+  const [visited, setVisited] = useState<string[]>(ordered[0] ? [ordered[0].screenKey] : []);
   const [finished, setFinished] = useState(false);
   const [stuck, setStuck] = useState<string | null>(null);
+  const [failure, setFailure] = useState<string | null>(null);
 
-  const rule = useMemo(() => {
-    const parsed = completionRule
-      ? completionRuleSchema.safeParse(completionRule)
-      : null;
-    return parsed?.success ? parsed.data : null;
-  }, [completionRule]);
-
-  const screen = currentKey ? (byKey.get(currentKey) ?? null) : null;
-
-  function nextSequenceKeyFor(s: MissionScreen): string | null {
-    const i = ordered.findIndex((x) => x.screenKey === s.screenKey);
-    return i >= 0 && i + 1 < ordered.length ? ordered[i + 1].screenKey : null;
-  }
+  const screen = currentKey ? (model.screens.find((s) => s.screenKey === currentKey) ?? null) : null;
+  // Render what a child would receive — the projection — not the raw model.
+  const projected = screen ? projectScreen(model, screen, state, new Date()) : null;
+  const childState = clientState(model, state);
 
   function advance(interaction: MissionInteraction) {
     if (!screen) return;
     setStuck(null);
-
-    // Exactly the server's order: the reducer first, then the screen's own
-    // canonical patch, so nothing the interaction carried can overwrite it.
-    const nextState = applyCanonicalTracker(
-      applyInteraction(state, interaction),
-      screen,
-    );
-    setState(nextState);
-
-    if (rule && isMissionComplete(rule, nextState)) {
+    setFailure(null);
+    let result;
+    try {
+      // The server's own transition (runtime.ts) — not a copy of it.
+      result = step(model, state, screen.screenKey, interaction, new Date());
+    } catch (e) {
+      setStuck(e instanceof Error ? `Refused: ${e.message}` : "Refused.");
+      return;
+    }
+    if (!result.ok) {
+      setState(result.state);
+      setFailure(result.failure.message);
+      return;
+    }
+    setState(result.state);
+    if (result.completed) {
       setFinished(true);
       return;
     }
-
-    const nextKey = screenAfterInteraction(
-      interaction,
-      screen,
-      nextSequenceKeyFor(screen),
-      nextState,
-    );
+    const nextKey = result.nextScreenKey;
     if (!nextKey) {
       setStuck("Nothing follows this screen and the mission is not complete.");
       return;
     }
-    if (!byKey.has(nextKey)) {
+    if (!model.screens.some((s) => s.screenKey === nextKey)) {
       setStuck(`This screen leads to "${nextKey}", which does not exist in this version.`);
       return;
     }
@@ -125,11 +115,12 @@ export function MissionPreview({
   }
 
   function restart() {
-    setState(emptyMissionState);
+    setState(fresh());
     setCurrentKey(ordered[0]?.screenKey ?? null);
     setVisited(ordered[0] ? [ordered[0].screenKey] : []);
     setFinished(false);
     setStuck(null);
+    setFailure(null);
   }
 
   return (
@@ -201,12 +192,13 @@ export function MissionPreview({
         ) : screen ? (
           <>
             <MissionScreenRenderer
-              key={screen.screenKey}
-              screen={screen}
-              state={state}
+              key={`${screen.screenKey}:${state.attempts[screen.screenKey] ?? 0}`}
+              screen={projected ?? screen}
+              state={childState}
               missionSlug={missionSlug}
               onAdvance={advance}
               isPending={false}
+              error={failure ?? undefined}
             />
             <p
               className={cn(

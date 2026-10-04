@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { condition as conditionSchema } from "./conditions";
 
 /**
  * MISSION SCREEN CONFIGURATION SCHEMAS
@@ -123,7 +124,7 @@ export const choiceConfig = z.object({
         next: nextRef,
       }),
     )
-    .min(2),
+    .min(1),
   /**
    * Shown once a response is selected and before it is confirmed.
    *
@@ -173,7 +174,7 @@ export const revealConfig = z.object({
   revealLabel: z.string().default("Show me"),
   revealedTitle: z.string().optional(),
   revealedBody: z.string().min(1),
-  condition: z.discriminatedUnion("type", [
+  condition: z.union([z.discriminatedUnion("type", [
     /** Unlocks when the child explicitly asks — the common case. */
     z.object({ type: z.literal("child_action") }),
     /** Unlocks based on an earlier choice. */
@@ -187,7 +188,7 @@ export const revealConfig = z.object({
       type: z.literal("response_exists"),
       screenKey: z.string().min(1),
     }),
-  ]),
+  ], ), z.lazy(() => conditionSchema)]),
   /**
    * Prompts shown AFTER the reveal. Read-and-reflect; no field, nothing
    * stored. Six Names' Evidence asks "What does this evidence explain? What
@@ -453,6 +454,12 @@ export const completionRule = z.discriminatedUnion("type", [
       ]),
     ),
   }),
+  /**
+   * Any condition the shared evaluator understands (F2). The two shapes
+   * above are kept because published versions and pinned runs carry them
+   * (D-17); they are translated into this form, never evaluated separately.
+   */
+  z.object({ type: z.literal("condition"), when: z.lazy(() => conditionSchema) }),
 ]);
 
 export type CompletionRule = z.infer<typeof completionRule>;
@@ -485,6 +492,27 @@ export const missionStateData = z.object({
    */
   respondedScreens: z.array(z.string()).default([]),
   custom: z.record(z.string(), z.unknown()).default({}),
+  /*
+   * F1 — added by the engine foundation. Every field defaults to empty, so
+   * state written before the foundation (Six Names runs in flight) parses
+   * unchanged.
+   */
+  /** Declared mission variables (variables.ts). Hidden ones are stored privately. */
+  variables: z.record(z.string(), z.unknown()).default({}),
+  /** Unlock keys gained, in order. Monotonic within a run. */
+  unlocked: z.array(z.string()).default([]),
+  /** Validation attempts per screen, for retry limits and analytics. */
+  attempts: z.record(z.string(), z.number().int().nonnegative()).default({}),
+  /** Server-time marks: `start`, `screen:<key>`, `checkpoint:<key>`, `event:<key>`. */
+  marks: z.record(z.string(), z.string()).default({}),
+  /** Changing-condition events already fired. Stored privately. */
+  firedEvents: z.array(z.string()).default([]),
+  /** The approved variant this run uses. Stored privately; recorded for consistency. */
+  variant: z.string().nullable().default(null),
+  /** Randomisation seed — server-generated, stored privately, never sent to a client. */
+  seed: z.number().int().nullable().default(null),
+  /** Persistent interactive workspaces: placements and links by workspace key. */
+  workspaces: z.record(z.string(), z.unknown()).default({}),
 });
 
 export type MissionStateData = z.infer<typeof missionStateData>;
@@ -497,6 +525,14 @@ export const emptyMissionState: MissionStateData = {
   multiChoices: {},
   respondedScreens: [],
   custom: {},
+  variables: {},
+  unlocked: [],
+  attempts: {},
+  marks: {},
+  firedEvents: [],
+  variant: null,
+  seed: null,
+  workspaces: {},
 };
 
 /**
@@ -541,6 +577,16 @@ export const missionInteraction = z.discriminatedUnion("kind", [
     key: z.string().min(1),
     value: z.unknown(),
   }),
+  /**
+   * F4 — the generic interaction for every contract-based screen type. The
+   * value's shape is checked by that type's contract (contract.ts), on the
+   * server, before anything changes.
+   */
+  z.object({ kind: z.literal("submit"), screenKey: z.string().min(1), value: z.unknown() }),
+  /** Clear this screen's input and try again, where the screen allows it (D-78). */
+  z.object({ kind: z.literal("retry"), screenKey: z.string().min(1) }),
+  /** A timed stage ran out. Accepted only once server time agrees. */
+  z.object({ kind: z.literal("timer_expired"), screenKey: z.string().min(1) }),
 ]);
 
 export type MissionInteraction = z.infer<typeof missionInteraction>;

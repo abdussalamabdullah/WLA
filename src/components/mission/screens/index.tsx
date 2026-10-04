@@ -472,7 +472,9 @@ export function RevealScreen({
   error,
 }: ScreenComponentProps) {
   const config = parseScreenConfig("reveal", screen.configuration);
-  const revealed = isRevealed(screen, state);
+  // The server decides (projection.ts, D-81): the browser no longer receives
+  // the reveal's condition or, until it opens, its content.
+  const revealed = screen.view?.revealed ?? isRevealed(screen, state);
 
   return (
     <ScreenFrame

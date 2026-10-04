@@ -44,6 +44,7 @@ export function BuilderWorkspace({
   noteContent,
   noteDocumentPath,
   noteDocumentUrl,
+  paths = [],
 }: {
   missionId: string;
   slug: string;
@@ -57,6 +58,8 @@ export function BuilderWorkspace({
   noteContent: string | null;
   noteDocumentPath: string | null;
   noteDocumentUrl: string | null;
+  /** Every route the QA simulator played (validator.ts). */
+  paths?: { decisions: string[]; screens: string[]; outcome: string; detail: string | null }[];
 }) {
   const [editing, setEditing] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
@@ -222,6 +225,28 @@ export function BuilderWorkspace({
               </li>
             ))}
           </ul>
+        )}
+
+        {/*
+          BRANCH TESTING — every route the automated QA played through the
+          real runtime. A route that does not reach Complete is a blocking
+          problem above; this shows the whole picture.
+        */}
+        {paths.length > 0 && (
+          <details className="mt-[var(--space-l)]">
+            <summary className="inline-flex min-h-[var(--target-min)] cursor-pointer items-center text-[length:var(--text-label)] font-medium">
+              Branch test: {paths.filter((p) => p.outcome === "complete").length} of {paths.length} routes reach Complete
+            </summary>
+            <ol className="mt-[var(--space-s)] flex flex-col gap-[var(--space-xs)]">
+              {paths.map((p, i) => (
+                <li key={i} className="text-[length:var(--text-small)]">
+                  <strong>{p.outcome === "complete" ? "Completes" : "Does not complete"}</strong>
+                  {p.decisions.length ? ` — ${p.decisions.join(" → ")}` : ""}
+                  <span className="text-[var(--color-text-muted)]"> · {p.screens.length} screens{p.detail ? ` · ${p.detail}` : ""}</span>
+                </li>
+              ))}
+            </ol>
+          </details>
         )}
 
         <PublishPanel

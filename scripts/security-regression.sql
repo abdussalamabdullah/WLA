@@ -146,10 +146,10 @@ set role anon;
 -- Forged progress id: holding one is not authorisation.
 select chk_raises('sibling cannot persist onto another child progress id',
   format($$select child_session_persist_state(%L, %L, '{}'::jsonb, 'the_list')$$, :'tokb', :'pid'),
-  'not_this_childs_record');
+  'permission denied');
 select chk_raises('sibling cannot complete another child run',
   format($$select child_session_complete_mission(%L, %L, '{}'::jsonb)$$, :'tokb', :'pid'),
-  'not_this_childs_record');
+  'permission denied');
 select chk_raises('a forged token cannot start anything',
   format($$select child_session_start_mission('not-a-token', %L)$$, :'mid'),
   'no_child_session');
@@ -191,7 +191,7 @@ select chk_raises('a parent cannot start a mission for another family child',
   'not_your_child');
 select chk_raises('a parent cannot persist onto another family run',
   format($$select persist_mission_state(%L, '{}'::jsonb, 'the_list')$$, :'pid'),
-  'not_your_record');
+  'permission denied');
 
 \echo ''
 \echo '=============== ADMIN ESCALATION ==============='
@@ -310,9 +310,12 @@ select admin_upsert_screen(:'newmid',1,'intro','content','Intro','Hello',10,'{"n
 select chk('a transition to a missing screen is caught',
   (select count(*) > 0 from validate_mission_version(:'newmid',1)
     where blocking and code = 'broken_reference'));
-select chk('the now-orphaned completion screen is caught',
-  (select count(*) > 0 from validate_mission_version(:'newmid',1)
-    where blocking and code in ('unreachable_screen','unreachable_completion')));
+-- Reachability moved to the TypeScript simulation (validator.ts, 0028); the
+-- database's guarantee is that a structurally broken version cannot publish,
+-- even through a direct RPC call.
+select chk_raises('a broken version cannot be published, even by a direct RPC',
+  format($$select set_mission_version_status(%L,1,'published')$$, :'newmid'),
+  'validation_failed');
 select admin_upsert_screen(:'newmid',1,'intro','content','Intro','Hello',10,'{"next":"finish"}'::jsonb);
 
 select chk_ok('a valid draft publishes',
@@ -448,4 +451,56 @@ reset role; set request.jwt.claim.sub='aaaaaaaa-0000-0000-0000-000000000002'; se
 select chk('a file becomes readable only once its version is released',
   (select count(*) = 1 from storage.objects where name = :'mid' || '/draft-secret.pdf'));
 reset role;
+\echo ''
+
+\echo '=============== SERVER-AUTHORITATIVE STATE (D-80) ==============='
+-- The hole this closes: a family writing ITS OWN run directly — skipping to
+-- Evidence, landing on the unused consequence, or completing without playing.
+reset role;
+select id as ownpid from mission_progress where child_id='bbbbbbbb-0000-0000-0000-000000000001' limit 1 \gset
+set request.jwt.claim.sub='aaaaaaaa-0000-0000-0000-000000000002'; set role authenticated;
+select chk('fixture: the parent can still READ their own run', (select count(*) >= 1 from mission_progress));
+select chk_raises('a parent cannot PATCH their own run''s screen (skip to Evidence)',
+  format($$update mission_progress set current_screen_key = 'evidence' where id = %L$$, :'ownpid'), 'permission denied');
+select chk_raises('a parent cannot mark their own run complete directly',
+  format($$update mission_progress set status = 'complete' where id = %L$$, :'ownpid'), 'permission denied');
+select chk_raises('a parent cannot write their own mission_state',
+  format($$update mission_state set state_data = '{}'::jsonb where progress_id = %L$$, :'ownpid'), 'permission denied');
+select chk_raises('a parent cannot insert evidence directly',
+  format($$insert into mission_evidence (child_id, mission_id, type, title) select child_id, mission_id, 'physical', 'forged' from mission_progress where id = %L$$, :'ownpid'), 'permission denied');
+select chk_raises('a parent cannot write responses directly',
+  format($$insert into mission_responses (progress_id, screen_key, value) values (%L, 'x', '"y"')$$, :'ownpid'), 'permission denied');
+select chk_raises('a parent cannot call persist_mission_state on their OWN run',
+  format($$select persist_mission_state(%L, '{}'::jsonb, 'evidence')$$, :'ownpid'), 'permission denied');
+select chk_raises('a parent cannot call complete_mission on their OWN run',
+  format($$select complete_mission(%L, '{}'::jsonb, '[]'::jsonb)$$, :'ownpid'), 'permission denied');
+select chk_raises('a parent cannot call the engine store',
+  format($$select engine_save(%L, '{}', '{}', 'evidence', null, null, true, '[]', '[]')$$, :'ownpid'), 'permission denied');
+select chk_raises('a parent cannot load the whole pinned model',
+  format($$select engine_load_run(%L)$$, :'ownpid'), 'permission denied');
+select chk_raises('a parent cannot read private run state',
+  $$select * from mission_state_private$$, 'permission denied');
+select chk_raises('a parent cannot record analytics directly',
+  format($$select engine_record_events(%L, '[]')$$, :'ownpid'), 'permission denied');
+select chk_raises('a parent cannot read a version definition',
+  $$select definition from mission_versions$$, 'permission denied');
+select chk_ok('version metadata is still readable by column',
+  $$select id, status from mission_versions$$);
+reset role; set request.jwt.claim.sub = ''; set role anon;
+select chk_raises('anon cannot call the engine store',
+  format($$select engine_save(%L, '{}', '{}', 'evidence', null, null, true, '[]', '[]')$$, :'ownpid'), 'permission denied');
+reset role; set role service_role;
+select chk_ok('the server role can load a run', format($$select engine_load_run(%L)$$, :'ownpid'));
+select chk('the loaded run carries the whole pinned model server-side',
+  (select jsonb_array_length(engine_load_run(:'ownpid')->'screens') > 0));
+reset role;
+select chk('analytics detail cannot carry free-text keys (D-76)',
+  not exists (select 1 from pg_constraint where conname = 'analytics_events_detail_keys_check') = false);
+do $$ begin
+  insert into analytics_events (name, mission_id, mission_version, detail)
+    select 'screen_entered', id, 1, '{"child":"x"}'::jsonb from missions limit 1;
+  perform chk('an analytics row with a non-allow-listed detail key is refused', false);
+exception when check_violation then
+  perform chk('an analytics row with a non-allow-listed detail key is refused', true);
+end $$;
 \echo ''

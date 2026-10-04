@@ -12,6 +12,8 @@ import {
   type MissionScreen,
   type MissionStateData,
 } from "../index";
+import { buildModel } from "../definition";
+import { isComplete } from "../runtime";
 
 const repo = join(__dirname, "../../../..");
 const migration = readFileSync(
@@ -20,6 +22,11 @@ const migration = readFileSync(
 );
 const persistence = readFileSync(
   join(repo, "src/features/mission-engine/persistence.ts"),
+  "utf8",
+);
+const runtimeSrc = readFileSync(join(repo, "src/features/mission-engine/runtime.ts"), "utf8");
+const foundation = readFileSync(
+  join(repo, "supabase/migrations/20261004100000_engine_foundation.sql"),
   "utf8",
 );
 
@@ -223,38 +230,25 @@ describe("duplicate-start protection", () => {
 
 // ─────────────────────────────────────────────── 8. child-scoped authorization ──
 describe("child-scoped authorization", () => {
-  it("every entry point goes through requireEntitledMission", () => {
-    for (const fn of ["getMissionStage", "startMission"]) {
-      const body = persistence.slice(
-        persistence.indexOf(`export async function ${fn}`),
-      );
-      const upToNext = body.slice(0, body.indexOf("\nexport ", 10));
-      expect(upToNext, fn).toContain("requireEntitledMission(");
+  it("every parent entry point goes through requireEntitledMission (D-80)", () => {
+    // The parent gateway authorises in BOTH of its database-facing steps;
+    // the engine store is only ever reached with the run that resolve() returned.
+    const gw = persistence.slice(persistence.indexOf("export function parentGateway("));
+    const gwBody = gw.slice(0, gw.indexOf("\n// ----", 10));
+    expect(gwBody.match(/requireEntitledMission\(/g), "resolve and start both authorise").toHaveLength(2);
+    for (const fn of ["getMissionStage", "startMission", "recordInteraction"]) {
+      const body = persistence.slice(persistence.indexOf(`export function ${fn}(`));
+      expect(body.slice(0, body.indexOf("\n}")), fn).toContain("parentGateway(");
     }
   });
 
-  /*
-   * recordInteraction now reaches the database through a gateway, so that the
-   * reducer, canonical tracker and completion logic are not duplicated for
-   * child sessions (D-59). The parent path must still run the permissions
-   * chain — this follows the one indirection rather than accepting it.
-   */
-  it("the parent gateway still runs the permissions chain", () => {
-    const entry = persistence.slice(
-      persistence.indexOf("export async function recordInteraction("),
-    );
-    const upToNext = entry.slice(0, entry.indexOf("\n/**"));
-    expect(upToNext, "recordInteraction must delegate to parentGateway")
-      .toContain("parentGateway(");
-
-    const gw = persistence.slice(persistence.indexOf("export function parentGateway("));
-    const gwBody = gw.slice(0, gw.indexOf("\nexport ", 10));
-    // Every database operation the gateway performs re-establishes access.
-    expect(
-      gwBody.match(/requireEntitledMission\(/g),
-      "each parent gateway write must re-establish entitlement",
-    ).toHaveLength(2);
-    expect(gwBody).toContain("getMissionStage(childId, missionIdOrSlug)");
+  it("the store is only reached with a run id the gateway resolved, never a caller's", () => {
+    // No exported entry point accepts a progress id from its caller.
+    for (const fn of ["loadStageVia", "startVia", "recordInteractionVia", "recordClientEventVia"]) {
+      const sig = persistence.slice(persistence.indexOf(`export async function ${fn}(`));
+      expect(sig.slice(0, sig.indexOf("{")), fn).not.toMatch(/progressId/i);
+    }
+    expect(persistence).toMatch(/gw\.load\(ctx\.progress\.id\)/);
   });
 
   it("the shared interaction logic never takes a child id directly", () => {
@@ -277,9 +271,12 @@ describe("child-scoped authorization", () => {
     expect(migration).toContain("and e.status = 'active'");
   });
 
-  it("the functions run as the caller, so RLS still applies", () => {
-    expect(migration).not.toContain("security definer");
-    expect(migration.match(/security invoker/g)).toHaveLength(3);
+  it("no client role can write a run (D-80)", () => {
+    expect(foundation).toMatch(/revoke insert, update, delete, truncate\s+on mission_state, mission_progress, mission_responses, mission_evidence\s+from anon, authenticated;/);
+    for (const fn of ["engine_load_run(uuid)", "engine_save(uuid, jsonb, jsonb, text, text, jsonb, boolean, jsonb, jsonb)", "engine_record_events(uuid, jsonb)"]) {
+      expect(foundation, fn).toContain(`revoke all on function ${fn} from public, anon, authenticated;`);
+      expect(foundation, fn).toContain(`grant execute on function ${fn} to service_role;`);
+    }
   });
 });
 
@@ -300,13 +297,17 @@ describe("atomic completion", () => {
   });
 
   it("completion is evaluated from configuration, never mission identity", () => {
-    // Tech Spec §31.
-    expect(persistence).toContain("mission.completion_rule");
-    expect(persistence).not.toMatch(/mission\.(slug|id)\s*===?\s*["']/);
+    // Tech Spec §31: the definition's condition, else the pinned rule (D-17).
+    expect(runtimeSrc).toContain("model.definition.completion ?? fromLegacyCompletion(model.completionRule)");
+    for (const src of [persistence, runtimeSrc]) {
+      expect(src).not.toMatch(/mission\.(slug|id)\s*===?\s*["']/);
+    }
   });
 
   it("a mission without a completion rule never auto-completes", () => {
-    expect(persistence).toContain("rule?.success === true");
+    const model = buildModel({ definition: {}, screens, completionRule: null });
+    const done = { ...emptyMissionState, visitedScreens: screens.map((x) => x.screenKey) };
+    expect(isComplete(model, done, new Date())).toBe(false);
   });
 
   it("evaluates screen_reached and conditions rules correctly", () => {
@@ -422,8 +423,9 @@ describe("D-17 mission version pinning", () => {
     // Otherwise editing a live mission could leave a child unable to finish.
     expect(pinning).toContain("alter table mission_progress");
     expect(pinning).toContain("add column if not exists completion_rule jsonb");
-    expect(persistence).toContain(
-      "progress.completion_rule ?? mission.completion_rule",
+    // The run's own snapshot wins, then the version's, then the mission's.
+    expect(foundation).toContain(
+      "'completion_rule', coalesce(v_p.completion_rule, v_v.completion_rule, v_m.completion_rule)",
     );
   });
 
@@ -436,7 +438,8 @@ describe("D-17 mission version pinning", () => {
       "utf8",
     );
     expect(access).toContain("and s.version = v_progress.mission_version");
-    expect(persistence).toContain("get_current_mission_screen");
+    // The runtime loads the pinned version only — the run's, never the current.
+    expect(foundation).toContain("where s.mission_id = v_p.mission_id and s.version = v_p.mission_version");
   });
 
   it("no publishing or version-management system was introduced", () => {

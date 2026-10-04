@@ -11,6 +11,9 @@ import {
   type MissionScreen,
   type MissionStateData,
 } from "../index";
+import { buildModel } from "../definition";
+import { EngineRefusal, step } from "../runtime";
+import { projectScreen } from "../projection";
 
 /**
  * SIX NAMES — conformance to the ACADEMY BUILD BRIEF of 2026-09-27.
@@ -47,6 +50,7 @@ const withholdNext = readFileSync(
   join(repo, "supabase/migrations/20260927100100_withhold_unused_next_key.sql"),
   "utf8",
 );
+const runtimeSrc = readFileSync(join(__dirname, "../runtime.ts"), "utf8");
 const persistence = readFileSync(
   join(repo, "src/features/mission-engine/persistence.ts"),
   "utf8",
@@ -452,6 +456,39 @@ function play(d1: string, d2: string, judgement: string) {
   return { path, state, completedAt };
 }
 
+/**
+ * The same routes, played through the FOUNDATION runtime (runtime.ts) — the
+ * code the server and Learner Preview actually run since D-80. A reveal now
+ * stays on its screen (D-69), so Evidence takes two interactions: open, then
+ * Continue. Everything else must match the legacy reducer exactly.
+ */
+function playRuntime(d1: string, d2: string, judgement: string) {
+  const model = buildModel({ definition: {}, screens: graph, completionRule: COMPLETION_RULE });
+  let state: MissionStateData = emptyMissionState;
+  const path: string[] = [];
+  let key: string | null = "the_list";
+  let completed = false;
+  const now = new Date("2026-10-04T12:00:00Z");
+  for (let guard = 0; key && guard < 80 && !completed; guard++) {
+    const current = byKey.get(key)!;
+    if (path[path.length - 1] !== key) path.push(key);
+    const i =
+      current.type === "choice"
+        ? { kind: "choice" as const, screenKey: key, optionId: key === "decision1" ? d1 : key === "decision2" ? d2 : judgement }
+        : current.type === "reveal" && !state.revealed.includes(key)
+          ? { kind: "reveal" as const, screenKey: key }
+          : current.type === "handoff" || current.type === "prepare"
+            ? { kind: "handoff" as const, screenKey: key }
+            : { kind: "visit" as const, screenKey: key };
+    const r = step(model, state, key, i, now);
+    if (!r.ok) throw new Error(`refused on ${key}: ${r.failure.code}`);
+    state = r.state;
+    completed = r.completed;
+    key = r.nextScreenKey;
+  }
+  return { path, state, completed, model };
+}
+
 const ALL_C1 = ["consequence1_ask", "consequence1_stop"];
 const ALL_T1 = ["tracker1_ask", "tracker1_stop"];
 const ALL_C2 = [
@@ -637,11 +674,11 @@ describe("canonical tracker states", () => {
     expect(navigation).toContain("export function applyCanonicalTracker");
     expect(navigation).toContain("screenConfigByType[screen.type]");
 
-    // The server path still applies it, and still applies it last.
-    expect(persistence).toContain("applyCanonicalTracker");
-    expect(persistence).toMatch(
-      /applyCanonicalTracker\(\s*applyInteraction\(stage\.state, interaction\),/,
-    );
+    // The one runtime (server and Preview) applies it after the contract's
+    // own reduction, so nothing the interaction carried can overwrite it.
+    expect(runtimeSrc).toMatch(/applyCanonicalTracker\(out\.state, screen\)/);
+    expect(runtimeSrc.indexOf("contract.apply(screen, interaction, state0, ctx)"))
+      .toBeLessThan(runtimeSrc.indexOf("applyCanonicalTracker(out.state, screen)"));
   });
 
   it("there is exactly ONE canonical-tracker implementation", () => {
@@ -661,9 +698,11 @@ describe("canonical tracker states", () => {
      * could write any key — including the canonical tracker. It is now
      * refused at the client boundary.
      */
-    expect(persistence).toMatch(
-      /if \(interaction\.kind === "custom"\) \{\s*throw new Error/,
-    );
+    const model = buildModel({ definition: {}, screens: graph, completionRule: null });
+    expect(() =>
+      step(model, emptyMissionState, graph[0].screenKey,
+        { kind: "custom", key: "tracker", value: { clarity: "forged" } }, new Date()),
+    ).toThrow(EngineRefusal);
   });
 });
 
@@ -1295,16 +1334,19 @@ describe("staged information is server-authoritative", () => {
   it("completion cannot be forged from the browser", () => {
     // The rule is evaluated server-side from pinned configuration, and the
     // write happens through the atomic RPC.
-    expect(persistence).toContain(
-      "progress.completion_rule ?? mission.completion_rule",
-    );
-    expect(persistence).toContain('supabase.rpc("complete_mission"');
+    // The runtime decides completion from pinned configuration; the only
+    // write path is engine_save, which no client role may call (D-80).
+    expect(persistence).toContain("complete: result.completed");
     expect(persistence).not.toContain("req.body.completed");
+    expect(persistence).not.toMatch(/\.rpc\("(complete_mission|persist_mission_state)"/);
   });
 
   it("the client is never given more than one screen", () => {
-    expect(persistence).toContain("get_current_mission_screen");
+    // The full model stays server-side; the page receives projectCurrent only.
+    expect(persistence).toContain("projectCurrent(run.model");
     expect(persistence).not.toContain('.from("mission_screens")');
+    const stageType = persistence.slice(persistence.indexOf("export type MissionStage"));
+    expect(stageType.slice(0, stageType.indexOf("};"))).not.toMatch(/model|screens:/);
   });
 });
 
@@ -1378,6 +1420,77 @@ describe("seed integrity", () => {
     );
     for (const type of ["sort_items", "tracker_confirmation", "reflection"]) {
       expect(migration).toContain(`add value if not exists '${type}'`);
+    }
+  });
+});
+
+
+// ─────────────────────────────────── foundation runtime: Six Names unchanged ──
+
+describe("Six Names on the foundation runtime (D-80, no redesign)", () => {
+  const routes = D1.flatMap((a) => D2.map((b) => [a.id, b.id] as const));
+  it.each(routes)("%s → %s: same path and same state as the legacy engine", (a, b) => {
+    for (const j of JUDGEMENTS) {
+      const legacy = play(a, b, j.id);
+      const now = playRuntime(a, b, j.id);
+      const legacyUntilDone = legacy.path.slice(0, legacy.path.indexOf(legacy.completedAt!) + 1);
+      expect(now.path).toEqual(legacyUntilDone);
+      expect(now.completed).toBe(true);
+      expect(now.state.choices).toEqual(legacy.state.choices);
+      // The canonical tracker the server applies (the legacy reducer above
+      // never applied it): Evidence changes only Clarity.
+      const t = now.state.custom.tracker as Record<string, string>;
+      expect(t.spread).toBe("Nearly everyone");
+      expect(t.clarity).toBe("Purpose clear");
+      expect(now.state.revealed).toEqual(["evidence"]);
+    }
+  });
+
+  it("a forged `visit` cannot skip a decision", () => {
+    const model = buildModel({ definition: {}, screens: graph, completionRule: COMPLETION_RULE });
+    expect(() => step(model, emptyMissionState, "decision1", { kind: "visit", screenKey: "decision1" }, new Date()))
+      .toThrow(EngineRefusal);
+  });
+
+  it("Continue cannot skip Evidence before it is opened", () => {
+    const model = buildModel({ definition: {}, screens: graph, completionRule: COMPLETION_RULE });
+    const r = step(model, emptyMissionState, "evidence", { kind: "visit", screenKey: "evidence" }, new Date());
+    expect(r.ok).toBe(false);
+  });
+
+  it("the unopened Evidence never reaches the browser (D-81)", () => {
+    const model = buildModel({ definition: {}, screens: graph, completionRule: COMPLETION_RULE });
+    const evidence = byKey.get("evidence")!;
+    const before = JSON.stringify(projectScreen(model, evidence, emptyMissionState, new Date()));
+    const body = parseScreenConfig("reveal", evidence.configuration).revealedBody;
+    expect(before).not.toContain(body.slice(0, 40));
+    expect(before).not.toContain("canonicalTracker");
+    expect(before).not.toContain('"next"');
+    const after = JSON.stringify(projectScreen(model, evidence, { ...emptyMissionState, revealed: ["evidence"] }, new Date()));
+    expect(after).toContain(body.slice(0, 40));
+  });
+
+  it("a decision's projection names no destination", () => {
+    const model = buildModel({ definition: {}, screens: graph, completionRule: COMPLETION_RULE });
+    const p = JSON.stringify(projectScreen(model, byKey.get("decision1")!, emptyMissionState, new Date()));
+    expect(p).not.toContain("consequence1_");
+  });
+});
+
+// ──────────────────────────────── automated mission QA on the reference mission ──
+
+describe("automated mission QA passes Six Names v2 (the reference mission)", () => {
+  it("has no blocking issue, and every one of its 18 routes completes", async () => {
+    const { validateMission } = await import("../validator");
+    const model = buildModel({ definition: {}, screens: graph, completionRule: COMPLETION_RULE });
+    const { issues, paths } = validateMission(model);
+    expect(issues.filter((i) => i.severity === "blocking")).toEqual([]);
+    expect(paths.filter((p) => p.outcome === "complete")).toHaveLength(2 * 3 * 3);
+    expect(paths.every((p) => p.outcome === "complete")).toBe(true);
+    // and no path ever shows both consequences of one decision
+    for (const p of paths) {
+      expect(p.screens.filter((k) => k.startsWith("consequence1_"))).toHaveLength(1);
+      expect(p.screens.filter((k) => k.startsWith("consequence2_"))).toHaveLength(1);
     }
   });
 });

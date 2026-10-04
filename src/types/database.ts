@@ -154,6 +154,8 @@ export type MissionProgressRow = {
   last_activity_at: string;
   created_at: string;
   updated_at: string;
+  /** D-76 — random per-run key for analytics sequencing. Never a child id. */
+  analytics_key?: string;
 };
 
 export type MissionStateRow = {
@@ -199,6 +201,12 @@ export type MissionEvidenceRow = {
   /** NULL for physical evidence — the Academy does not hold the artefact. */
   storage_path: string | null;
   created_at: string;
+  /** Evidence v2 (F6). */
+  evidence_key?: string | null;
+  screen_key?: string | null;
+  related_to?: string | null;
+  relation?: "revision_of" | "changed_plan_of" | "result_of" | "later_judgement_of" | "after_of" | null;
+  source?: "completion" | "mission";
 };
 
 // ------------------------------------------------- LMS additions (D-56–D-60) --
@@ -350,6 +358,37 @@ export type Database = {
       start_mission: {
         Args: { p_child_id: string; p_mission_id: string };
         Returns: MissionProgressRow;
+      };
+      /** D-80 — service role only. The caller has authorised the run. */
+      engine_load_run: {
+        Args: { p_progress_id: string };
+        Returns: Json;
+      };
+      engine_save: {
+        Args: {
+          p_progress_id: string;
+          p_state: Json;
+          p_private: Json;
+          p_screen_key: string | null;
+          p_response_key: string | null;
+          p_response_value: Json;
+          p_complete: boolean;
+          p_evidence: Json;
+          p_events: Json;
+        };
+        Returns: MissionProgressRow;
+      };
+      engine_record_events: {
+        Args: { p_progress_id: string; p_events: Json };
+        Returns: undefined;
+      };
+      admin_draft_definition: {
+        Args: { p_mission_id: string; p_version: number };
+        Returns: Json;
+      };
+      admin_set_definition: {
+        Args: { p_mission_id: string; p_version: number; p_definition: Json };
+        Returns: undefined;
       };
       persist_mission_state: {
         Args: {

@@ -33,4 +33,18 @@ if (mode === "parent") {
   const r = await fetch(`${U}/rest/v1/mission_entitlements`, { method: "POST", headers: { ...H, Prefer: "resolution=ignore-duplicates" }, body: JSON.stringify(rows) });
   writeFileSync("qa-kids.json", JSON.stringify({ parentId: p.id, sixId: six.id, kids }));
   console.log("granted Six Names to", rows.length, "children:", r.status);
-} else console.log("usage: node fixtures.mjs parent|grant");
+} else if (mode === "kids") {
+  // Extra Six Names children for repeated runs (no replay exists, D-78).
+  const n = Number(process.argv[3] ?? 6);
+  const q = JSON.parse(readFileSync("qa-parent.json", "utf8"));
+  const p = (await (await fetch(`${U}/rest/v1/profiles?select=id&email=eq.${encodeURIComponent(q.email)}`, { headers: H })).json())[0];
+  const six = (await (await fetch(`${U}/rest/v1/missions?select=id&slug=eq.six-names`, { headers: H })).json())[0];
+  const stamp = Date.now().toString(36).slice(-4);
+  const rows = Array.from({ length: n }, (_, i) => ({ parent_id: p.id, display_name: `QA Run ${stamp}-${i + 1}`, birth_year: 2014 }));
+  const made = await (await fetch(`${U}/rest/v1/child_profiles`, { method: "POST", headers: { ...H, Prefer: "return=representation" }, body: JSON.stringify(rows) })).json();
+  await fetch(`${U}/rest/v1/mission_entitlements`, { method: "POST", headers: H, body: JSON.stringify(made.map((k) => ({ child_id: k.id, mission_id: six.id, source: "admin", status: "active" }))) });
+  const all = JSON.parse(readFileSync("qa-kids.json", "utf8"));
+  all.kids.push(...made.map((k) => ({ id: k.id, display_name: k.display_name })));
+  writeFileSync("qa-kids.json", JSON.stringify(all));
+  console.log("made", made.map((k) => k.display_name).join(", "));
+} else console.log("usage: node fixtures.mjs parent|grant|kids [n]");

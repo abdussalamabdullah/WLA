@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { PrimaryAction, ScreenFrame, SelectableOption } from "./shared";
 import {
@@ -142,7 +142,18 @@ export function SortItemsScreen({
   isPending,
   error,
 }: ScreenComponentProps) {
-  const config = parseScreenConfig("sort_items", screen.configuration);
+  /*
+   * Memoised on the screen's configuration. Parsing on every render produced a
+   * NEW `items` array each time, so the shuffle effect below — which depends
+   * on it — re-ran after every render: shuffle → render → new array → shuffle,
+   * without end. Found in staging QA: the endless urgent re-renders starved
+   * the transition to the next screen, so "Continue" sat on "Saving…" for ever
+   * although the save had succeeded, and the list re-shuffled under the child.
+   */
+  const config = useMemo(
+    () => parseScreenConfig("sort_items", screen.configuration),
+    [screen.configuration],
+  );
 
   /*
    * Shuffled once per mount, never persisted. The order is presentation, not

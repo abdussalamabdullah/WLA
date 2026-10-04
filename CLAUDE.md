@@ -67,10 +67,19 @@ functions, which derive the child from the token inside the database and never
 take a child id as an argument.
 
 `src/lib/supabase/admin.ts` bypasses RLS. Its only legitimate uses are the
-Stripe webhook, gift redemption, and signing a Mission Kit file for a child
-session **after** `child_session_resource_path` has authorised it (D-64). In
-that third case it signs a path the database has already decided the child may
-have — it never decides. If you reach for it while serving a logged-in parent,
+Stripe webhook, gift redemption, signing a Mission Kit file for a child
+session **after** `child_session_resource_path` has authorised it (D-64), and
+the **mission engine store** (`features/mission-engine/store.ts`, D-80), which
+loads and saves a run only after the permission chain or the child-session
+lookup has authorised it. In both of the last two it acts on something already
+authorised — it never decides.
+
+**Mission state is server-authoritative (D-80).** No client role may write
+`mission_progress`, `mission_state`, `mission_responses` or `mission_evidence`,
+or call a function that does. Every learner change goes
+`runtime.step` (pure) → `store.saveRun` → `engine_save` (service role). Never
+grant a client write path to run state, and never send the browser more than
+`projection.ts` produces. If you reach for it while serving a logged-in parent,
 you are almost certainly doing something wrong.
 
 ## Locked product behaviour — do not redesign

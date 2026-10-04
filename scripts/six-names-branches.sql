@@ -5,7 +5,7 @@
 -- lifecycle, immutability trigger, child sessions, the owns_child seam) did
 -- not disturb it, by playing every route to completion exactly as the
 -- application does: start_mission → get_current_mission_screen →
--- persist_mission_state → complete_mission.
+-- engine_save (the server-only store, D-80), as the Next server drives it.
 --
 -- It also re-asserts the D-42 rule that an unused sibling branch is never
 -- revealed.
@@ -61,7 +61,7 @@ begin
     v_seen := v_seen || v_screen.screen_key;
 
     if v_screen.screen_key = 'complete' then
-      perform complete_mission(v_pid, v_state, '[]'::jsonb);
+      perform engine_save(v_pid, v_state, '{}'::jsonb, null, null, null, true, '[]'::jsonb, '[{"name":"mission_completed"}]'::jsonb);
       exit;
     end if;
 
@@ -95,7 +95,7 @@ begin
       (v_state->'visitedScreens') || to_jsonb(v_screen.screen_key));
 
     exit when v_next is null;
-    perform persist_mission_state(v_pid, v_state, v_next, null, null);
+    perform engine_save(v_pid, v_state, '{}'::jsonb, v_next, null, null, false, '[]'::jsonb, '[]'::jsonb);
   end loop;
 
   return v_seen;
@@ -223,7 +223,7 @@ begin
     v_seen := v_seen || v_screen.screen_key;
 
     if v_screen.screen_key = 'complete' then
-      perform child_session_complete_mission(v_token, v_pid, v_state, '[]'::jsonb);
+      perform engine_save(v_pid, v_state, '{}'::jsonb, null, null, null, true, '[]'::jsonb, '[{"name":"mission_completed"}]'::jsonb);
       exit;
     end if;
 
@@ -247,7 +247,7 @@ begin
     v_state := jsonb_set(v_state, '{visitedScreens}', (v_state->'visitedScreens') || to_jsonb(v_screen.screen_key));
 
     exit when v_next is null;
-    perform child_session_persist_state(v_token, v_pid, v_state, v_next, null, null);
+    perform engine_save(v_pid, v_state, '{}'::jsonb, v_next, null, null, false, '[]'::jsonb, '[]'::jsonb);
   end loop;
 
   perform chk('child session reached the end of the mission', 'complete' = any(v_seen));
@@ -261,7 +261,7 @@ begin
     array_length(v_seen, 1) between 15 and 25);
 
   -- Analytics must work for a child-driven run too.
-  perform child_session_record_event(v_token, v_mission, 'mission_completed');
+  perform engine_record_events(v_pid, '[{"name":"mission_completed"}]'::jsonb);
   perform chk('a child-driven run emits analytics',
     exists (select 1 from analytics_events where name = 'mission_completed'));
 
