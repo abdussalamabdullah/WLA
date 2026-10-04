@@ -244,6 +244,20 @@ export async function setVersionStatusAction(
     "draft" | "in_review" | "published" | "archived";
 
   const { supabase } = await requireAdmin();
+
+  // Automated mission QA runs BEFORE review and BEFORE publish (Part 6). The
+  // database runs its own structural gate inside the RPC as a second line.
+  if (status === "in_review" || status === "published") {
+    const { draftQaReport } = await import("./lms-queries");
+    const { issues } = await draftQaReport(missionId, version);
+    const blockingCount = issues.filter((i) => i.severity === "blocking").length;
+    if (blockingCount > 0) {
+      return {
+        error: `Mission QA found ${blockingCount} problem${blockingCount === 1 ? "" : "s"} that must be fixed first. They are listed under Review.`,
+      };
+    }
+  }
+
   const { error } = await supabase.rpc("set_mission_version_status", {
     p_mission_id: missionId, p_version: version, p_status: status,
   });

@@ -3,15 +3,15 @@ import "server-only";
 import { createChildClient, type ChildSession } from "@/lib/child-session";
 import {
   parentGateway,
-  getMissionStage,
+  loadStageVia,
+  deviceCategory,
+  recordKitOpenedVia,
   type MissionGateway,
   type MissionStage,
 } from "@/features/mission-engine/persistence";
-import { parseMissionState } from "@/features/mission-engine/schemas";
-import { logWarn } from "@/lib/observability/logger";
+import { loadRun, recordRunEvents, saveRun } from "@/features/mission-engine/store";
 import type { AcademyActor } from "./actor";
 import type {
-  Json,
   MissionEvidenceRow,
   MissionProgressRow,
   MissionRow,
@@ -29,16 +29,20 @@ import type { EvidenceWithUrl } from "@/features/mission-trail/queries";
  * Every call passes the session token and NO child id. The database derives
  * the child, re-scopes the progress id to it, and refuses anything else.
  */
-export function childGateway(
-  session: ChildSession,
-  missionSlug: string,
-): MissionGateway {
+/**
+ * The child-session gateway (D-59). Authorisation is the token: the run is
+ * identified by `child_session_mission`, which derives the child from the
+ * token inside the database and checks the entitlement. Only then does the
+ * engine store load or save that run (D-80) — with the progress id that
+ * lookup returned, never one from the browser.
+ */
+export function childGateway(session: ChildSession, missionSlug: string): MissionGateway {
   const supabase = createChildClient();
 
   return {
     childId: session.childId,
 
-    async loadStage(): Promise<MissionStage> {
+    async resolve() {
       const { data: missionRows } = await supabase.rpc("child_session_mission", {
         p_token: session.token,
         p_mission_slug: missionSlug,
@@ -57,7 +61,6 @@ export function childGateway(
         duration: m.duration,
         delivery_type: m.delivery_type,
         cover_image: m.cover_image,
-        // Commerce is not part of a child's world, so it is not fetched.
         price_minor: null,
         currency: "GBP",
         is_free: false,
@@ -68,107 +71,44 @@ export function childGateway(
         updated_at: new Date(0).toISOString(),
       } as MissionRow;
 
-      if (!m.progress_id) {
-        return {
-          mission,
-          progress: null,
-          state: parseMissionState(undefined),
-          screen: null,
-          nextSequenceKey: null,
-        };
-      }
-
-      const [{ data: stateData }, { data: screenRows }] = await Promise.all([
-        supabase.rpc("child_session_state", {
-          p_token: session.token,
-          p_progress_id: m.progress_id,
-        }),
-        supabase.rpc("child_session_current_screen", {
-          p_token: session.token,
-          p_mission_id: m.mission_id,
-        }),
-      ]);
-
-      const row = Array.isArray(screenRows) ? screenRows[0] : null;
-
-      /*
-       * `completion_rule` is read from the RUN, not the mission — D-17. The
-       * child RPCs do not return the mission's current rule at all, which is
-       * the right way round: a run's pinned rule is what decides completion,
-       * and the mission's current one must never be substituted for it.
-       */
-      const progress = {
-        id: m.progress_id,
-        child_id: session.childId,
-        mission_id: m.mission_id,
-        status: m.status,
-        current_screen_key: m.current_screen_key,
-        mission_version: m.mission_version ?? 1,
-        // The run's PINNED rule (D-17). Null here would mean the engine had no
-        // rule to evaluate and the child could never finish the mission.
-        completion_rule: m.completion_rule,
-        started_at: null,
-        completed_at: null,
-        last_activity_at: new Date().toISOString(),
-        created_at: new Date(0).toISOString(),
-        updated_at: new Date(0).toISOString(),
-      } as unknown as MissionProgressRow;
+      const progress = m.progress_id
+        ? ({
+            id: m.progress_id,
+            child_id: session.childId,
+            mission_id: m.mission_id,
+            status: m.status,
+            current_screen_key: m.current_screen_key,
+            mission_version: m.mission_version ?? 1,
+            completion_rule: m.completion_rule,
+            started_at: null,
+            completed_at: null,
+            last_activity_at: new Date().toISOString(),
+            created_at: new Date(0).toISOString(),
+            updated_at: new Date(0).toISOString(),
+          } as unknown as MissionProgressRow)
+        : null;
 
       return {
         mission,
         progress,
-        state: parseMissionState(stateData ?? undefined),
-        screen: row
-          ? {
-              screenKey: row.screen_key,
-              type: row.type,
-              title: row.title,
-              body: row.body,
-              sequence: row.sequence,
-              configuration: row.configuration,
-            }
-          : null,
-        nextSequenceKey: row?.next_sequence_key ?? null,
+        childAgeYears: session.birthYear ? new Date().getFullYear() - session.birthYear : null,
       };
     },
 
-    async persist({ progressId, state, screenKey, responseKey, responseValue }) {
-      const { data, error } = await supabase.rpc("child_session_persist_state", {
-        p_token: session.token,
-        p_progress_id: progressId,
-        p_state: state as unknown as Json,
-        p_screen_key: screenKey,
-        p_response_key: responseKey,
-        p_response_value: responseValue as Json,
-      });
-      if (error) return null;
-      return data as unknown as MissionProgressRow;
-    },
-
-    async complete({ progressId, state }) {
-      const { data, error } = await supabase.rpc("child_session_complete_mission", {
-        p_token: session.token,
-        p_progress_id: progressId,
-        p_state: state as unknown as Json,
-        p_trail: [] as unknown as Json,
-      });
-      if (error) return null;
-      return data as unknown as MissionProgressRow;
-    },
-
-    async recordEvent(name, missionId) {
-      // D-50: losing an event is acceptable, losing progress is not.
-      const { error } = await supabase.rpc("child_session_record_event", {
+    async start(missionId) {
+      const { error } = await supabase.rpc("child_session_start_mission", {
         p_token: session.token,
         p_mission_id: missionId,
-        p_name: name,
       });
-      if (error) logWarn("child_analytics_write_failed", { name, reason: error.message });
+      if (error) throw new Error(`Could not start mission: ${error.message}`);
     },
+
+    load: loadRun,
+    save: saveRun,
+    events: recordRunEvents,
   };
 }
 
-/** The right gateway for whoever is playing. */
 export function gatewayFor(actor: AcademyActor, missionSlug: string): MissionGateway {
   if (actor.kind === "child") return childGateway(actor.session, missionSlug);
   if (actor.kind === "parent") return parentGateway(actor.childId, missionSlug);
@@ -180,8 +120,10 @@ export async function getStageFor(
   actor: AcademyActor,
   missionSlug: string,
 ): Promise<MissionStage> {
-  if (actor.kind === "parent") return getMissionStage(actor.childId, missionSlug);
-  if (actor.kind === "child") return childGateway(actor.session, missionSlug).loadStage();
+  const { headers } = await import("next/headers");
+  const device = deviceCategory((await headers()).get("user-agent"));
+  if (actor.kind === "parent") return loadStageVia(parentGateway(actor.childId, missionSlug), { device });
+  if (actor.kind === "child") return loadStageVia(childGateway(actor.session, missionSlug), { device });
   throw new Error("No learner context.");
 }
 
@@ -325,4 +267,10 @@ export async function getKitFor(
       href: r.can_view ? `/api/kit/${r.id}` : null,
     })),
   };
+}
+
+/** Mission Kit opened by a learner whose run is in progress (§13 analytics). */
+export async function recordKitOpenedFor(actor: AcademyActor, missionSlug: string, source: "page" | "file") {
+  if (actor.kind !== "parent" && actor.kind !== "child") return;
+  await recordKitOpenedVia(gatewayFor(actor, missionSlug), source);
 }

@@ -3,6 +3,7 @@ import "server-only";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { supabaseServerEnv } from "@/lib/env";
 import type { Database } from "@/types/database";
+import { boundedFetch } from "./fetch";
 
 /**
  * Service-role client — BYPASSES RLS.
@@ -14,6 +15,11 @@ import type { Database } from "@/types/database";
  *   - the Stripe webhook creating an entitlement for a not-yet-signed-in user
  *   - granting a FREE mission, which has no session to act on either
  *   - gift redemption linking a gift record to a child profile
+ *   - signing a Mission Kit file a child session was authorised for (D-64)
+ *   - the mission engine store (features/mission-engine/store.ts, D-80):
+ *     loading and saving a run AFTER the parent permission chain or the
+ *     token-derived child lookup has authorised it. State writes are
+ *     service-role only, so no browser can write a run directly.
  *
  * It reads the SUPABASE env only. It used to read a combined schema, which
  * made a free mission grant impossible whenever Stripe was unconfigured.
@@ -27,6 +33,9 @@ export function createAdminClient() {
   return createSupabaseClient<Database>(
     env.NEXT_PUBLIC_SUPABASE_URL,
     env.SUPABASE_SERVICE_ROLE_KEY,
-    { auth: { persistSession: false, autoRefreshToken: false } },
+    {
+      auth: { persistSession: false, autoRefreshToken: false },
+      global: { fetch: boundedFetch },
+    },
   );
 }

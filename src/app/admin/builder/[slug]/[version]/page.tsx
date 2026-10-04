@@ -9,6 +9,7 @@ import {
   adminDraftParentNote,
   validateVersion,
   signDraftFiles,
+  draftQaReport,
 } from "@/features/admin/lms-queries";
 
 export const metadata = { title: "Mission Builder" };
@@ -45,7 +46,8 @@ export default async function BuilderVersionPage({
 
   const { data: versionRow } = await supabase
     .from("mission_versions")
-    .select("*")
+    // By column: the definition is read only through admin_draft_definition (D-61).
+    .select("id, mission_id, version, status, completion_rule, notes, created_by, created_at, updated_at, submitted_at, published_at, archived_at")
     .eq("mission_id", mission.id)
     .eq("version", version)
     .maybeSingle();
@@ -53,20 +55,27 @@ export default async function BuilderVersionPage({
 
   const editable = versionRow.status === "draft" || versionRow.status === "in_review";
 
-  const [screens, resources, note, problems] = await Promise.all([
+  const [screens, resources, note, problems, qa] = await Promise.all([
     editable ? adminDraftScreens(mission.id, version) : Promise.resolve([]),
     editable ? adminDraftResources(mission.id, version) : Promise.resolve([]),
     editable ? adminDraftParentNote(mission.id, version) : Promise.resolve(null),
     validateVersion(mission.id, version),
+    // Automated mission QA (Part 6) while authoring — drafts only: a published
+    // version has no read path through the builder (D-61).
+    editable ? draftQaReport(mission.id, version) : Promise.resolve(null),
   ]);
+  const qaProblems = qa
+    ? qa.issues.map((i) => ({ code: i.code, blocking: i.severity === "blocking", screen_key: i.screenKey, detail: i.detail }))
+    : problems;
 
   const fileUrls = await signDraftFiles([
     ...resources.map((r) => r.storage_path),
     note?.document_path ?? "",
   ]);
 
-  const blocking = problems.filter((p) => p.blocking);
-  const advisory = problems.filter((p) => !p.blocking);
+  const blocking = qaProblems.filter((p) => p.blocking);
+  const advisory = qaProblems.filter((p) => !p.blocking);
+  const paths = (qa?.paths ?? []).map((p) => ({ decisions: p.decisions, screens: p.screens, outcome: p.outcome, detail: p.detail ?? null }));
 
   return (
     <AdminPage
@@ -123,6 +132,7 @@ export default async function BuilderVersionPage({
             configuration: s.configuration,
           }))}
           blocking={blocking}
+          paths={paths}
           advisory={advisory}
           resources={resources.map((r) => ({
             id: r.id, title: r.title, description: r.description,

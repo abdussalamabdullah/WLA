@@ -1,16 +1,18 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { resolveAcademyActor } from "@/features/academy/actor";
 import { gatewayFor } from "@/features/academy/play";
 import {
-  startMission,
+  startVia,
+  deviceCategory,
   recordInteractionVia,
+  recordClientEventVia,
   MissionPersistenceError,
   type InteractionResult,
 } from "./persistence";
-import { createChildClient } from "@/lib/child-session";
 import type { MissionInteraction } from "./schemas";
 
 /**
@@ -31,49 +33,40 @@ import type { MissionInteraction } from "./schemas";
  */
 export async function startMissionAction(missionSlug: string) {
   const actor = await resolveAcademyActor();
-
-  if (actor.kind === "child") {
-    const supabase = createChildClient();
-    // The mission id is resolved from the slug by the database, scoped to the
-    // child's own entitlements — it is never taken from the browser.
-    const { data: rows } = await supabase.rpc("child_session_mission", {
-      p_token: actor.session.token,
-      p_mission_slug: missionSlug,
-    });
-    const mission = rows?.[0];
-    if (!mission) throw new Error("No access to this mission.");
-
-    await supabase.rpc("child_session_start_mission", {
-      p_token: actor.session.token,
-      p_mission_id: mission.mission_id,
-    });
-    await supabase.rpc("child_session_record_event", {
-      p_token: actor.session.token,
-      p_mission_id: mission.mission_id,
-      p_name: "mission_started",
-    });
-  } else if (actor.kind === "parent") {
-    // Idempotent: a double submit resumes rather than restarting.
-    await startMission(actor.childId, missionSlug);
-  } else {
+  if (actor.kind !== "parent" && actor.kind !== "child") {
     throw new Error("No active child profile.");
   }
+  // One path for both actors: authorise, start, initialise the run once (D-80).
+  const device = deviceCategory((await headers()).get("user-agent"));
+  await startVia(gatewayFor(actor, missionSlug), { device });
 
   revalidatePath(`/academy/missions/${missionSlug}`);
   revalidatePath("/academy/my-missions");
   redirect(`/academy/missions/${missionSlug}/active`);
 }
 
-/**
- * D-18 — the shape the UI works with.
- *
- * Interaction → persist → success → advance. A failure is a value, not an
- * exception, so the screen can keep the learner exactly where they are and
- * offer a retry instead of showing an error boundary.
- */
 export type InteractionOutcome =
   | ({ ok: true } & InteractionResult)
   | { ok: false; retryable: true; message: string };
+
+/**
+ * Analytics the browser reports — Mission Control opened, a Kit file opened,
+ * a device fallback used. Allow-listed and sanitised in recordClientEventVia;
+ * the run comes from the server's own lookup, never from the browser (D-76).
+ */
+export async function recordMissionEventAction(
+  missionSlug: string,
+  name: string,
+  detail: { level?: number; source?: string } = {},
+): Promise<void> {
+  const actor = await resolveAcademyActor();
+  if (actor.kind !== "parent" && actor.kind !== "child") return;
+  try {
+    await recordClientEventVia(gatewayFor(actor, missionSlug), name, detail);
+  } catch {
+    // Reporting must never break a mission.
+  }
+}
 
 /**
  * Record one meaningful interaction. Called by mission screen components once
@@ -109,6 +102,11 @@ export async function recordInteractionAction(
   }
 
   // Only reached once the write succeeded.
+  if (result.failure) {
+    // Validation failed: nothing moved. The child keeps their input and sees why.
+    return { ok: false, retryable: true, message: result.failure.message };
+  }
+
   revalidatePath(`/academy/missions/${missionSlug}/active`);
 
   if (result.completed) {

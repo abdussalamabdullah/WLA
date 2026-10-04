@@ -8,7 +8,7 @@ import {
 } from "@/components/system/states";
 import { ResourceItem } from "@/components/mission/resource-item";
 import { resolveAcademyActor } from "@/features/academy/actor";
-import { getKitFor } from "@/features/academy/play";
+import { getKitFor, recordKitOpenedFor } from "@/features/academy/play";
 import { AccessError } from "@/lib/permissions";
 
 export const metadata = { title: "Mission Kit" };
@@ -54,6 +54,9 @@ export default async function MissionKitPage({
 
   // Outside the try — notFound() throws, and the catch would swallow it.
   if (!kit) notFound();
+
+  // §13: Mission Kit use during an active run. Never blocks the Kit.
+  await recordKitOpenedFor(actor, missionId, "page");
 
 
   return (

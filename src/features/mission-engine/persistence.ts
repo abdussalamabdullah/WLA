@@ -1,168 +1,68 @@
 import "server-only";
 
 import { requireEntitledMission } from "@/lib/permissions";
-import { recordEvent } from "@/lib/analytics/events";
 import { logError } from "@/lib/observability/logger";
+import { EngineRefusal, startRun, step } from "./runtime";
+import { projectCurrent, type ProjectedScreen } from "./projection";
 import {
-  applyCanonicalTracker,
-  applyInteraction,
-  screenAfterInteraction,
-  type MissionScreen,
-} from "./navigation";
+  loadRun as storeLoad,
+  recordRunEvents,
+  saveRun as storeSave,
+  type LoadedRun,
+} from "./store";
 import {
-  completionRule,
-  isMissionComplete,
+  emptyMissionState,
   missionInteraction,
-  parseMissionState,
   type MissionInteraction,
   type MissionStateData,
-} from "./index";
-import type { Json, MissionProgressRow, MissionRow } from "@/types/database";
+} from "./schemas";
+import type { AnalyticsDraft } from "./contract";
+import type { MissionProgressRow, MissionRow } from "@/types/database";
 
 /**
- * MISSION PERSISTENCE — Sprint 6.
+ * MISSION PERSISTENCE — the server half of every learner interaction.
  *
- * Tech Spec §29: "Supabase should hold the authoritative state." Nothing here
- * writes to localStorage, and nothing reads it. A mission survives a refresh,
- * a closed tab, a different device and a different day because the server —
- * not the browser — knows where the child is.
+ * Tech Spec §29: "Supabase should hold the authoritative state." Since D-80 it
+ * genuinely does: no browser can write a run. The flow for both actors is
  *
- * Authorisation: every entry point begins with `requireEntitledMission`, which
- * runs validation steps 1–3. The database functions re-check ownership and
- * entitlement independently (step 4), so a direct RPC call is equally safe.
+ *   gateway.resolve()  → AUTHORISE and identify the run (actor-specific)
+ *   gateway.load()     → the whole pinned model + full state (service-role store)
+ *   runtime.step()     → the one shared transition (pure)
+ *   gateway.save()     → engine_save, atomically: state, private state,
+ *                        response, Trail evidence, analytics, completion
+ *   projectCurrent()   → the only thing the browser receives
  *
- * GENERIC BY CONSTRUCTION. Nothing in this file may branch on a mission's
- * identity. Mission-specific behaviour arrives as `mission_screens`
- * configuration and `custom` state, both defined by a Mission Build Brief.
+ * GENERIC BY CONSTRUCTION. Nothing here may branch on a mission's identity.
  */
 
-/**
- * What the Active Mission screen is allowed to know.
- *
- * Exactly ONE screen — the child's current position — plus the key of the
- * next screen by sequence, which navigation needs and which reveals a name,
- * never content.
- *
- * Future screens are not filtered out client-side; they are never fetched.
- * mission_screens has no client read policy at all (the screen_access
- * migration), so this
- * is the only path to screen content and the stage check lives in the
- * database, not in the interface.
- */
+export type RunContext = {
+  mission: MissionRow;
+  progress: MissionProgressRow | null;
+  childAgeYears: number | null;
+};
+
+export type MissionGateway = {
+  /** The verified child. An authorisation INPUT, never a result. */
+  childId: string;
+  /** Authorise the actor for this mission and return the run, if any. */
+  resolve(): Promise<RunContext>;
+  /** Create the run at its first screen (the actor's start RPC). Idempotent. */
+  start(missionId: string): Promise<void>;
+  load(progressId: string): Promise<LoadedRun>;
+  save: typeof storeSave;
+  events: typeof recordRunEvents;
+};
+
 export type MissionStage = {
   mission: MissionRow;
   progress: MissionProgressRow | null;
+  /** Client-safe state (projection.ts). */
   state: MissionStateData;
-  /** Null when not started, or when the mission has no screens yet. */
-  screen: MissionScreen | null;
-  /** The next screen by sequence. A key only. */
-  nextSequenceKey: string | null;
+  /** The projected current screen, or null when not started. */
+  screen: ProjectedScreen | null;
 };
 
-/**
- * Load the child's current stage.
- *
- * This is the read half of pause/resume: it reconstructs the exact position
- * from the server, which is what makes refresh recovery and leave-and-return
- * recovery the same code path rather than two features.
- */
-export async function getMissionStage(
-  childId: string,
-  missionIdOrSlug: string,
-): Promise<MissionStage> {
-  const { child, mission, progress, supabase } = await requireEntitledMission(
-    childId,
-    missionIdOrSlug,
-  );
-
-  const [stateResult, screenResult] = await Promise.all([
-    progress
-      ? supabase
-          .from("mission_state")
-          .select("state_data")
-          .eq("progress_id", progress.id)
-          .maybeSingle()
-      : Promise.resolve({ data: null }),
-    progress
-      ? supabase.rpc("get_current_mission_screen", {
-          p_child_id: child.id,
-          p_mission_id: mission.id,
-        })
-      : Promise.resolve({ data: null }),
-  ]);
-
-  const row = Array.isArray(screenResult.data) ? screenResult.data[0] : null;
-
-  return {
-    mission,
-    progress,
-    state: parseMissionState(stateResult.data?.state_data),
-    screen: row
-      ? {
-          screenKey: row.screen_key,
-          type: row.type,
-          title: row.title,
-          body: row.body,
-          sequence: row.sequence,
-          configuration: row.configuration,
-        }
-      : null,
-    nextSequenceKey: row?.next_sequence_key ?? null,
-  };
-}
-
-/**
- * Start — or resume — a mission.
- *
- * Tech Spec §27. Safe to call repeatedly: the RPC is idempotent, so a
- * double-click, a retried request or a re-submitted form cannot create a
- * second progress record or reset a child's position.
- */
-export async function startMission(
-  childId: string,
-  missionIdOrSlug: string,
-): Promise<MissionProgressRow> {
-  const { child, mission, progress, supabase } = await requireEntitledMission(
-    childId,
-    missionIdOrSlug,
-  );
-
-  const wasAlreadyStarted =
-    progress !== null && progress.status !== "not_started";
-
-  const { data, error } = await supabase.rpc("start_mission", {
-    p_child_id: child.id,
-    p_mission_id: mission.id,
-  });
-
-  if (error || !data) {
-    throw new Error(
-      `Could not start mission: ${error?.message ?? "no record"}`,
-    );
-  }
-
-  // Tech Spec §42 — fired only on a genuine first start, so resuming does not
-  // inflate the metric.
-  if (!wasAlreadyStarted) {
-    await recordEvent({
-      name: "mission_started",
-      childId: child.id,
-      missionId: mission.id,
-      progressId: data.id,
-    });
-  }
-
-  return data;
-}
-
-/**
- * D-18 — persistence failed, so the mission has NOT advanced.
- *
- * Thrown only after the reducer has run and before anything is returned to the
- * caller, so a caller that catches this still holds the pre-interaction state.
- * There is no retry queue and no offline persistence: the learner simply
- * retries the same interaction.
- */
+/** D-18 — persistence failed, so the mission has NOT advanced. */
 export class MissionPersistenceError extends Error {
   readonly retryable = true;
   constructor(message = "Your progress couldn't be saved.") {
@@ -176,279 +76,250 @@ export type InteractionResult = {
   currentScreenKey: string | null;
   status: MissionProgressRow["status"];
   completed: boolean;
+  /** A validation failure: nothing moved; the child sees this message. */
+  failure?: { code: string; message: string };
 };
 
 /**
- * Record one meaningful interaction and advance.
- *
- * Tech Spec §29 defines the save points: choice confirmed, response submitted,
- * reveal unlocked, branch established, handoff confirmed, screen transition.
- * Each arrives here as a `MissionInteraction`.
- *
- * After every interaction the mission's configured completion rule is
- * evaluated. If it is satisfied, completion happens in the same request
- * through the atomic RPC — the child never sees a screen claiming Complete
- * while the backing state is unwritten.
+ * Coarse device category from the user agent — phone, tablet or desktop and
+ * nothing finer (D-76: structural, never identifying).
  */
-/**
- * HOW THIS FUNCTION TALKS TO THE DATABASE — D-59.
- *
- * Two actors can now play a mission: a parent with a child selected, and a
- * child with their own session. They differ ONLY in which database calls
- * carry the authorisation — the parent path runs the permissions chain and
- * RLS, the child path passes a session token to `security definer` functions
- * that derive the child inside the database.
- *
- * Everything else — the reducer, the canonical tracker, the screen-match
- * check, completion evaluation, D-17's pinned rule — is identical, and a
- * second copy of it for children would be the one thing most likely to rot.
- * So the three database touchpoints are injected and the logic is shared.
- */
-export type MissionGateway = {
-  /** The verified child. An authorisation INPUT, never a result. */
-  childId: string;
-  loadStage(): Promise<MissionStage>;
-  persist(args: {
-    progressId: string;
-    state: MissionStateData;
-    screenKey: string | null;
-    responseKey: string | null;
-    responseValue: Json | null;
-  }): Promise<MissionProgressRow | null>;
-  complete(args: {
-    progressId: string;
-    state: MissionStateData;
-  }): Promise<MissionProgressRow | null>;
-  /** Analytics must never become a reason a mission fails (D-50). */
-  recordEvent(name: "mission_started" | "mission_completed", missionId: string, progressId: string): Promise<void>;
-};
-
-export async function recordInteraction(
-  childId: string,
-  missionIdOrSlug: string,
-  rawInteraction: MissionInteraction,
-): Promise<InteractionResult> {
-  return recordInteractionVia(
-    parentGateway(childId, missionIdOrSlug),
-    rawInteraction,
-  );
+export function deviceCategory(userAgent: string | null | undefined): "phone" | "tablet" | "desktop" {
+  const ua = userAgent ?? "";
+  if (/iPad|Tablet|PlayBook|Silk|(Android(?!.*Mobile))/i.test(ua)) return "tablet";
+  if (/Mobi|iPhone|iPod|Android/i.test(ua)) return "phone";
+  return "desktop";
 }
 
-/** The parent path: the permissions chain plus RLS, exactly as before. */
-export function parentGateway(
-  childId: string,
-  missionIdOrSlug: string,
-): MissionGateway {
+/** A gap after which returning counts as a new session (multi-session analytics). */
+const SESSION_GAP_MS = 30 * 60 * 1000;
+
+function gapBucket(ms: number): string {
+  if (ms < 24 * 3600e3) return "under_1d";
+  if (ms < 7 * 24 * 3600e3) return "1d_7d";
+  return "over_7d";
+}
+
+// ------------------------------------------------------------ parent actor --
+
+export function parentGateway(childId: string, missionIdOrSlug: string): MissionGateway {
   return {
     childId,
-    loadStage: () => getMissionStage(childId, missionIdOrSlug),
-    async persist({ progressId, state, screenKey, responseKey, responseValue }) {
-      const { supabase } = await requireEntitledMission(childId, missionIdOrSlug);
-      const { data, error } = await supabase.rpc("persist_mission_state", {
-        p_progress_id: progressId,
-        p_state: state as unknown as Json,
-        p_screen_key: screenKey,
-        p_response_key: responseKey,
-        p_response_value: responseValue as Json,
+    async resolve() {
+      const { child, mission, progress } = await requireEntitledMission(childId, missionIdOrSlug);
+      const birthYear = (child as { birth_year?: number | null }).birth_year ?? null;
+      return {
+        mission,
+        progress,
+        childAgeYears: birthYear ? new Date().getFullYear() - birthYear : null,
+      };
+    },
+    async start(missionId) {
+      const { supabase, child } = await requireEntitledMission(childId, missionIdOrSlug);
+      const { error } = await supabase.rpc("start_mission", {
+        p_child_id: child.id,
+        p_mission_id: missionId,
       });
-      if (error) return null;
-      return data as unknown as MissionProgressRow;
+      if (error) throw new Error(`Could not start mission: ${error.message}`);
     },
-    async complete({ progressId, state }) {
-      const { supabase } = await requireEntitledMission(childId, missionIdOrSlug);
-      const { data, error } = await supabase.rpc("complete_mission", {
-        p_progress_id: progressId,
-        p_state: state as unknown as Json,
-        p_trail: [] as unknown as Json,
-      });
-      if (error) return null;
-      return data as unknown as MissionProgressRow;
-    },
-    async recordEvent(name, missionId, progressId) {
-      await recordEvent({ name, childId, missionId, progressId });
-    },
+    load: storeLoad,
+    save: storeSave,
+    events: recordRunEvents,
   };
 }
 
+// --------------------------------------------------------------- shared ----
+
+/** The read half of pause/resume: the exact position, rebuilt from the server. */
+export async function loadStageVia(gw: MissionGateway, opts: { device?: string } = {}): Promise<MissionStage> {
+  const ctx = await gw.resolve();
+  if (!ctx.progress || ctx.progress.status === "not_started") {
+    return { mission: ctx.mission, progress: ctx.progress, state: emptyMissionState, screen: null };
+  }
+  const run = await gw.load(ctx.progress.id);
+  const now = new Date();
+
+  // A return after a real gap is a new session (multi-session analytics, §13).
+  const last = Date.parse(run.progress.last_activity_at);
+  if (run.progress.status === "in_progress" && !Number.isNaN(last) && now.getTime() - last > SESSION_GAP_MS) {
+    await gw.events(run.progress.id, [
+      {
+        name: "session_resumed",
+        screen_key: run.progress.current_screen_key,
+        detail: { gap: gapBucket(now.getTime() - last), ...(opts.device ? { device: opts.device } : {}) },
+      },
+    ]);
+  }
+
+  const projected = projectCurrent(run.model, run.progress.current_screen_key, run.state, now);
+  return { mission: ctx.mission, progress: run.progress, state: projected.state, screen: projected.screen };
+}
+
+/**
+ * Start — or resume — a mission. Safe to repeat: the start RPC is idempotent,
+ * and run initialisation (variables, variant, pool draws) happens exactly once,
+ * from a server-generated seed.
+ */
+export async function startVia(gw: MissionGateway, opts: { device?: string } = {}): Promise<MissionProgressRow> {
+  const before = await gw.resolve();
+  const wasStarted = before.progress !== null && before.progress.status !== "not_started";
+  if (!wasStarted) await gw.start(before.mission.id);
+
+  const ctx = wasStarted ? before : await gw.resolve();
+  if (!ctx.progress) throw new Error("Could not start mission: no record");
+  const run = await gw.load(ctx.progress.id);
+
+  if (run.state.seed === null && run.progress.status !== "complete") {
+    const seed = crypto.getRandomValues(new Uint32Array(1))[0] & 0x7fffffff;
+    const init = startRun(run.model, run.state, run.progress.current_screen_key, new Date(), seed, ctx.childAgeYears);
+    const started: AnalyticsDraft = { name: "mission_started", detail: opts.device ? { device: opts.device } : {} };
+    const events: AnalyticsDraft[] = wasStarted ? init.events : [started, ...init.events];
+    const saved = await gw.save({
+      progressId: run.progress.id,
+      model: run.model,
+      state: init.state,
+      screenKey: null,
+      response: null,
+      complete: false,
+      evidence: [],
+      events,
+    });
+    if (!saved) throw new MissionPersistenceError();
+    return saved;
+  }
+  return run.progress;
+}
+
+/**
+ * Record one interaction and advance. Completion, Trail saves, unlocks, events
+ * and analytics are decided by the runtime and written in ONE transaction by
+ * engine_save — the child never sees a screen claiming Complete while the
+ * backing state is unwritten.
+ */
 export async function recordInteractionVia(
-  gateway: MissionGateway,
+  gw: MissionGateway,
   rawInteraction: MissionInteraction,
 ): Promise<InteractionResult> {
-  const parsedInteraction = missionInteraction.safeParse(rawInteraction);
-  if (!parsedInteraction.success) {
-    throw new Error("Unrecognised mission interaction.");
-  }
-  const interaction = parsedInteraction.data;
+  const parsed = missionInteraction.safeParse(rawInteraction);
+  if (!parsed.success) throw new Error("Unrecognised mission interaction.");
+  const interaction = parsed.data;
 
-  const stage = await gateway.loadStage();
-  const { mission, progress, screen, nextSequenceKey } = stage;
+  const ctx = await gw.resolve();
+  if (!ctx.progress) throw new Error("This mission has not been started.");
+  const run = await gw.load(ctx.progress.id);
+  const progress = run.progress;
 
-  if (!progress) {
-    throw new Error("This mission has not been started.");
-  }
-
-  // Architecture §17 — a completed mission is terminal. Replay is deferred.
+  // Architecture §17 — a completed run is terminal. Replay is deferred (D-78).
   if (progress.status === "complete") {
-    return {
-      state: stage.state,
-      currentScreenKey: progress.current_screen_key,
-      status: "complete",
-      completed: true,
-    };
+    return { state: run.state, currentScreenKey: progress.current_screen_key, status: "complete", completed: true };
   }
 
-  /*
-   * `custom` is not reachable from the browser.
-   *
-   * Every other interaction kind names a screen and is checked against the
-   * one the child is actually on. `custom` names no screen, so it skipped that
-   * check and could write any key into `custom` state — including the
-   * canonical tracker the Build Brief requires the Academy to hold as
-   * authoritative. It exists for server-authored state (see
-   * `applyCanonicalTracker`); it is not something a client may send.
-   */
-  if (interaction.kind === "custom") {
-    throw new Error("That interaction does not belong to the current step.");
-  }
-
-  /*
-   * An interaction may only target the screen the child is actually on.
-   *
-   * Because only that screen is ever fetched, a forged interaction for a
-   * future screen — skipping ahead to Evidence, or pre-answering a
-   * consequence — has nothing to match and is refused here.
-   */
-  if (!screen || screen.screenKey !== interaction.screenKey) {
-    throw new Error("That interaction does not belong to the current step.");
-  }
-
-  /*
-   * The reducer runs first, then the SERVER applies any canonical tracker
-   * state the current screen declares. Order matters: the canonical patch must
-   * land after the child's own interaction so nothing the browser sent can
-   * overwrite it.
-   */
-  const nextState = applyCanonicalTracker(
-    applyInteraction(stage.state, interaction),
-    screen,
-  );
-
-  const nextScreenKey = screenAfterInteraction(
-    interaction,
-    screen,
-    nextSequenceKey,
-    nextState,
-  );
-
-  /*
-   * Completion is decided from configuration, never from mission identity.
-   *
-   * D-17: the rule snapshotted onto this run wins over the mission's current
-   * rule, so editing a live mission cannot change what "complete" means for a
-   * child already playing.
-   */
-  const pinnedRule = progress.completion_rule ?? mission.completion_rule;
-  const rule = pinnedRule ? completionRule.safeParse(pinnedRule) : null;
-
-  const reachedCompletion =
-    rule?.success === true && isMissionComplete(rule.data, nextState);
-
-  if (reachedCompletion) {
-    /*
-     * Mission Trail entries are resolved inside complete_mission, from the
-     * mission's completion screen at this run's pinned version.
-     *
-     * They deliberately are NOT read here. Completion is evaluated after an
-     * interaction, so the current screen is whatever the child just acted on
-     * — for Six Names, the `final_judgement` screen. The completion screen
-     * is a configuration carrier that is never itself rendered, and the
-     * engine cannot see it: mission_screens has no client read policy.
-     *
-     * An earlier version read `screen.configuration` when the screen happened
-     * to be of type `completion`, which was never true, so every mission
-     * completed with an empty Trail. Hosted validation caught it.
-     *
-     * `[]` means "derive them"; a non-empty array would override.
-     *
-     * THE COMPLETING RESPONSE IS SAVED FIRST. When the interaction that meets
-     * the rule is itself a written answer (a `response_exists` rule), that
-     * answer used to be dropped: complete() takes no response, so the Trail's
-     * `fromResponse` entry found nothing, its description was NULL, the
-     * evidence insert failed and the whole completion rolled back — the child
-     * saw "That didn't save." on the last step for ever. Found building a QA
-     * mission in the admin UI; Six Names never hit it because it completes on
-     * a content screen. If the save lands and completion then fails, nothing
-     * is lost: the answer is kept and the next attempt completes.
-     */
-    if (interaction.kind === "response") {
-      const saved = await gateway.persist({
-        progressId: progress.id,
-        state: nextState,
-        screenKey: nextScreenKey ?? screen.screenKey,
-        responseKey: interaction.screenKey,
-        responseValue: (interaction.value ?? null) as Json,
-      });
-      if (!saved) {
-        logError("mission_persist_failed", null, {
-          missionId: mission.id,
-          progressId: progress.id,
-          interaction: interaction.kind,
-        });
-        throw new MissionPersistenceError();
-      }
+  const now = new Date();
+  let result;
+  try {
+    result = step(run.model, run.state, progress.current_screen_key, interaction, now);
+  } catch (error) {
+    if (error instanceof EngineRefusal) {
+      throw new Error("That interaction does not belong to the current step.");
     }
+    throw error;
+  }
 
-    const data = await gateway.complete({
+  if (!result.ok) {
+    // Nothing moves; the attempt and the failure are recorded.
+    await gw.save({
       progressId: progress.id,
-      state: nextState,
+      model: run.model,
+      state: result.state,
+      screenKey: null,
+      response: null,
+      complete: false,
+      evidence: [],
+      events: result.events,
     });
-    if (!data) {
-      // OPS-01. Identifiers only — never state, responses or screen content.
-      logError("mission_completion_failed", null, {
-        missionId: mission.id,
-        progressId: progress.id,
-      });
-      throw new MissionPersistenceError(
-        "We couldn't finish saving this mission. Please try again.",
-      );
-    }
-
-    await gateway.recordEvent("mission_completed", mission.id, progress.id);
-
+    const projected = projectCurrent(run.model, progress.current_screen_key, result.state, now);
     return {
-      state: nextState,
-      currentScreenKey: data.current_screen_key,
-      status: data.status,
-      completed: true,
+      state: projected.state,
+      currentScreenKey: progress.current_screen_key,
+      status: progress.status,
+      completed: false,
+      failure: result.failure,
     };
   }
 
-  const data = await gateway.persist({
+  const saved = await gw.save({
     progressId: progress.id,
-    state: nextState,
-    screenKey: nextScreenKey,
-    responseKey: interaction.kind === "response" ? interaction.screenKey : null,
-    responseValue:
-      interaction.kind === "response"
-        ? ((interaction.value ?? null) as Json)
-        : null,
+    model: run.model,
+    state: result.state,
+    screenKey: result.nextScreenKey,
+    response: result.response,
+    complete: result.completed,
+    evidence: result.evidence,
+    events: result.events,
   });
-
-  if (!data) {
-    // D-18: do not advance. persist_mission_state is one transaction, so the
-    // state, the response and the position are all unchanged.
-    logError("mission_persist_failed", null, {
-      missionId: mission.id,
+  if (!saved) {
+    // OPS-01. Identifiers only — never state, responses or screen content.
+    logError(result.completed ? "mission_completion_failed" : "mission_persist_failed", null, {
+      missionId: ctx.mission.id,
       progressId: progress.id,
       interaction: interaction.kind,
     });
-    throw new MissionPersistenceError();
+    throw new MissionPersistenceError(
+      result.completed ? "We couldn't finish saving this mission. Please try again." : undefined,
+    );
   }
 
+  const projected = projectCurrent(run.model, saved.current_screen_key, result.state, now);
   return {
-    state: nextState,
-    currentScreenKey: data.current_screen_key,
-    status: data.status,
-    completed: false,
+    state: projected.state,
+    currentScreenKey: saved.current_screen_key,
+    status: saved.status,
+    completed: result.completed,
   };
+}
+
+/** Analytics the browser reports (Mission Control opened, a Kit file opened...). */
+const CLIENT_EVENTS = new Set(["mission_control_opened", "kit_opened", "device_fallback_used"]);
+
+/** Server-observed Mission Kit use during an active run (§13). */
+export async function recordKitOpenedVia(gw: MissionGateway, source: "page" | "file"): Promise<void> {
+  try {
+    const ctx = await gw.resolve();
+    if (ctx.progress?.status !== "in_progress") return;
+    await gw.events(ctx.progress.id, [{ name: "kit_opened", screen_key: ctx.progress.current_screen_key, detail: { source } }]);
+  } catch {
+    // Reporting must never break the Kit.
+  }
+}
+
+export async function recordClientEventVia(
+  gw: MissionGateway,
+  name: string,
+  detail: { level?: number; source?: string } = {},
+): Promise<void> {
+  if (!CLIENT_EVENTS.has(name)) return;
+  const ctx = await gw.resolve();
+  if (!ctx.progress || ctx.progress.status === "not_started") return;
+  const safe: Record<string, string | number> = {};
+  if (typeof detail.level === "number" && detail.level >= 1 && detail.level <= 3) safe.level = Math.floor(detail.level);
+  if (typeof detail.source === "string" && /^[a-z_]{1,32}$/.test(detail.source)) safe.source = detail.source;
+  await gw.events(ctx.progress.id, [{ name, screen_key: ctx.progress.current_screen_key, detail: safe }]);
+}
+
+// ------------------------------------------------ parent-path conveniences --
+
+export function getMissionStage(childId: string, missionIdOrSlug: string): Promise<MissionStage> {
+  return loadStageVia(parentGateway(childId, missionIdOrSlug));
+}
+
+export function startMission(childId: string, missionIdOrSlug: string): Promise<MissionProgressRow> {
+  return startVia(parentGateway(childId, missionIdOrSlug));
+}
+
+export function recordInteraction(
+  childId: string,
+  missionIdOrSlug: string,
+  interaction: MissionInteraction,
+): Promise<InteractionResult> {
+  return recordInteractionVia(parentGateway(childId, missionIdOrSlug), interaction);
 }

@@ -121,3 +121,49 @@ export async function signDraftFiles(paths: string[]) {
       .map((s) => [s.path as string, s.signedUrl]),
   );
 }
+
+/**
+ * AUTOMATED MISSION QA for a draft (validator.ts, Part 6).
+ *
+ * Loads the canonical model through the draft-only RPCs — screens, the
+ * definition (D-61: refuses a published version), the version's completion
+ * rule — runs the TypeScript validator, and adds the database's Kit and
+ * parent-note checks, which only SQL can answer. Used by the builder page
+ * (while authoring) and by the status action (before review and publish).
+ */
+export async function draftQaReport(missionId: string, version: number) {
+  const { buildModel } = await import("@/features/mission-engine/definition");
+  const { validateMission } = await import("@/features/mission-engine/validator");
+  const { supabase } = await requireAdmin();
+  const [screens, defRes, verRes, sqlIssues, resources, missionRes] = await Promise.all([
+    adminDraftScreens(missionId, version),
+    supabase.rpc("admin_draft_definition", { p_mission_id: missionId, p_version: version }),
+    supabase.from("mission_versions").select("completion_rule").eq("mission_id", missionId).eq("version", version).maybeSingle(),
+    validateVersion(missionId, version),
+    adminDraftResources(missionId, version),
+    supabase.from("missions").select("min_age, max_age").eq("id", missionId).maybeSingle(),
+  ]);
+  const model = buildModel({
+    definition: defRes.data ?? {},
+    screens: screens.map((s) => ({
+      screenKey: s.screen_key, type: s.type, title: s.title, body: s.body,
+      sequence: s.sequence, configuration: s.configuration,
+    })),
+    completionRule: verRes.data?.completion_rule ?? null,
+  });
+  const { issues, paths } = validateMission(model, {
+    kitTitles: resources.map((r) => r.title),
+    ages: missionRes.data ? { min: missionRes.data.min_age, max: missionRes.data.max_age } : null,
+  });
+  // The SQL gate's Kit / note findings are not visible to the TS validator.
+  const fromSql = sqlIssues
+    .filter((p) => ["no_kit_resources", "kit_resource_without_file", "no_parent_note"].includes(p.code))
+    .map((p) => ({
+      code: p.code,
+      severity: (p.blocking ? "blocking" : "advisory") as "blocking" | "advisory",
+      category: "assets" as const,
+      screenKey: p.screen_key,
+      detail: p.detail,
+    }));
+  return { model, issues: [...issues, ...fromSql], paths };
+}

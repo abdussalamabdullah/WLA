@@ -1,3 +1,4 @@
+import { evaluate, fromLegacyCompletion, fromLegacyReveal } from "./conditions";
 import {
   emptyMissionState,
   parseScreenConfig,
@@ -24,6 +25,20 @@ export type MissionScreen = {
   body: string | null;
   sequence: number;
   configuration: unknown;
+  /**
+   * Server-derived facts for the component (projection.ts) — whether a
+   * reveal is open, timer seconds left, retry, checkpoint wait. Present on
+   * every screen the browser receives; absent on the full model.
+   */
+  view?: {
+    revealed?: boolean;
+    timerSeconds?: number | null;
+    timerVisible?: boolean;
+    canRetry?: boolean;
+    attempts?: number;
+    waitSeconds?: number;
+    trail?: { title: string; type: "digital" | "physical" } | null;
+  };
 };
 
 /**
@@ -103,53 +118,38 @@ export function resolveResumeScreen(
   return ordered[0]?.screenKey ?? null;
 }
 
-/** Is a reveal unlocked? Reveals persist once opened (Architecture §13). */
+/**
+ * Is a reveal unlocked? Reveals persist once opened (Architecture §13).
+ *
+ * Evaluated by the shared condition evaluator (F2): legacy reveal conditions
+ * are translated, never evaluated separately. `now` only matters for timed
+ * (delayed) reveals; it defaults to the current time for callers that have
+ * no server clock to hand.
+ */
 export function isRevealed(
   screen: MissionScreen,
   state: MissionStateData,
+  now: Date = new Date(),
 ): boolean {
   if (state.revealed.includes(screen.screenKey)) return true;
-
-  const config = parseScreenConfig("reveal", screen.configuration);
-  switch (config.condition.type) {
-    case "child_action":
-      return false; // requires an explicit action
-    case "choice_equals":
-      return (
-        state.choices[config.condition.screenKey] === config.condition.optionId
-      );
-    case "response_exists":
-      return state.visitedScreens.includes(config.condition.screenKey);
-  }
+  const raw = (screen.configuration as { condition?: unknown } | null)?.condition;
+  return evaluate(fromLegacyReveal(raw, screen.screenKey), { state, now });
 }
 
 /**
  * Tech Spec §31 — completion is configured, never hard-coded per mission.
+ * All three rule shapes go through the shared evaluator.
  */
 export function isMissionComplete(
   rule: CompletionRule,
   state: MissionStateData,
   /** Defaults to the responses mirrored in state (see `respondedScreens`). */
   responseKeys: string[] = state.respondedScreens,
+  now: Date = new Date(),
 ): boolean {
-  switch (rule.type) {
-    case "screen_reached":
-      return state.visitedScreens.includes(rule.screenKey);
-    case "conditions":
-      return rule.conditions.every((condition) => {
-        switch (condition.kind) {
-          case "response_exists":
-            return responseKeys.includes(condition.screenKey);
-          case "choice_equals":
-            return state.choices[condition.screenKey] === condition.optionId;
-          case "choice_exists":
-            // Any option counts — no branch is correct or incorrect.
-            return Boolean(state.choices[condition.screenKey]);
-          case "screen_visited":
-            return state.visitedScreens.includes(condition.screenKey);
-        }
-      });
-  }
+  const c = fromLegacyCompletion(rule);
+  if (!c) return false;
+  return evaluate(c, { state: { ...state, respondedScreens: responseKeys }, now });
 }
 
 /** Record a visit without duplicating entries. */
@@ -186,6 +186,13 @@ export function applyInteraction(
   switch (interaction.kind) {
     case "visit":
       return markVisited(state, interaction.screenKey);
+
+    // F4 contract interactions are reduced by their type's contract
+    // (contract.ts); the legacy reducer leaves state unchanged for them.
+    case "submit":
+    case "retry":
+    case "timer_expired":
+      return state;
 
     case "choice":
       return {

@@ -216,21 +216,16 @@ describe("admin surfaces are admin-only at the database (§18–§23)", () => {
 describe("the learner Preview is the real engine, writing nothing (§6)", () => {
   const preview = () => read("src/components/admin/mission-preview.tsx");
 
-  it("drives the SAME renderer a learner sees, not a second one", () => {
+  it("drives the SAME renderer and the SAME runtime a learner gets, not copies", () => {
     const p = preview();
     expect(p).toContain("MissionScreenRenderer");
-    // and advances with the same pure engine functions the server uses
-    // `screenAfterInteraction` (not `resolveNextScreen` directly) since the
-    // reveal-in-place fix: it is the one rule for where an interaction leaves
-    // the child, and BOTH sides must call it or they can disagree.
+    // The server's own transition and initialisation (runtime.ts) and the
+    // server's own projection — what a child's browser actually receives.
+    for (const fn of ["startRun(", "step(", "projectScreen(", "clientState("]) {
+      expect(p, `preview must use ${fn}`).toContain(fn);
+    }
     const server = code("src/features/mission-engine/persistence.ts");
-    for (const fn of [
-      "applyInteraction",
-      "applyCanonicalTracker",
-      "screenAfterInteraction",
-      "isMissionComplete",
-    ]) {
-      expect(p, `preview must reuse ${fn}`).toContain(fn);
+    for (const fn of ["startRun(", "step(", "projectCurrent("]) {
       expect(server, `server must use ${fn}`).toContain(fn);
     }
   });
@@ -254,10 +249,11 @@ describe("the learner Preview is the real engine, writing nothing (§6)", () => 
     expect(p).not.toMatch(/createClient|supabase\./);
   });
 
-  it("applies the canonical tracker AFTER the interaction, exactly as the server does", () => {
-    expect(preview()).toMatch(
-      /applyCanonicalTracker\(\s*applyInteraction\(state, interaction\),/,
-    );
+  it("re-implements no engine step of its own", () => {
+    const p = preview();
+    for (const fn of ["applyInteraction(", "applyCanonicalTracker(", "resolveNextScreen(", "isMissionComplete("]) {
+      expect(p, `${fn} belongs to the runtime`).not.toContain(fn);
+    }
   });
 
   it("refuses to preview a published or archived version", () => {

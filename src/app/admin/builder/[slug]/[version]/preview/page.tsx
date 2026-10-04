@@ -49,7 +49,11 @@ export default async function PreviewPage({
     notFound();
   }
 
-  const screens = await adminDraftScreens(mission.id, version);
+  const [screens, { data: definition }] = await Promise.all([
+    adminDraftScreens(mission.id, version),
+    // Draft-only (D-61): the same RPC refuses a published version.
+    supabase.rpc("admin_draft_definition", { p_mission_id: mission.id, p_version: version }),
+  ]);
 
   return (
     <MissionPreview
@@ -58,6 +62,7 @@ export default async function PreviewPage({
       version={version}
       backHref={`/admin/builder/${slug}/${version}`}
       completionRule={versionRow.completion_rule}
+      definition={definition ?? {}}
       screens={screens.map((s) => ({
         screenKey: s.screen_key,
         type: s.type,
