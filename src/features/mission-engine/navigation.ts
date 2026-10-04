@@ -38,6 +38,7 @@ export type MissionScreen = {
     attempts?: number;
     waitSeconds?: number;
     trail?: { title: string; type: "digital" | "physical" } | null;
+    prints?: { key: string; title: string }[];
   };
 };
 

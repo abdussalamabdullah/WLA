@@ -84,3 +84,25 @@ describe("a completing response is kept", () => {
     expect(saves[0].response).toBeNull();
   });
 });
+
+describe("stale steps and timers, through the real path (found in mechanics QA)", () => {
+  const screens = [
+    { screenKey: "timed", type: "content", title: "Timed", body: null, sequence: 1, configuration: { next: "after", timer: { seconds: 20, onExpire: "advance" } } },
+    { screenKey: "after", type: "content", title: "After", body: null, sequence: 2, configuration: {} },
+  ];
+
+  it("an interaction for a step the run has left changes nothing and does not throw", async () => {
+    const { gateway, saves } = gatewayFor(screens, null, "after");
+    const r = await recordInteractionVia(gateway as never, { kind: "timer_expired", screenKey: "timed" });
+    expect(r.currentScreenKey).toBe("after");
+    expect(r.failure).toBeUndefined();
+    expect(saves).toEqual([]);
+  });
+
+  it("an early timer report is a quiet 'not yet', not an error", async () => {
+    const { gateway, saves } = gatewayFor(screens, null, "timed");
+    const r = await recordInteractionVia(gateway as never, { kind: "timer_expired", screenKey: "timed" });
+    expect(r.failure?.code).toBe("timer_not_expired");
+    expect(saves).toEqual([]);
+  });
+});

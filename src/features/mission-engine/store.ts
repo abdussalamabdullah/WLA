@@ -137,3 +137,22 @@ export async function signMedia(missionId: string, version: number, keys: string
   }
   return out;
 }
+
+/**
+ * Plan §5 — the approved base PDF for a printable, from the run's pinned
+ * version's Mission Kit. Same shape as signMedia: the caller authorised the
+ * run; the title comes from the pinned definition, never from the browser.
+ */
+export async function readKitBase(missionId: string, version: number, title: string): Promise<Uint8Array | null> {
+  const admin = createAdminClient();
+  const { data: row } = await admin
+    .from("mission_resources")
+    .select("storage_path")
+    .eq("mission_id", missionId)
+    .eq("version", version)
+    .eq("title", title)
+    .maybeSingle();
+  if (!row?.storage_path) return null;
+  const { data: file } = await admin.storage.from("mission-resources").download(row.storage_path);
+  return file ? new Uint8Array(await file.arrayBuffer()) : null;
+}

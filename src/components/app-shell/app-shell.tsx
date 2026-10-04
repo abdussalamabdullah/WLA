@@ -104,7 +104,7 @@ export function AppShell({
   return (
     <div className="min-h-dvh bg-[var(--color-background)]">
       {/* ---------------------------------------------------------- header */}
-      <header className="sticky top-0 z-30 border-b border-[var(--color-border)] bg-[var(--color-background)]">
+      <header className="sticky top-0 z-30 print:hidden border-b border-[var(--color-border)] bg-[var(--color-background)]">
         <div className="flex min-h-[64px] items-center gap-[var(--space-m)] px-[var(--space-m)] lg:px-[var(--space-l)]">
           <button
             type="button"
@@ -156,7 +156,7 @@ export function AppShell({
           className={cn(
             "border-[var(--color-border)] lg:w-[248px] lg:shrink-0 lg:border-r",
             "lg:sticky lg:top-[64px] lg:h-[calc(100dvh-64px)]",
-            "flex-col justify-between p-[var(--space-m)] lg:flex",
+            "flex-col justify-between p-[var(--space-m)] lg:flex print:!hidden",
             open ? "flex border-b" : "hidden",
           )}
         >

@@ -526,6 +526,31 @@ const pattern_grid = graded("pattern_grid", {
   samples: (c) => [...c.outcomes.map((o) => o.match.grid), Array.from({ length: c.rows * c.cols }, (_, n) => c.given[n] || "")],
 });
 
+/** Compass ranges wrap through north when min > max (e.g. 315–45 is "roughly north"). */
+export function inRange(mode: string, n: number, m: { min: number; max: number }): boolean {
+  if (mode === "compass" && m.min > m.max) return n >= m.min || n <= m.max;
+  return n >= m.min && n <= m.max;
+}
+
+const device_input = graded("device_input", {
+  check(v, c) {
+    if (!isRecord(v) || typeof v.reading !== "number" || !Number.isFinite(v.reading) || (v.source !== "sensor" && v.source !== "manual")) {
+      return fail("invalid", "That reading couldn't be used. Try again, or use the other way.");
+    }
+    const r = v.reading;
+    if (c.mode === "compass" && (r < 0 || r >= 360)) return fail("invalid", "That direction isn't on the compass.");
+    if (c.mode === "tilt" && (r < -90 || r > 90)) return fail("invalid", "That tilt isn't possible.");
+    if (c.mode === "motion" && (r < 0 || r > 100 || !Number.isInteger(r))) return fail("invalid", "That count isn't possible.");
+    return ok;
+  },
+  matches: (v, m: { min: number; max: number }, c) => inRange(c.mode, (v as { reading: number }).reading, m),
+  stored: (v) => (v as { reading: number }).reading,
+  samples: (c) => [
+    ...c.outcomes.map((o) => ({ reading: c.mode === "compass" && o.match.min > o.match.max ? o.match.min : (o.match.min + o.match.max) / 2, source: "manual" })),
+    { reading: c.mode === "motion" ? c.target : 0, source: "manual" },
+  ],
+});
+
 /** Simulation: `{ action: "run", values }` stays and updates readouts; `{ action: "done" }` moves on. */
 const simulation: InteractionContract = {
   type: "simulation",
@@ -658,4 +683,5 @@ export const libraryContracts: Record<LibraryType, InteractionContract> = {
   pattern_grid,
   simulation,
   workspace,
+  device_input,
 };

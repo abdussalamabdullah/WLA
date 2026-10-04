@@ -31,11 +31,13 @@ export type ScreenView = {
   waitSeconds?: number;
   /** A Trail marker on this screen, so the child knows what is kept. */
   trail?: { title: string; type: "digital" | "physical" } | null;
+  /** Printables this screen offers whose condition holds (key + title only). */
+  prints?: { key: string; title: string }[];
 };
 
 export type ProjectedScreen = MissionScreen & { view: ScreenView };
 
-const SERVER_ONLY = ["routes", "requires", "otherwise", "effects", "next", "canonicalTracker", "condition", "convergeAt", "required"];
+const SERVER_ONLY = ["prints", "routes", "requires", "otherwise", "effects", "next", "canonicalTracker", "condition", "convergeAt", "required"];
 
 function withoutWhen(o: Record<string, unknown>): Record<string, unknown> {
   const copy = { ...o };
@@ -161,6 +163,10 @@ export function projectScreen(
       attempts: state.attempts[screen.screenKey] ?? 0,
       waitSeconds: checkpointWait(model, screen.screenKey, state, now),
       trail: common.trail ? { title: common.trail.title, type: common.trail.type } : null,
+      prints: (common.prints ?? []).flatMap((k) => {
+        const p = model.definition.prints.find((x) => x.key === k);
+        return p && (!p.when || evaluate(p.when, { state, now })) ? [{ key: p.key, title: p.title }] : [];
+      }),
     },
   };
 }

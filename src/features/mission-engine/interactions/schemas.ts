@@ -106,6 +106,12 @@ export const codeEntryConfig = z.object({
     .default({ case: true, spaces: true, punctuation: true }),
   outcomes: outcomes(z.object({ values: z.array(z.string().min(1)).min(1) })),
   onNoMatch,
+  /**
+   * Offer "Scan it" (camera, Plan §5): reads a QR or barcode printed on a
+   * Kit card into the field. Object-facing, nothing kept; typing is always
+   * offered alongside.
+   */
+  scan: z.boolean().default(false),
 });
 
 export const tokenSequenceConfig = z.object({
@@ -297,6 +303,24 @@ export const workspaceConfig = z.object({
   requirePlaced: z.array(z.string()).default([]),
 });
 
+/**
+ * Device-assisted input (Plan §5): compass heading, tilt, or shakes — with an
+ * equivalent manual route always offered (directions, a number, or "I did
+ * it"), so no child is stopped by a device, a permission or a preference.
+ * Readings are numbers; nothing else leaves the device.
+ */
+export const deviceInputConfig = z.object({
+  ...base,
+  mode: z.enum(["compass", "tilt", "motion"]).default("compass"),
+  /** What the child is asked to do with the device, e.g. "Point the top of your device at the tallest tree." */
+  label: z.string().default("Hold your device steady"),
+  /** compass: degrees 0–359 (min > max wraps through north); tilt: degrees −90…90; motion: shakes. */
+  outcomes: outcomes(z.object({ min: z.number(), max: z.number() })),
+  onNoMatch,
+  /** Shakes to count in motion mode. */
+  target: z.number().int().positive().max(50).default(3),
+});
+
 export const libraryConfigByType = {
   numeric_entry: numericEntryConfig,
   code_entry: codeEntryConfig,
@@ -312,6 +336,7 @@ export const libraryConfigByType = {
   pattern_grid: patternGridConfig,
   simulation: simulationConfig,
   workspace: workspaceConfig,
+  device_input: deviceInputConfig,
 } as const;
 
 export type LibraryType = keyof typeof libraryConfigByType;

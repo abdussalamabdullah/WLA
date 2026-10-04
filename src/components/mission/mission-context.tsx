@@ -33,6 +33,10 @@ export type MissionContextValue = {
   notice?: string;
   /** F7 — this screen's resolved media, shown by ScreenFrame under the body. */
   media?: MediaBlock[];
+  /** Printables made for this run that this screen offers (Plan §5). */
+  prints?: { key: string; title: string }[];
+  /** A timed stage: seconds left by server time (view.timerSeconds). */
+  timer?: { seconds: number; visible: boolean; onExpire: () => void };
 };
 
 const MissionContext = createContext<MissionContextValue>({

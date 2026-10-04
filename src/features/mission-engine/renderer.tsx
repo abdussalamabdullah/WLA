@@ -1,6 +1,7 @@
 "use client";
 
-import { createElement } from "react";
+import { createElement, useCallback } from "react";
+import { CheckpointWait } from "@/components/mission/mission-timer";
 import {
   MissionContextProvider,
   useMissionContext,
@@ -37,6 +38,7 @@ import {
   TokenSequenceScreen,
   WorkspaceScreen,
 } from "@/components/mission/screens/library";
+import { DeviceInputScreen } from "@/components/mission/screens/device";
 import type { MissionScreen } from "./navigation";
 import type { MediaBlock } from "./media";
 import type { MissionInteraction, MissionStateData } from "./schemas";
@@ -74,6 +76,7 @@ registerScreens({
   pattern_grid: PatternGridScreen,
   simulation: SimulationScreen,
   workspace: WorkspaceScreen,
+  device_input: DeviceInputScreen,
 });
 
 /**
@@ -110,7 +113,20 @@ export function MissionScreenRenderer({
 }) {
   const outer = useMissionContext();
   const component = getScreenComponent(screen.type);
+  const view = screen.view;
+  const onTimerExpired = useCallback(
+    () => onAdvance({ kind: "timer_expired", screenKey: screen.screenKey }),
+    [onAdvance, screen.screenKey],
+  );
   if (!component) return null;
+
+  // A stage that opens later (checkpoint): nothing to do here yet.
+  if (view?.waitSeconds && view.waitSeconds > 0) {
+    return createElement(CheckpointWait, { seconds: view.waitSeconds, missionSlug, title: screen.title });
+  }
+  const timer = typeof view?.timerSeconds === "number"
+    ? { seconds: view.timerSeconds, visible: Boolean(view.timerVisible), onExpire: onTimerExpired }
+    : undefined;
 
   // Mission Control v2 items for THIS screen (already filtered by the
   // server's projection), made available to every shared component.
@@ -122,7 +138,7 @@ export function MissionScreenRenderer({
 
   return createElement(
     MissionContextProvider,
-    { value: { ...outer, missionSlug, support, media } },
+    { value: { ...outer, missionSlug, support, media, timer, prints: view?.prints ?? [] } },
     createElement(component, {
       screen,
       state,

@@ -3,7 +3,7 @@ import { assetKeysIn } from "./media";
 import { contractFor } from "./contract";
 import { commonOf, commonScreenConfig, missionDefinition, screenByKey, type MissionModel } from "./definition";
 import type { MissionScreen } from "./navigation";
-import { EngineRefusal, completionCondition, startRun, step } from "./runtime";
+import { EngineRefusal, applyQr, completionCondition, startRun, step } from "./runtime";
 import { emptyMissionState, screenConfigByType, type MissionInteraction, type MissionStateData } from "./schemas";
 import { acceptsValue, effect as effectSchema, opsByType, type VariableDeclaration } from "./variables";
 
@@ -131,6 +131,15 @@ export function simulate(model: MissionModel, opts: { maxPaths?: number; maxStep
     }
     const inputs = sampleInputs(screen, f.state, model);
     let progressed = false;
+    // A Kit QR code can be scanned at any point (Plan §5): explore each scan
+    // once as a held step, so content it unlocks is reachable in QA.
+    if (f.stays < 1) {
+      for (const q of model.definition.qr) {
+        if (q.action !== "unlock") continue;
+        const r = applyQr(model, f.state, q.key, later);
+        if (r.applied) stack.push({ ...f, state: r.state, steps: f.steps + 1, stays: f.stays + 1, decisions: [...f.decisions, `scan:${q.key}`] });
+      }
+    }
     for (const input of inputs) {
       let r;
       try {
@@ -235,6 +244,28 @@ export function validateMission(model: MissionModel, ctx: ValidationContext = {}
     seen.set(s.sequence, s.screenKey);
   }
 
+  // Kit QR codes (Plan §5)
+  const qrKeys = def.qr.map((q) => q.key);
+  for (const k of new Set(qrKeys.filter((k, i) => qrKeys.indexOf(k) !== i))) issues.push(issue("blocking", "logic", "duplicate_qr", null, `QR code "${k}" is defined twice.`));
+  for (const q of def.qr) {
+    if (q.action === "resource" && !q.resource) issues.push(issue("blocking", "logic", "qr_without_resource", null, `QR "${q.key}" opens a Kit resource but names none.`));
+    if (q.action === "resource" && q.resource && ctx.kitTitles && !ctx.kitTitles.includes(q.resource)) issues.push(issue("blocking", "assets", "qr_missing_resource", null, `QR "${q.key}" opens "${q.resource}", which is not in this version's Kit.`));
+    if (q.action === "unlock" && !q.unlock && !q.effects.length) issues.push(issue("blocking", "logic", "qr_does_nothing", null, `QR "${q.key}" is a scan-to-reveal code that unlocks nothing.`));
+  }
+
+  // Dynamic printables (Plan §5)
+  const printKeys = def.prints.map((p) => p.key);
+  for (const k of new Set(printKeys.filter((k, i) => printKeys.indexOf(k) !== i))) issues.push(issue("blocking", "logic", "duplicate_print", null, `Printable "${k}" is defined twice.`));
+  for (const p of def.prints) {
+    if (ctx.kitTitles && !ctx.kitTitles.includes(p.base)) issues.push(issue("blocking", "assets", "print_missing_base", null, `Printable "${p.key}" is based on "${p.base}", which is not in this version's Kit.`));
+    for (const f of p.fields) for (const [, v] of f.text.matchAll(/\{\{\s*var\.([a-z0-9_.]+)\s*\}\}/g)) {
+      if (!v.startsWith("tracker.") && !def.variables.some((d) => d.key === v)) issues.push(issue("blocking", "logic", "undeclared_variable", null, `Printable "${p.key}" prints "${v}", which is not declared.`));
+    }
+  }
+  for (const s of screens) for (const k of commonOf(s).prints ?? []) {
+    if (!printKeys.includes(k)) issues.push(issue("blocking", "structure", "broken_reference", s.screenKey, `Offers printable "${k}", which is not defined.`));
+  }
+
   const dupVar = def.variables.map((d) => d.key).filter((k, i, a) => a.indexOf(k) !== i);
   for (const k of new Set(dupVar)) issues.push(issue("blocking", "logic", "duplicate_variable", null, `Variable "${k}" is declared twice.`));
 
@@ -254,7 +285,8 @@ export function validateMission(model: MissionModel, ctx: ValidationContext = {}
       }
     }
     if ("unlocked" in r && !unlockKeys.has(r.unlocked)) {
-      const viaEffect = JSON.stringify(screens.map((s) => s.configuration)).includes(`"key":"${r.unlocked}"`) || JSON.stringify(def.events).includes(`"key":"${r.unlocked}"`);
+      const viaEffect = JSON.stringify(screens.map((s) => s.configuration)).includes(`"key":"${r.unlocked}"`) || JSON.stringify(def.events).includes(`"key":"${r.unlocked}"`)
+        || def.qr.some((q) => q.unlock === r.unlocked || JSON.stringify(q.effects).includes(`"key":"${r.unlocked}"`));
       if (!viaEffect) issues.push(issue("blocking", "logic", "unlock_without_condition", where, `Waits for unlock "${r.unlocked}", which nothing can ever grant.`));
     }
     if ("outcome" in r) {
@@ -493,6 +525,10 @@ export function validateMission(model: MissionModel, ctx: ValidationContext = {}
     unsatisfiable(e.when, null);
     checkEffects(e.effects, null);
     if (e.goto && !keys.has(e.goto)) issues.push(issue("blocking", "structure", "broken_reference", null, `Event "${e.key}" goes to "${e.goto}", which is not a screen.`));
+  }
+  for (const q of def.qr) {
+    if (q.when) { for (const r of conditionRefs(q.when)) checkRef(r, null, null); unsatisfiable(q.when, null); }
+    checkEffects(q.effects, null);
   }
   for (const cp of def.checkpoints) if (!keys.has(cp.screenKey)) issues.push(issue("blocking", "structure", "broken_reference", null, `Checkpoint "${cp.key}" is on "${cp.screenKey}", which is not a screen.`));
   for (const p of def.pools) {

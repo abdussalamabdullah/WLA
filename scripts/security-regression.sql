@@ -620,3 +620,7 @@ select chk('the engine loads the run''s own responses for recall',
   jsonb_typeof(engine_load_run(:'ownpid')->'responses') = 'object');
 reset role;
 \echo ''
+\echo '=============== DEVICE INPUT (0035) ==============='
+select chk('device_input is a screen_type value',
+  exists (select 1 from unnest(enum_range(null::screen_type)) t where t::text = 'device_input'));
+\echo ''

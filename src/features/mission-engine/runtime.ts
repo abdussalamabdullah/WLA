@@ -67,6 +67,9 @@ export type StepResult =
       events: AnalyticsDraft[];
     };
 
+/** How early a `timer_expired` may arrive and still count (clock skew, latency). */
+export const TIMER_TOLERANCE_SECONDS = 2;
+
 const mark = (s: MissionStateData, key: string, now: Date): MissionStateData => ({
   ...s,
   marks: { ...s.marks, [key]: now.toISOString() },
@@ -236,7 +239,8 @@ export function step(
   // ---- timed stage: accepted only when the server agrees time is up.
   if (interaction.kind === "timer_expired") {
     const left = timerRemaining(screen, state0, now);
-    if (left === null || left > 0) throw new EngineRefusal("timer_not_expired");
+    // Two seconds' tolerance for clocks and the network: nothing a child could use.
+    if (left === null || left > TIMER_TOLERANCE_SECONDS) throw new EngineRefusal("timer_not_expired");
     if (common.timer?.onExpire === "stay") {
       return { ok: true, state: state0, nextScreenKey: screen.screenKey, completed: false, stayed: true, response: null, evidence: [], events: [] };
     }
@@ -310,6 +314,35 @@ export function step(
   if (completed) events.push({ name: "mission_completed" });
 
   return { ok: true, state, nextScreenKey, completed, stayed, response, evidence, events };
+}
+
+// ----------------------------------------------------------------- QR ----
+
+/**
+ * A Kit QR code was scanned (Plan §5). Not a screen interaction: the physical
+ * world reaching into the run. Applies the code's unlock and effects once,
+ * if its condition holds, then settles unlocks and events as any interaction
+ * does. Never moves the child's position. Pure, like `step`.
+ */
+export function applyQr(
+  model: MissionModel,
+  state0: MissionStateData,
+  key: string,
+  now: Date,
+): { applied: boolean; state: MissionStateData; events: AnalyticsDraft[]; qr: MissionModel["definition"]["qr"][number] | null } {
+  const qr = model.definition.qr.find((q) => q.key === key) ?? null;
+  if (!qr) return { applied: false, state: state0, events: [], qr: null };
+  const scanned = { name: "qr_scanned", detail: { source: qr.action } } as AnalyticsDraft;
+  if (qr.action !== "unlock") return { applied: false, state: state0, events: [scanned], qr };
+  const already = qr.unlock ? state0.unlocked.includes(qr.unlock) : state0.marks[`qr:${qr.key}`] !== undefined;
+  if (already || (qr.when && !evaluate(qr.when, { state: state0, now }))) {
+    return { applied: false, state: state0, events: [{ ...scanned, detail: { source: qr.action, outcome: already ? "already" : "not_yet" } }], qr };
+  }
+  const decls = declarations(model);
+  let state = applyEffects(state0, [...(qr.unlock ? [{ op: "unlock", key: qr.unlock }] : []), ...qr.effects], { declarations: decls, now });
+  state = mark(state, `qr:${qr.key}`, now);
+  const settled = settle(model, state, now, decls);
+  return { applied: true, state: settled.state, events: [{ ...scanned, detail: { source: qr.action, unlock: qr.unlock ?? qr.key } }, ...settled.events], qr };
 }
 
 // --------------------------------------------------------------- start ----

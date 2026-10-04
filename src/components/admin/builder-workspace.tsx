@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { AssetManager } from "./asset-manager";
 import type { ResolvedAsset } from "@/features/mission-engine/media";
 import { useActionState, useState } from "react";
@@ -202,6 +203,14 @@ export function BuilderWorkspace({
 
       {/* ------------------------------------------------- mission logic (F8) */}
       <DefinitionEditor missionId={missionId} slug={slug} version={version} definition={def} />
+      {def.qr.length > 0 && (
+        <p className="mt-[var(--space-s)]">
+          <Link href={`/admin/builder/${slug}/${version}/qr`}
+            className="inline-flex min-h-[var(--target-min)] items-center text-[length:var(--text-label)] underline decoration-[var(--color-border-strong)] underline-offset-4">
+            Print the QR codes ({def.qr.length})
+          </Link>
+        </p>
+      )}
 
       <AssetManager missionId={missionId} slug={slug} version={version} rows={assets.rows} resolved={assets.resolved} />
 
