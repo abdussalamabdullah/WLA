@@ -1,4 +1,5 @@
 import { conditionRefs, fromLegacyReveal, type Ref } from "./conditions";
+import { assetKeysIn } from "./media";
 import { contractFor } from "./contract";
 import { commonOf, commonScreenConfig, missionDefinition, screenByKey, type MissionModel } from "./definition";
 import type { MissionScreen } from "./navigation";
@@ -428,15 +429,22 @@ export function validateMission(model: MissionModel, ctx: ValidationContext = {}
     }
 
     // media and accessibility
-    for (const m of c.media ?? []) {
-      const a = assets.get(m.asset);
+    // Every asset the screen needs: media blocks and `asset:<key>` references.
+    for (const key of assetKeysIn(s.configuration)) {
+      const a = assets.get(key);
       if (!a) {
-        issues.push(issue("blocking", "assets", "missing_asset", s.screenKey, `Uses media "${m.asset}", which is not in this version's assets.`));
+        issues.push(issue("blocking", "assets", "missing_asset", s.screenKey, `Uses media "${key}", which is not in this version's assets.`));
         continue;
       }
       if (["image", "diagram", "map", "animation"].includes(a.kind) && !a.alt_text) issues.push(issue("blocking", "accessibility", "missing_alt_text", s.screenKey, `Media "${a.key}" needs a text alternative.`));
       if (a.kind === "audio" && !a.transcript) issues.push(issue("blocking", "accessibility", "missing_transcript", s.screenKey, `Audio "${a.key}" needs a text equivalent.`));
       if (a.kind === "video" && !a.captions && !a.transcript) issues.push(issue("blocking", "accessibility", "missing_captions", s.screenKey, `Video "${a.key}" needs captions or a transcript.`));
+    }
+    for (const m of c.media ?? []) {
+      if (m.display === "before_after" && !m.compareWith) issues.push(issue("advisory", "assets", "before_after_without_pair", s.screenKey, `Media "${m.asset}" is set to before/after but has nothing to compare with.`));
+      if (m.display === "layers" && !m.layers?.length) issues.push(issue("advisory", "assets", "layers_without_layers", s.screenKey, `Media "${m.asset}" is set to layers but has none.`));
+      const kind = assets.get(m.asset)?.kind;
+      if (m.display !== "inline" && (kind === "audio" || kind === "video")) issues.push(issue("advisory", "assets", "display_not_for_kind", s.screenKey, `"${m.display}" applies to pictures, not ${kind}.`));
     }
     if (c.timer && c.timer.seconds < 20) issues.push(issue("advisory", "accessibility", "short_timer", s.screenKey, "Timers under 20 seconds are hard to read and act on."));
     if (c.timer && !c.timer.visible) issues.push(issue("advisory", "accessibility", "hidden_timer", s.screenKey, "A timed stage should show the time left."));

@@ -135,13 +135,14 @@ export async function draftQaReport(missionId: string, version: number) {
   const { buildModel } = await import("@/features/mission-engine/definition");
   const { validateMission } = await import("@/features/mission-engine/validator");
   const { supabase } = await requireAdmin();
-  const [screens, defRes, verRes, sqlIssues, resources, missionRes] = await Promise.all([
+  const [screens, defRes, verRes, sqlIssues, resources, missionRes, media] = await Promise.all([
     adminDraftScreens(missionId, version),
     supabase.rpc("admin_draft_definition", { p_mission_id: missionId, p_version: version }),
     supabase.from("mission_versions").select("completion_rule").eq("mission_id", missionId).eq("version", version).maybeSingle(),
     validateVersion(missionId, version),
     adminDraftResources(missionId, version),
     supabase.from("missions").select("min_age, max_age").eq("id", missionId).maybeSingle(),
+    adminDraftAssets(missionId, version),
   ]);
   const model = buildModel({
     definition: defRes.data ?? {},
@@ -153,6 +154,7 @@ export async function draftQaReport(missionId: string, version: number) {
   });
   const { issues, paths } = validateMission(model, {
     kitTitles: resources.map((r) => r.title),
+    assets: media.rows.map((a) => ({ key: a.key, kind: a.kind, alt_text: a.alt_text, transcript: a.transcript, captions: Boolean(a.captions_path) })),
     ages: missionRes.data ? { min: missionRes.data.min_age, max: missionRes.data.max_age } : null,
   });
   // The SQL gate's Kit / note findings are not visible to the TS validator.
@@ -165,5 +167,31 @@ export async function draftQaReport(missionId: string, version: number) {
       screenKey: p.screen_key,
       detail: p.detail,
     }));
-  return { model, issues: [...issues, ...fromSql], paths };
+  return { model, issues: [...issues, ...fromSql], paths, media };
+}
+
+/**
+ * F7 — a draft version's media, with short-lived URLs signed by the ADMIN'S
+ * OWN SESSION (`admins read mission media`). `admin_draft_assets` refuses a
+ * published version (D-61), so this is not a read path to released media.
+ */
+export async function adminDraftAssets(missionId: string, version: number) {
+  const { supabase } = await requireAdmin();
+  const { data } = await supabase.rpc("admin_draft_assets", { p_mission_id: missionId, p_version: version });
+  const rows = (data ?? []) as import("@/types/database").MissionAssetRow[];
+  const paths = [...new Set(rows.flatMap((a) => [a.storage_path, a.captions_path].filter((p): p is string => Boolean(p))))];
+  const signed = paths.length
+    ? (await supabase.storage.from("mission-media").createSignedUrls(paths, 60 * 30)).data ?? []
+    : [];
+  const url = new Map(signed.filter((s) => s.path && s.signedUrl).map((s) => [s.path as string, s.signedUrl]));
+  const resolved: import("@/features/mission-engine/media").ResolvedAsset[] = rows.map((a) => ({
+    key: a.key,
+    kind: a.kind,
+    url: url.get(a.storage_path) ?? "",
+    alt: a.alt_text,
+    longDescription: a.long_description,
+    transcript: a.transcript,
+    captionsUrl: a.captions_path ? (url.get(a.captions_path) ?? null) : null,
+  }));
+  return { rows, resolved };
 }

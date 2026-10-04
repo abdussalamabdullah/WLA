@@ -552,7 +552,7 @@ const simulation: InteractionContract = {
         state: { ...state, custom: { ...state.custom, [k]: { runs: prev + 1, values: v.values } } },
         effects: controlEffects(v.values, c.controls),
         stay: true,
-        events: [{ name: "simulation_run", screen_key: k }],
+        events: [{ name: "interaction_submitted", screen_key: k, detail: { screen_type: "simulation", outcome: "run" } }],
       };
     }
     const last = (state.custom[k] as { values?: unknown } | undefined)?.values ?? null;

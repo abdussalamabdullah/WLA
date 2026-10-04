@@ -1,5 +1,6 @@
 "use client";
 
+import { resolveMedia, type ResolvedAsset } from "@/features/mission-engine/media";
 import { MissionContextProvider } from "@/components/mission/mission-context";
 import { useCallback, useMemo, useState } from "react";
 import Link from "next/link";
@@ -46,6 +47,7 @@ export function MissionPreview({
   completionRule,
   definition,
   backHref,
+  assets = [],
 }: {
   missionTitle: string;
   missionSlug: string;
@@ -55,7 +57,10 @@ export function MissionPreview({
   /** The draft's mission-level definition (F8), read through admin_draft_definition. */
   definition?: unknown;
   backHref: string;
+  /** F7 — the draft's media, signed with the admin's session; resolved exactly as for a learner. */
+  assets?: ResolvedAsset[];
 }) {
+  const assetMap = useMemo(() => new Map(assets.map((a) => [a.key, a])), [assets]);
   const model = useMemo(
     () => buildModel({ definition, screens, completionRule }),
     [definition, screens, completionRule],
@@ -83,7 +88,7 @@ export function MissionPreview({
 
   const screen = currentKey ? (model.screens.find((s) => s.screenKey === currentKey) ?? null) : null;
   // Render what a child would receive — the projection — not the raw model.
-  const projected = screen ? projectScreen(model, screen, state, new Date()) : null;
+  const projected = screen ? resolveMedia(projectScreen(model, screen, state, new Date()), assetMap) : null;
   const childState = clientState(model, state);
 
   function advance(interaction: MissionInteraction) {

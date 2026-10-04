@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useContext } from "react";
+import type { MediaBlock } from "@/features/mission-engine/media";
 
 /**
  * What shared mission components may know about the mission they are in.
@@ -30,6 +31,8 @@ export type MissionContextValue = {
    * the screen's `error`. Nothing moved in either case.
    */
   notice?: string;
+  /** F7 — this screen's resolved media, shown by ScreenFrame under the body. */
+  media?: MediaBlock[];
 };
 
 const MissionContext = createContext<MissionContextValue>({

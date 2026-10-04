@@ -8,8 +8,10 @@ import {
   loadRun as storeLoad,
   recordRunEvents,
   saveRun as storeSave,
+  signMedia,
   type LoadedRun,
 } from "./store";
+import { assetKeysIn, resolveMedia } from "./media";
 import {
   emptyMissionState,
   missionInteraction,
@@ -152,7 +154,13 @@ export async function loadStageVia(gw: MissionGateway, opts: { device?: string }
   }
 
   const projected = projectCurrent(run.model, run.progress.current_screen_key, run.state, now);
-  return { mission: ctx.mission, progress: run.progress, state: projected.state, screen: projected.screen };
+  let screen = projected.screen;
+  if (screen) {
+    // F7: media for this screen only, at the pinned version.
+    const keys = assetKeysIn(screen.configuration);
+    if (keys.length) screen = resolveMedia(screen, await signMedia(run.progress.mission_id, run.progress.mission_version, keys));
+  }
+  return { mission: ctx.mission, progress: run.progress, state: projected.state, screen };
 }
 
 /**

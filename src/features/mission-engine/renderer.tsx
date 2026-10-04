@@ -38,6 +38,7 @@ import {
   WorkspaceScreen,
 } from "@/components/mission/screens/library";
 import type { MissionScreen } from "./navigation";
+import type { MediaBlock } from "./media";
 import type { MissionInteraction, MissionStateData } from "./schemas";
 
 /**
@@ -114,10 +115,14 @@ export function MissionScreenRenderer({
   // Mission Control v2 items for THIS screen (already filtered by the
   // server's projection), made available to every shared component.
   const support = ((screen.configuration as { support?: SupportItem[] } | null)?.support ?? []);
+  // F7 — resolved media only (an unresolved block still names a key, not an asset).
+  const media = ((screen.configuration as { media?: unknown[] } | null)?.media ?? []).filter(
+    (b): b is MediaBlock => !!b && typeof (b as { asset?: unknown }).asset === "object",
+  );
 
   return createElement(
     MissionContextProvider,
-    { value: { ...outer, missionSlug, support } },
+    { value: { ...outer, missionSlug, support, media } },
     createElement(component, {
       screen,
       state,

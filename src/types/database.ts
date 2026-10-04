@@ -115,6 +115,22 @@ export type MissionResourceRow = {
   created_at: string;
 };
 
+/** F7 — media a screen shows, pinned to its version (0032). Never read by a client role. */
+export type MissionAssetKind = "image" | "diagram" | "map" | "animation" | "audio" | "video";
+export type MissionAssetRow = {
+  id: string;
+  mission_id: string;
+  version: number;
+  key: string;
+  kind: MissionAssetKind;
+  storage_path: string;
+  alt_text: string | null;
+  long_description: string | null;
+  transcript: string | null;
+  captions_path: string | null;
+  created_at: string;
+};
+
 export type MissionParentNoteRow = {
   version: number;
   id: string;
@@ -295,6 +311,10 @@ export type Database = {
         MissionResourceRow,
         "mission_id" | "title" | "storage_path"
       >;
+      mission_assets: Table<
+        MissionAssetRow,
+        "mission_id" | "version" | "key" | "kind" | "storage_path"
+      >;
       mission_parent_notes: Table<
         MissionParentNoteRow,
         "mission_id" | "content"
@@ -389,6 +409,21 @@ export type Database = {
       admin_mission_insights: {
         Args: { p_mission_id: string; p_version?: number | null };
         Returns: Json;
+      };
+      admin_upsert_asset: {
+        Args: {
+          p_mission_id: string; p_version: number; p_key: string; p_kind: string; p_storage_path: string;
+          p_alt_text: string | null; p_long_description: string | null; p_transcript: string | null; p_captions_path: string | null;
+        };
+        Returns: MissionAssetRow;
+      };
+      admin_delete_asset: {
+        Args: { p_mission_id: string; p_version: number; p_key: string };
+        Returns: undefined;
+      };
+      admin_draft_assets: {
+        Args: { p_mission_id: string; p_version: number };
+        Returns: MissionAssetRow[];
       };
       admin_draft_definition: {
         Args: { p_mission_id: string; p_version: number };

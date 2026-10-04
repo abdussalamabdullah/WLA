@@ -70,8 +70,8 @@ take a child id as an argument.
 Stripe webhook, gift redemption, signing a Mission Kit file for a child
 session **after** `child_session_resource_path` has authorised it (D-64), and
 the **mission engine store** (`features/mission-engine/store.ts`, D-80), which
-loads and saves a run only after the permission chain or the child-session
-lookup has authorised it. In both of the last two it acts on something already
+loads and saves a run — and signs the current screen's media (D-89) — only
+after the permission chain or the child-session lookup has authorised it. In both of the last two it acts on something already
 authorised — it never decides.
 
 **Mission state is server-authoritative (D-80).** No client role may write
