@@ -178,9 +178,28 @@ product and privacy sign-off:
    payment records, for instance — and for how long?
 4. Does deleting the parent account delete every child profile with it?
 
+**2026-10-04 (D-77):** still pending and now formally a blocker for three
+things only — how long published Mission Board contributions are retained,
+account deletion, and Trail export. Nothing else in the Enhancement Plan waits
+on it. The Mission Board inherits the current behaviour below (immediate
+removal on withdrawal or child deletion).
+
 **Current behaviour, unchanged pending your decision:** immediate hard delete
 of a child profile, cascading to entitlements, progress, state, responses and
 Mission Trail evidence. The confirmation names all three data categories.
+
+---
+
+## OPEN-15 — Authority documents cited by the Enhancement Plan are not in the repository · needs source files
+
+The Enhancement Plan cites the **Mission Manual**, the **Production Brief**,
+the **Child Mission** and the **Family Mission Guide** as authorities. None is
+in `docs/source/`. Consequences until they arrive (D-75):
+
+- the account page shows a Family Mission Guide placeholder, not invented copy;
+- the authoring QA's age-band and child-language checks use only the rules
+  that can be derived without the Mission Manual (reading-length and banned
+  gamification vocabulary already prohibited by CLAUDE.md), marked advisory.
 
 ---
 

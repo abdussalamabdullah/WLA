@@ -4,7 +4,9 @@ Read `docs/DECISIONS.md` before starting any task.
 
 ## Authority order
 
-1. **Academy Architecture** (LOCKED — `docs/source/`)
+1. **Academy Architecture** (LOCKED — `docs/source/`), as amended by the
+   **Academy Enhancement Plan** (`docs/source/WLA Academy Enhancement Plan.md`,
+   approved current scope, 2026-10-04)
 2. **Public Website Master**
 3. **Mission Build Brief** (none approved yet)
 4. **Designer Brief / UI-UX Specification**
@@ -92,11 +94,12 @@ you are almost certainly doing something wrong.
 **"Mission Board" means two different things.** See conflict C8.
 
 - _Six Names Mission Board_ — a printable worksheet. A Mission Kit resource.
-- _Mission Board_ (Architecture §16) — an Academy-wide shared-practice
-  destination beneath Mission Home. **Deferred; do not build it.**
+- _Mission Board_ (Architecture §16, amended) — the Academy-wide shared-practice
+  destination beneath the child's mission collection on **My Missions**. In
+  scope since the Enhancement Plan, with parent permission, anonymisation and
+  WLA moderation before anything appears (D-73).
 
-Never let a Build Brief's use of the phrase pull the deferred Academy feature
-into scope.
+Never let a Build Brief's use of the phrase confuse the two.
 
 ## Design system
 
@@ -130,9 +133,14 @@ store child data Brief §46 says not to collect. If deferred — stop.
 
 points · badges · streaks · rankings · leaderboards · gamification · confetti ·
 social profiles · chat · comments · likes · notifications · mission replay ·
-My Missions search/filter · public Trail sharing · compulsory uploads ·
-Mission Board submission or moderation · parent dashboard · no-code mission
-builder · AI tutor · global file library
+public Trail sharing (outside the moderated Mission Board) · compulsory uploads ·
+parent dashboard · AI tutor · global file library
+
+Approved since, and no longer on this list: no-code mission builder (D-56),
+My Missions search/filter (D-60), Mission Board contribution with permission,
+anonymisation and moderation (Enhancement Plan, D-73). The Enhancement Plan's
+interaction, logic and authoring capabilities are current scope — build them as
+shared configuration (`docs/FOUNDATION-ARCHITECTURE.md`), never per mission.
 
 These are deferred or prohibited by Architecture §22, PRD §5, Tech Spec §60 and
 UI/UX §76. Technical ease is not a reason to add one.

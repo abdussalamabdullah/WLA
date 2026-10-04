@@ -996,3 +996,12 @@ describe("a signed-out visitor to My Missions is sent to a way back in", () => {
     expect(page).not.toMatch(/Please sign in to see your missions/);
   });
 });
+
+describe("Mission Board placement (Architecture §16 as amended, D-73)", () => {
+  it("is linked beneath the collection on My Missions, not from Mission Home", () => {
+    const myMissions = code("src/app/(academy)/academy/my-missions/page.tsx");
+    const home = code("src/app/(academy)/academy/missions/[missionId]/page.tsx");
+    expect(myMissions.indexOf('href="/academy/mission-board"')).toBeGreaterThan(myMissions.indexOf("<MissionCollection"));
+    expect(home).not.toMatch(/\/academy\/mission-board/);
+  });
+});
