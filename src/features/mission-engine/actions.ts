@@ -47,7 +47,7 @@ export async function startMissionAction(missionSlug: string) {
 
 export type InteractionOutcome =
   | ({ ok: true } & InteractionResult)
-  | { ok: false; retryable: true; message: string };
+  | { ok: false; retryable: true; message: string; /** Validation, not persistence: nothing is wrong with the save. */ notAccepted?: boolean };
 
 /**
  * Analytics the browser reports — Mission Control opened, a Kit file opened,
@@ -104,7 +104,7 @@ export async function recordInteractionAction(
   // Only reached once the write succeeded.
   if (result.failure) {
     // Validation failed: nothing moved. The child keeps their input and sees why.
-    return { ok: false, retryable: true, message: result.failure.message };
+    return { ok: false, retryable: true, notAccepted: true, message: result.failure.message };
   }
 
   revalidatePath(`/academy/missions/${missionSlug}/active`);

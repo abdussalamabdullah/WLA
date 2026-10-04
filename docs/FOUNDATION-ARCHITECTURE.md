@@ -250,6 +250,54 @@ Control, Kit, device fallback) go through one allow-listed server action.
 
 ---
 
+## 12. The interaction library (D-86) — `interactions/`
+
+`schemas.ts` (configuration), `contracts.ts` (server behaviour), `lint.ts`
+(authoring checks), `catalog.ts` (builder families + working starter
+templates); components in `components/mission/screens/library.tsx`. Every type
+takes `submit`; the contract checks the value's shape against the ids the
+screen offers before anything changes.
+
+| Plan §4 form | Type · mode |
+| --- | --- |
+| single choice · multiple selection · short text | `choice` · `multi_choice` · `response` (existing) |
+| numeric entry | `numeric_entry` |
+| code · word/phrase · passphrase · cipher validation | `code_entry` · `mode` |
+| symbol/token sequence | `token_sequence` |
+| sorting · sequencing · reordering · ranking · drag-and-drop | `arrange` · `sort` / `sequence` / `rank` |
+| matching | `matching` |
+| sliders · weighting · resource allocation | `allocate` · `sliders` / `weighting` / `allocation` |
+| inventories | `inventory` (persists in a list variable) |
+| side-by-side comparison · decision matrices | `compare` · `comparison` / `matrix` |
+| image hotspots · annotation | `hotspot` · `find` / `annotate` |
+| simple drawing | `sketch` (not stored unless `store`) |
+| maps · route building · node/connection building | `map` · `route` / `network` |
+| pattern building | `pattern_grid` |
+| simple simulation controls | `simulation` (server-evaluated readouts) |
+| reset / retry / retest | runtime `retry` (any screen with `retry.allowed`); simulation re-run |
+| persistent workspace | `workspace` + definition `workspaces` |
+
+**Graded input.** `outcomes: [{id, match, next?, effects}]` and `onNoMatch
+{mode: retry|continue, message, next?, effects, fallbackAfter?, fallbackNext?}`
+are server-only. A match records `state.outcomes[screen] = id`; a miss either
+costs an attempt (shown as calm guidance, D-87) or records `no_match` and
+continues; after `fallbackAfter` attempts it continues to `fallbackNext`
+(interaction recovery). No outcomes = open-ended: any valid input is recorded.
+
+**New condition refs:** `{outcome: screenKey}` and `{placed: "board.object"}`.
+
+**What the page never receives:** outcomes, onNoMatch, storeAs (including a
+control's), simulation readout conditions (the server sends the text that
+applies), inventory items or board objects whose `when` does not hold.
+
+**Workspace.** Defined once (`definition.workspaces`: zones, objects with
+optional `when`, links); any number of screens show it (`arrange` or
+`review`). The arrangement persists in `state.workspaces[key]` across screens
+and sessions; objects arrive as their conditions hold; earlier arrangements
+can be revised.
+
+---
+
 ## 11. Extending
 
 * **New interaction type:** a module in `features/mission-engine/interactions/`

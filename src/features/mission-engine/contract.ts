@@ -8,6 +8,8 @@ import {
 } from "./schemas";
 import type { MissionModel } from "./definition";
 import type { Json } from "@/types/database";
+import { libraryContracts as library } from "./interactions/contracts";
+import { lintLibraryScreen } from "./interactions/lint";
 
 /**
  * F4 — THE INTERACTION CONTRACT.
@@ -61,6 +63,18 @@ export type InteractionContract = {
   apply(screen: MissionScreen, i: MissionInteraction, state: MissionStateData, ctx: ContractContext): ContractOutcome;
   /** Client-safe configuration. Must stay valid against the type's schema. */
   project?(config: Record<string, unknown>, screen: MissionScreen, state: MissionStateData, ctx: ContractContext): Record<string, unknown>;
+  /** `submit` values the validator's simulation tries on this screen (every outcome, plus a miss). */
+  samples?(screen: MissionScreen, model: MissionModel): unknown[];
+  /** Type-specific authoring checks, run by the validator (validator.ts). */
+  lint?(screen: MissionScreen, model: MissionModel): LintIssue[];
+};
+
+export type LintIssue = {
+  code: string;
+  severity: "blocking" | "advisory";
+  category: "structure" | "logic" | "content" | "assets" | "accessibility" | "language";
+  screenKey: string | null;
+  detail: string;
 };
 
 const ok: Validation = { ok: true };
@@ -210,8 +224,10 @@ export const builtInContracts: Record<string, InteractionContract> = {
   },
 };
 
-/** Contracts registered by the interaction library (interactions/). */
-const libraryContracts: Record<string, InteractionContract> = {};
+/** The interaction library (interactions/contracts.ts), with its authoring checks. */
+const libraryContracts: Record<string, InteractionContract> = Object.fromEntries(
+  Object.entries(library).map(([k, c]) => [k, { ...c, lint: (screen: MissionScreen, model: MissionModel) => [...(c.lint?.(screen, model) ?? []), ...lintLibraryScreen(screen, model)] }]),
+);
 
 export function registerContract(c: InteractionContract) {
   libraryContracts[c.type] = c;

@@ -528,3 +528,21 @@ select chk('no learner records are copied',
 select chk('the source is untouched',
   (select published = false and version >= 2 from missions where id = :'mid'));
 \echo ''
+\echo '=============== INTERACTION LIBRARY (0031) ==============='
+reset role; set request.jwt.claim.sub='aaaaaaaa-0000-0000-0000-000000000001'; set role authenticated;
+select screen_key as anykey from mission_screens where mission_id = :'dupid' and version = 1 and type = 'completion' limit 1 \gset
+select admin_upsert_screen(:'dupid', 1, 'lib_code', 'code_entry', 'Code', null, 9001,
+  jsonb_build_object('prompt', 'Enter it', 'outcomes', jsonb_build_array(jsonb_build_object('id', 'ok', 'match', '{"values":["x"]}'::jsonb, 'next', :'anykey'))));
+select chk('a screen whose only way on is an outcome is not a dead end',
+  not exists (select 1 from validate_mission_version(:'dupid', 1) v where v.code = 'dead_end' and v.screen_key = 'lib_code'));
+select admin_upsert_screen(:'dupid', 1, 'lib_code', 'code_entry', 'Code', null, 9001,
+  '{"prompt":"Enter it","outcomes":[{"id":"ok","match":{"values":["x"]},"next":"nowhere"}],"onNoMatch":{"mode":"retry","fallbackNext":"also_nowhere"}}'::jsonb);
+select chk('a broken outcome target is reported by the database gate',
+  exists (select 1 from validate_mission_version(:'dupid', 1) v where v.code = 'broken_reference' and v.detail like '%"nowhere"%'));
+select chk('a broken no-match fallback is reported by the database gate',
+  exists (select 1 from validate_mission_version(:'dupid', 1) v where v.code = 'broken_reference' and v.detail like '%"also_nowhere"%'));
+reset role;
+select chk('every library type is a screen_type value',
+  (select count(*) from unnest(enum_range(null::screen_type)) t
+    where t::text in ('numeric_entry','code_entry','token_sequence','arrange','matching','allocate','inventory','compare','hotspot','sketch','map','pattern_grid','simulation','workspace')) = 14);
+\echo ''

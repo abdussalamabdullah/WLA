@@ -2,6 +2,7 @@ import { z } from "zod";
 import { condition, type Condition } from "./conditions";
 import { effect, variableDeclaration, type VariableDeclaration } from "./variables";
 import type { CompletionRule } from "./schemas";
+import { workspaceDef } from "./interactions/schemas";
 import type { MissionScreen } from "./navigation";
 
 /**
@@ -105,6 +106,8 @@ export const missionDefinition = z
     variants: z.array(variantDef).default([]),
     pools: z.array(poolDef).default([]),
     checkpoints: z.array(checkpointDef).default([]),
+    /** Persistent interactive workspaces (Plan §4), shown by `workspace` screens. */
+    workspaces: z.array(workspaceDef).default([]),
     /** Mission-level completion; overrides the version's completion rule when set. */
     completion: condition.optional(),
     /** Named stages for drop-off reporting: screen key → stage label. */

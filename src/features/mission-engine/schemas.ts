@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { condition as conditionSchema } from "./conditions";
+import { libraryConfigByType } from "./interactions/schemas";
 
 /**
  * MISSION SCREEN CONFIGURATION SCHEMAS
@@ -421,6 +422,8 @@ export const screenConfigByType = {
   tracker_confirmation: trackerConfirmationConfig,
   reflection: reflectionConfig,
   completion: completionConfig,
+  /** The interaction library (interactions/schemas.ts, D-86). */
+  ...libraryConfigByType,
 } as const;
 
 export type ScreenType = keyof typeof screenConfigByType;
@@ -513,6 +516,8 @@ export const missionStateData = z.object({
   seed: z.number().int().nullable().default(null),
   /** Persistent interactive workspaces: placements and links by workspace key. */
   workspaces: z.record(z.string(), z.unknown()).default({}),
+  /** screenKey → matched outcome id for graded library input (interactions/). */
+  outcomes: z.record(z.string(), z.string()).default({}),
 });
 
 export type MissionStateData = z.infer<typeof missionStateData>;
@@ -533,6 +538,7 @@ export const emptyMissionState: MissionStateData = {
   variant: null,
   seed: null,
   workspaces: {},
+  outcomes: {},
 };
 
 /**

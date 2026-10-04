@@ -1,5 +1,6 @@
 "use client";
 
+import { MissionContextProvider } from "@/components/mission/mission-context";
 import { useCallback, useMemo, useState } from "react";
 import Link from "next/link";
 import { MissionScreenRenderer } from "@/features/mission-engine/renderer";
@@ -74,6 +75,7 @@ export function MissionPreview({
   const [finished, setFinished] = useState(false);
   const [stuck, setStuck] = useState<string | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
+  const [epoch, setEpoch] = useState(0);
   const [device, setDevice] = useState<"phone" | "tablet" | "desktop">("desktop");
   const [jumpKey, setJumpKey] = useState<string>(ordered[0]?.screenKey ?? "");
   const [stateText, setStateText] = useState<string>("");
@@ -102,6 +104,7 @@ export function MissionPreview({
       return;
     }
     setState(result.state);
+    if (interaction.kind === "retry") setEpoch((n) => n + 1);
     if (result.completed) {
       setFinished(true);
       return;
@@ -238,15 +241,16 @@ export function MissionPreview({
           </div>
         ) : screen ? (
           <>
+            <MissionContextProvider value={{ missionSlug, mode: "preview", support: [], report: () => {}, notice: failure ?? undefined }}>
             <MissionScreenRenderer
-              key={`${screen.screenKey}:${state.attempts[screen.screenKey] ?? 0}`}
+              key={`${screen.screenKey}:${epoch}`}
               screen={projected ?? screen}
               state={childState}
               missionSlug={missionSlug}
               onAdvance={advance}
               isPending={false}
-              error={failure ?? undefined}
             />
+            </MissionContextProvider>
             <p
               className={cn(
                 "mt-[var(--space-2xl)] border-t border-[var(--color-border)] pt-[var(--space-m)]",
