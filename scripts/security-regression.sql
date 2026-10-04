@@ -484,6 +484,8 @@ select chk_raises('a parent cannot record analytics directly',
   format($$select engine_record_events(%L, '[]')$$, :'ownpid'), 'permission denied');
 select chk_raises('a parent cannot read a version definition',
   $$select definition from mission_versions$$, 'permission denied');
+select chk_raises('a parent cannot read mission insights',
+  format($$select admin_mission_insights(%L)$$, :'mid'), 'not_admin');
 select chk_ok('version metadata is still readable by column',
   $$select id, status from mission_versions$$);
 reset role; set request.jwt.claim.sub = ''; set role anon;

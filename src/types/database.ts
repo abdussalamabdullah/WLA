@@ -382,6 +382,10 @@ export type Database = {
         Args: { p_progress_id: string; p_events: Json };
         Returns: undefined;
       };
+      admin_mission_insights: {
+        Args: { p_mission_id: string; p_version?: number | null };
+        Returns: Json;
+      };
       admin_draft_definition: {
         Args: { p_mission_id: string; p_version: number };
         Returns: Json;

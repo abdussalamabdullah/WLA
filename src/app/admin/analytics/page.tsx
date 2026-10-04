@@ -35,7 +35,7 @@ export default async function AdminAnalyticsPage() {
         <div className="mt-[var(--space-m)]">
           <DataTable
             caption="Mission analytics"
-            columns={["Mission", "Published", "Entitled", "Starts", "In progress", "Completed", "Completion rate", "Quiet 14d"]}
+            columns={["Mission", "Published", "Entitled", "Starts", "In progress", "Completed", "Completion rate", "Quiet 14d", ""]}
           >
             {rows.map((r) => (
               <tr key={r.mission_id}>
@@ -51,6 +51,11 @@ export default async function AdminAnalyticsPage() {
                 <Td>{r.completions}</Td>
                 <Td>{r.completion_rate}%</Td>
                 <Td>{r.quiet_14d}</Td>
+                <Td>
+                  <Link href={`/admin/analytics/${r.slug}`} className="inline-flex min-h-[var(--target-min)] items-center underline decoration-[var(--color-border-strong)] underline-offset-4">
+                    Insights<span className="sr-only"> for {r.title}</span>
+                  </Link>
+                </Td>
               </tr>
             ))}
           </DataTable>
