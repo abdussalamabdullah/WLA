@@ -6,6 +6,7 @@ import { ErrorState } from "@/components/system/states";
 import { cn } from "@/lib/utils";
 import { useMissionContext } from "@/components/mission/mission-context";
 import { MediaBlocks } from "@/components/mission/media-blocks";
+import { MissionTimer } from "@/components/mission/mission-timer";
 
 /**
  * Shared frame for every mission screen.
@@ -33,7 +34,7 @@ export function ScreenFrame({
   children?: React.ReactNode;
   action: React.ReactNode;
 }) {
-  const { notice, media } = useMissionContext();
+  const { notice, media, timer, prints, missionSlug, mode } = useMissionContext();
   return (
     <div className="flex flex-col gap-[var(--space-l)]">
       {/*
@@ -56,9 +57,29 @@ export function ScreenFrame({
         </div>
       )}
 
+      {timer && <MissionTimer seconds={timer.seconds} visible={timer.visible} onExpire={timer.onExpire} />}
+
       <MediaBlocks blocks={media} />
 
       {children}
+
+      {/* Printables made for this run (Plan §5): a new tab, never a step. */}
+      {prints && prints.length > 0 && (
+        <ul className="flex flex-col gap-[var(--space-xs)]">
+          {prints.map((p) => (
+            <li key={p.key}>
+              {mode === "preview" ? (
+                <span className="text-[length:var(--text-small)] text-[var(--color-text-muted)]">Print: {p.title} (made for the learner&rsquo;s own run)</span>
+              ) : (
+                <a href={`/api/print/${encodeURIComponent(missionSlug)}/${encodeURIComponent(p.key)}`} target="_blank" rel="noreferrer"
+                  className="inline-flex min-h-[var(--target-min)] items-center text-[length:var(--text-label)] font-medium underline decoration-[var(--color-border-strong)] underline-offset-4">
+                  Print: {p.title}
+                </a>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
 
       {/*
         The physical step. Always visible, never hover-dependent.

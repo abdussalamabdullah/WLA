@@ -177,6 +177,24 @@ export function lintLibraryScreen(screen: MissionScreen, model: MissionModel): L
       unknownIn(c.requirePlaced as string[], objs, "object", "requirePlaced");
       break;
     }
+    case "device_input": {
+      const lim = c.mode === "compass" ? [0, 359] : c.mode === "tilt" ? [-90, 90] : [0, 100];
+      for (const o of outcomes) {
+        const m = o.match as { min: number; max: number };
+        if (m.min < lim[0] || m.max > lim[1]) out.push(L("blocking", "logic", "unreachable_outcome", k, `Outcome "${o.id}" is outside what a ${c.mode} reading can be.`));
+        if (c.mode !== "compass" && m.min > m.max) out.push(L("blocking", "logic", "unreachable_outcome", k, `Outcome "${o.id}" has its minimum above its maximum.`));
+      }
+      // The manual route offers eight directions for a compass: an outcome narrower than 45° may be unreachable by hand.
+      if (c.mode === "compass") for (const o of outcomes) {
+        const m = o.match as { min: number; max: number };
+        const width = m.min > m.max ? 360 - m.min + m.max : m.max - m.min;
+        const dirs = [0, 45, 90, 135, 180, 225, 270, 315];
+        if (!dirs.some((d) => (m.min > m.max ? d >= m.min || d <= m.max : d >= m.min && d <= m.max))) {
+          out.push(L("blocking", "accessibility", "no_manual_route", k, `Outcome "${o.id}" (${width}° wide) can't be chosen without the compass sensor — include one of N, NE, E, SE, S, SW, W, NW.`));
+        }
+      }
+      break;
+    }
     case "sketch":
       if ((c as { store?: boolean }).store) out.push(L("advisory", "content", "stores_drawing", k, "Drawings will be kept as part of the child's record. Only keep them where the mission needs them (Brief §46)."));
       break;

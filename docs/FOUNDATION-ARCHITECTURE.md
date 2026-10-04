@@ -325,6 +325,22 @@ captions. Private bucket `mission-media`. No client role reads either.
 
 ---
 
+## 14. Physical ↔ digital mechanics (D-93, D-94)
+
+| Mechanic | Where | Server rule |
+| --- | --- | --- |
+| Timed stage | `timer` on any screen; `MissionTimer` | expiry accepted only by server time (±2 s) |
+| Checkpoint | `definition.checkpoints[].availableAfter` | `checkpointWait`; step refused until open |
+| Kit QR | `definition.qr`; `/q/<mission>/<code>` | `applyQr`: once, if `when` holds, never moves the child |
+| Printable | `definition.prints`; screen `prints`; `/api/print/...` | pinned Kit PDF + run values, per request, no-store |
+| Device input | `device_input` (compass · tilt · motion) | graded like any library input; manual route equal |
+| Camera scan | `code_entry.scan` | client-only reading into the field; nothing kept |
+
+A step for a screen the run has already left is a no-op returning the real
+position (D-94).
+
+---
+
 ## 11. Extending
 
 * **New interaction type:** a module in `features/mission-engine/interactions/`

@@ -97,6 +97,59 @@ export const checkpointDef = z
   })
   .strict();
 
+/**
+ * QR codes printed in the Mission Kit that lead back into the Academy
+ * (Enhancement Plan §5). A code is mission-aware (it names its mission) and
+ * state-aware (`when`), and resolves on the server for the signed-in actor:
+ *   open     — the mission (active screen if started, else Mission Home)
+ *   resource — an exact Mission Kit resource, by title
+ *   unlock   — scan-to-reveal: grant `unlock` and apply `effects`, once
+ */
+export const qrDef = z
+  .object({
+    key,
+    label: z.string().min(1),
+    action: z.enum(["open", "resource", "unlock"]),
+    resource: z.string().min(1).optional(),
+    unlock: key.optional(),
+    effects: z.array(effect).default([]),
+    /** Only takes effect while this holds; otherwise the scan just opens the mission. */
+    when: condition.optional(),
+  })
+  .strict();
+export type QrDef = z.infer<typeof qrDef>;
+
+/**
+ * Dynamic printables (Plan §5): an approved Kit PDF with fields filled from
+ * the run — a variant's code, a drawn clue, the child's chosen route. The
+ * presentation stays the approved base; only the named fields are added.
+ * Positions are millimetres from the page's top-left, as designers measure.
+ */
+export const printDef = z
+  .object({
+    key,
+    title: z.string().min(1),
+    /** Title of the approved base PDF in this version's Mission Kit. */
+    base: z.string().min(1),
+    fields: z
+      .array(
+        z
+          .object({
+            /** Text with {{var.x}} placeholders — hidden variables included: printing them is the point. */
+            text: z.string().min(1),
+            page: z.number().int().min(0).default(0),
+            x: z.number().min(0),
+            y: z.number().min(0),
+            size: z.number().min(6).max(72).default(14),
+          })
+          .strict(),
+      )
+      .min(1),
+    when: condition.optional(),
+  })
+  .strict();
+export type PrintDef = z.infer<typeof printDef>;
+
 export const missionDefinition = z
   .object({
     schemaVersion: z.literal(1).default(1),
@@ -106,6 +159,10 @@ export const missionDefinition = z
     variants: z.array(variantDef).default([]),
     pools: z.array(poolDef).default([]),
     checkpoints: z.array(checkpointDef).default([]),
+    /** Printables generated for the run from approved Kit PDFs (Plan §5). */
+    prints: z.array(printDef).default([]),
+    /** Kit QR codes that lead back into the mission (Plan §5). */
+    qr: z.array(qrDef).default([]),
     /** Persistent interactive workspaces (Plan §4), shown by `workspace` screens. */
     workspaces: z.array(workspaceDef).default([]),
     /** Mission-level completion; overrides the version's completion rule when set. */
@@ -207,6 +264,8 @@ export const commonScreenConfig = z
       )
       .optional(),
     support: z.array(supportItem).optional(),
+    /** Dynamic printables (definition `prints`) this screen offers. */
+    prints: z.array(z.string().min(1)).optional(),
     /** Every completing path must pass through this screen (validator: bypassable_required_content). */
     required: z.boolean().optional(),
     /** For a decision: every branch from here must meet again at this screen (validator: missing_convergence). */

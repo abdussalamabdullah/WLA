@@ -6,6 +6,8 @@ import {
   loadStageVia,
   deviceCategory,
   recordKitOpenedVia,
+  scanQrVia,
+  printVia,
   type MissionGateway,
   type MissionStage,
 } from "@/features/mission-engine/persistence";
@@ -280,4 +282,14 @@ export async function getKitFor(
 export async function recordKitOpenedFor(actor: AcademyActor, missionSlug: string, source: "page" | "file") {
   if (actor.kind !== "parent" && actor.kind !== "child") return;
   await recordKitOpenedVia(gatewayFor(actor, missionSlug), source);
+}
+
+/** A Kit QR code for either actor (Plan §5). */
+export async function scanQrFor(actor: AcademyActor, missionSlug: string, key: string) {
+  return scanQrVia(gatewayFor(actor, missionSlug), key);
+}
+
+/** A printable made for this run, for either actor (Plan §5). */
+export async function printFor(actor: AcademyActor, missionSlug: string, key: string) {
+  return printVia(gatewayFor(actor, missionSlug), key);
 }

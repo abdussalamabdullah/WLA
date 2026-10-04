@@ -182,3 +182,32 @@ sibling entries never, forged token refused); Six Names SQL 64/0.
 
 **Browser QA (`trail.mjs`, staging):** parent and child-session Trail at 390/1512 — Lab, dates, source,
 physical-entry wording, audits: 12/12 (the code created for the child login was turned off again afterwards).
+
+---
+
+## Phase 7 — Physical ↔ digital mechanics (Plan §3 timers/checkpoints, §5) · COMPLETE
+
+**Implementation (D-93):** `MissionTimer` and `CheckpointWait` in every frame; `definition.qr` + `/q/<mission>/<code>`
++ `applyQr` (runtime) + `scanQrVia` + printable QR sheet (`/admin/builder/<slug>/<v>/qr`); `definition.prints`
++ `printVia` + `/api/print/<mission>/<print>` (pdf-lib overlay on the pinned Kit PDF); `device_input` screen type
+(compass, tilt, shakes with manual routes) and camera scan on `code_entry` (BarcodeDetector, rear camera, nothing
+kept). Validator: QR, printable and device checks; the path simulation explores QR scans.
+
+**Defects found and fixed (D-94):** a re-fired timer produced a stale step that the server answered by throwing →
+error boundary. Stale steps now return the real position; expiry has a 2 s server tolerance and fires once.
+
+**Migrations:** 0035 `device_input`. Local and staging 35/35. **Dependencies:** `qrcode`, `pdf-lib` (+ types).
+
+**Tests:** vitest 672; security regression 140/0.
+
+**Browser QA (`mechanics.mjs`, staging):** QA mission built and published entirely in the Admin UI (kept out of the
+catalogue), QR sheet, preview timer and printable; then as a learner — anonymous print 404 and QR → sign-in;
+printable PDF for the run (no-store, approved base, the run's hidden variant code drawn on it — verified by
+inflating the content stream); timer shown and expired by server time; QR scan-to-reveal recorded server-side
+without moving the child, gating the next screen; resource code → Kit; compass manual route graded on the server;
+camera fallback; completion with the printed code; structural analytics. **32/32** across the build and learner runs.
+
+**Known limitations:** camera scanning needs a browser with `BarcodeDetector` (Chrome/Android, not Safari/Firefox
+today) — typing is always offered; compass headings depend on device calibration; printables use the standard
+Helvetica font for the added fields (the approved base carries WLA typography); QR sheets are printed from draft or
+in-review versions (D-61), and stay valid once published.

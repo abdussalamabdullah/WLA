@@ -156,6 +156,16 @@ export const screenCatalog: CatalogEntry[] = [
     },
   },
 
+  {
+    type: "device_input", family: "Visual and spatial", label: "Device — compass, tilt or shake (with a manual way)",
+    template: {
+      prompt: "Which way is the old tower from the gate?",
+      mode: "compass",
+      label: "Point the top of your device at the tower.",
+      outcomes: [{ id: "east", match: { min: 45, max: 135 } }],
+      onNoMatch: { mode: "retry", message: "That isn't the way to the tower yet. Look again.", fallbackAfter: 3 },
+    },
+  },
   { type: "workspace", family: "Workspace", label: "Workspace — a board that persists across screens", template: { prompt: "Place each clue where you think it belongs.", workspace: "board" } },
 
   { type: "completion", family: "Ending", label: "Completion — the end", template: { message: "", trailEntries: [] } },

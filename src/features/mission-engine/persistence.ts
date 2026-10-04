@@ -2,13 +2,15 @@ import "server-only";
 
 import { requireEntitledMission } from "@/lib/permissions";
 import { logError } from "@/lib/observability/logger";
-import { EngineRefusal, startRun, step } from "./runtime";
+import { EngineRefusal, applyQr, startRun, step } from "./runtime";
+import { evaluate } from "./conditions";
 import { projectCurrent, type ProjectedScreen } from "./projection";
 import {
   loadRun as storeLoad,
   recordRunEvents,
   saveRun as storeSave,
   signMedia,
+  readKitBase,
   type LoadedRun,
 } from "./store";
 import { assetKeysIn, resolveMedia } from "./media";
@@ -227,6 +229,23 @@ export async function recordInteractionVia(
   try {
     result = step(run.model, run.state, progress.current_screen_key, interaction, now);
   } catch (error) {
+    // The device's clock ran a little ahead of the server's: not yet, quietly.
+    if (error instanceof EngineRefusal && error.code === "timer_not_expired") {
+      const projected = projectCurrent(run.model, progress.current_screen_key, run.state, now);
+      return {
+        state: projected.state,
+        currentScreenKey: progress.current_screen_key,
+        status: progress.status,
+        completed: false,
+        failure: { code: "timer_not_expired", message: "Nearly time — a moment more." },
+      };
+    }
+    // A step the run has already left — a double tap, a late timer, a second
+    // tab. Nothing changes; the page re-renders at the run's real position.
+    if (error instanceof EngineRefusal && error.code === "not_current_step") {
+      const projected = projectCurrent(run.model, progress.current_screen_key, run.state, now);
+      return { state: projected.state, currentScreenKey: progress.current_screen_key, status: progress.status, completed: false };
+    }
     if (error instanceof EngineRefusal) {
       throw new Error("That interaction does not belong to the current step.");
     }
@@ -330,4 +349,65 @@ export function recordInteraction(
   interaction: MissionInteraction,
 ): Promise<InteractionResult> {
   return recordInteractionVia(parentGateway(childId, missionIdOrSlug), interaction);
+}
+
+// ------------------------------------------------------------------ QR ----
+
+export type QrDestination = { to: "active" | "home" | "kit"; resource?: string };
+
+/**
+ * A Kit QR code, scanned by an authorised actor (Plan §5). The gateway has
+ * already established the child and the entitlement; the key only selects
+ * which of the run's OWN mission's codes was scanned — a key from another
+ * mission simply does not exist here.
+ */
+export async function scanQrVia(gw: MissionGateway, key: string): Promise<QrDestination> {
+  const ctx = await gw.resolve();
+  if (!ctx.progress || ctx.progress.status === "not_started") {
+    // Before the mission starts a scan changes nothing; Mission Home explains what to do.
+    return { to: "home" };
+  }
+  const run = await gw.load(ctx.progress.id);
+  const r = applyQr(run.model, run.state, key, new Date());
+  if (!r.qr) return { to: run.progress.status === "complete" ? "home" : "active" };
+  if (r.applied && run.progress.status !== "complete") {
+    const saved = await gw.save({
+      progressId: run.progress.id,
+      model: run.model,
+      state: r.state,
+      screenKey: null,
+      response: null,
+      complete: false,
+      evidence: [],
+      events: r.events,
+    });
+    if (!saved) throw new MissionPersistenceError();
+  } else if (r.events.length) {
+    await gw.events(run.progress.id, r.events);
+  }
+  if (r.qr.action === "resource") return { to: "kit", resource: r.qr.resource };
+  return { to: run.progress.status === "complete" ? "home" : "active" };
+}
+
+// -------------------------------------------------------------- prints ----
+
+/**
+ * A printable made for this run (Plan §5). Only for a started run, only a
+ * print the pinned definition declares, only while its condition holds, and
+ * only from the base PDF in that version's Kit.
+ */
+export async function printVia(gw: MissionGateway, key: string): Promise<{ title: string; bytes: Uint8Array } | null> {
+  const ctx = await gw.resolve();
+  if (!ctx.progress || ctx.progress.status === "not_started") return null;
+  const run = await gw.load(ctx.progress.id);
+  const def = run.model.definition.prints.find((p) => p.key === key);
+  if (!def) return null;
+  const now = new Date();
+  if (def.when && !evaluate(def.when, { state: run.state, now })) return null;
+  const base = await readKitBase(run.progress.mission_id, run.progress.mission_version, def.base);
+  if (!base) return null;
+  const { renderPrint } = await import("./print");
+  const bytes = await renderPrint(base, def, run.state);
+  await gw.events(run.progress.id, [{ name: "kit_opened", detail: { source: "print" } }]);
+  return { title: def.title, bytes };
 }

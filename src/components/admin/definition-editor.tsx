@@ -17,6 +17,8 @@ const SECTIONS: { key: keyof MissionDefinition; title: string; help: string }[] 
   { key: "variants", title: "Variants", help: "Approved versions of the starting situation. Each run gets one, kept for the whole run." },
   { key: "pools", title: "Controlled randomisation", help: "Draw from an approved pool, with weights and exclusions. The draw is kept for the whole run." },
   { key: "checkpoints", title: "Checkpoints and stages", help: "Points to come back to across sessions, and stages that open after a real-world interval." },
+  { key: "prints", title: "Printables", help: "Kit PDFs filled with this run's values — a variant's code, a drawn clue. Based on an approved PDF in this version's Kit; screens offer them with `prints`." },
+  { key: "qr", title: "QR codes", help: "Codes printed in the Kit that lead back here: open the mission, open a Kit resource, or scan to reveal. Print them from the QR sheet." },
   { key: "workspaces", title: "Workspaces", help: "Boards that persist across screens: evidence, clues, routes, resources, relationships. Objects appear as the mission allows; placements are remembered." },
   { key: "stages", title: "Stage names (for reporting)", help: "Screen key → stage name, so insights group drop-off by stage." },
 ];

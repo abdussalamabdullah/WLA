@@ -7,6 +7,7 @@ import { PrimaryAction, ScreenFrame, SelectableOption } from "./shared";
 import { parseScreenConfig, type ScreenComponentProps } from "@/features/mission-engine";
 import type { MissionScreen } from "@/features/mission-engine/navigation";
 import { cn } from "@/lib/utils";
+import { CameraScan } from "./device";
 
 /**
  * THE INTERACTION LIBRARY — components (Enhancement Plan §4, D-86).
@@ -185,6 +186,7 @@ export function CodeEntryScreen(p: Props) {
             onKeyDown={(e) => { if (e.key === "Enter" && v.trim()) submit(p, v); }} />
         </Field>
       </div>
+      {c.scan && <CameraScan onRead={(text) => setV(text.slice(0, c.maxLength))} />}
     </LibFrame>
   );
 }
