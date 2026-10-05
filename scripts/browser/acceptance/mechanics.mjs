@@ -6,10 +6,18 @@ import { launch, chk, summary, uiLogin, ACCOUNTS, sleep } from "./cdp.mjs";
 import { readFileSync } from "node:fs";
 import { PDFDocument } from "pdf-lib";
 import { inflateSync } from "node:zlib";
-const drawnText = (bytes) => { const raw = Buffer.from(bytes); const out = []; let i = 0;
+// The text a PDF draws. WLA's embedded subset fonts store glyph ids, so each
+// font's ToUnicode map turns them back into characters (D-101).
+const drawnText = (bytes) => {
+  const raw = Buffer.from(bytes); const streams = []; let i = 0;
   for (;;) { const s = raw.indexOf("stream", i); if (s < 0) break; const st = raw[s + 6] === 0x0d ? s + 8 : s + 7; const e = raw.indexOf("endstream", st); if (e < 0) break;
-    try { out.push(inflateSync(raw.subarray(st, e)).toString("latin1")); } catch {} i = e + 9; }
-  return out.join("\n").replace(/<([0-9A-Fa-f]+)>/g, (_, h) => Buffer.from(h, "hex").toString("latin1")); };
+    try { streams.push(inflateSync(raw.subarray(st, e)).toString("latin1")); } catch {} i = e + 9; }
+  const map = new Map();
+  for (const t of streams.filter((x) => /begincmap/.test(x))) {
+    for (const [, g, u] of t.matchAll(/<([0-9A-Fa-f]{4})>\s*<([0-9A-Fa-f]{4,})>/g)) map.set(g.toUpperCase(), String.fromCodePoint(...u.match(/.{4}/g).map((h) => parseInt(h, 16))));
+  }
+  return streams.filter((x) => !/begincmap/.test(x)).join("\n").replace(/<([0-9A-Fa-f]+)>/g, (_, h) => (h.match(/.{4}/g) || []).map((g) => map.get(g.toUpperCase()) ?? "").join(""));
+};
 
 const SLUG = "qa-mechanics-mission", TITLE = "QA MECHANICS MISSION";
 const env = readFileSync(new URL("../../../.env.local", import.meta.url), "utf8");

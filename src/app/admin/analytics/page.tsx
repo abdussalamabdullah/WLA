@@ -23,7 +23,7 @@ export default async function AdminAnalyticsPage() {
 
   return (
     <AdminPage title="Analytics" intro="See how learners are using the Academy.">
-      <div className="grid grid-cols-2 gap-[var(--space-m)] sm:grid-cols-4">
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,10rem),1fr))] gap-[var(--space-m)]">
         <Stat label="Mission starts" value={totalStarts} />
         <Stat label="Completions" value={totalCompletions} />
         <Stat label="Completion rate" value={`${rate}%`} />

@@ -68,7 +68,7 @@ export default async function MissionInsightsPage({
         ))}
       </nav>
 
-      <div className="mt-[var(--space-l)] grid grid-cols-2 gap-[var(--space-m)] sm:grid-cols-4">
+      <div className="mt-[var(--space-l)] grid grid-cols-[repeat(auto-fit,minmax(min(100%,10rem),1fr))] gap-[var(--space-m)]">
         <Stat label="Starts" value={i.starts} />
         <Stat label="Completions" value={i.completions} />
         <Stat label="Came back later" value={i.returned_runs} hint={`${pct(i.returned_runs, i.runs)} of runs`} />

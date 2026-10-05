@@ -50,7 +50,7 @@ export function ProfileSwitcher({
     <Dialog.Root open={open} onOpenChange={setOpen}>
       <Dialog.Trigger
         className={cn(
-          "inline-flex min-h-[var(--target-min)] items-center gap-[var(--space-s)]",
+          "inline-flex min-h-[var(--target-min)] min-w-0 max-w-full items-center gap-[var(--space-s)] text-left",
           "rounded-[var(--radius-button)] px-[var(--space-m)]",
           "text-[length:var(--text-label)]",
           "border border-[var(--color-border-strong)]",
@@ -58,7 +58,7 @@ export function ProfileSwitcher({
           "transition-colors duration-[var(--duration-fast)]",
         )}
       >
-        <span>
+        <span className="min-w-0 break-words">
           {active ? `${active.display_name}'s Missions` : "Choose a child"}
         </span>
         <span aria-hidden>⌄</span>

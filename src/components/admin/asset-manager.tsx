@@ -62,7 +62,7 @@ export function AssetManager({
                       <img src={a.url} alt="" className="h-[64px] w-[96px] shrink-0 rounded-[var(--radius-control)] object-cover" />
                     )}
                     <div className="min-w-0">
-                      <p className="font-medium"><code>{r.key}</code> · {r.kind}</p>
+                      <p className="break-all font-medium"><code>{r.key}</code> · {r.kind}</p>
                       <p className="text-[length:var(--text-small)] text-[var(--color-text-muted)]">
                         {a?.alt ? `Text alternative: ${a.alt}` : ["image", "diagram", "map", "animation"].includes(r.kind) ? "No text alternative" : ""}
                         {r.kind === "audio" || r.kind === "video" ? `${a?.transcript ? "Transcript" : "No transcript"}${r.kind === "video" ? ` · ${r.captions_path ? "Captions" : "No captions"}` : ""}` : ""}

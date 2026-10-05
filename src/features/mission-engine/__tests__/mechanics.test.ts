@@ -248,3 +248,19 @@ describe("printables to the WLA print standard (D-101)", () => {
     expect((await renderPrint(await mk(1), def, st({}))).issues.map((i) => i.code)).toContain("print_image_missing");
   });
 });
+
+describe("QA and real-world intervals (D-105, found by the no-code Builder run)", () => {
+  it("a stage that opens later is reachable in mission QA", () => {
+    const m = buildModel({
+      definition: {
+        completion: { ref: { visited: "later" }, op: "exists" },
+        checkpoints: [{ key: "day_two", screenKey: "later", label: "Day two", availableAfter: { since: "screen:first", seconds: 86400 } }],
+      },
+      screens: [sc("first", "content", { next: "later" }, 1), sc("later", "content", { next: "end" }, 2), sc("end", "completion", { message: "x" }, 3)],
+      completionRule: null,
+    });
+    const { issues, paths } = validateMission(m);
+    expect(blocking(issues)).toEqual([]);
+    expect(paths.some((p) => p.outcome === "complete")).toBe(true);
+  });
+});
