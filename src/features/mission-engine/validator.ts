@@ -6,6 +6,7 @@ import type { MissionScreen } from "./navigation";
 import { EngineRefusal, applyQr, checkpointWait, completionCondition, startRun, step } from "./runtime";
 import { emptyMissionState, screenConfigByType, type MissionInteraction, type MissionStateData } from "./schemas";
 import { acceptsValue, effect as effectSchema, opsByType, type VariableDeclaration } from "./variables";
+import { templateFor } from "./interactions/catalog";
 
 /**
  * AUTOMATED MISSION QA (Enhancement Plan §12 "Automated mission QA", Part 6).
@@ -550,6 +551,16 @@ export function validateMission(model: MissionModel, ctx: ValidationContext = {}
     const words = texts.join(" ").split(/[.!?]\s/).map((x) => x.trim().split(/\s+/).length);
     if (words.some((n) => n > 35)) issues.push(issue("advisory", "language", "long_sentence", s.screenKey, "A sentence runs past 35 words; consider splitting it for children."));
     if (!s.title && !["handoff", "completion", "reflection"].includes(s.type)) issues.push(issue("advisory", "content", "screen_without_title", s.screenKey, "This screen has no title."));
+    // The catalogue's example wording left in place (Final QA LOW-3): it names
+    // things — a cipher wheel, a gate — this mission may not have.
+    if (s.type === "code_entry") {
+      type CodeText = { prompt?: string; hint?: string; onNoMatch?: { message?: string } };
+      const tpl = templateFor("code_entry") as CodeText;
+      const cfg = (s.configuration ?? {}) as CodeText;
+      const same = ([["hint", cfg.hint, tpl.hint], ["prompt", cfg.prompt, tpl.prompt], ["no-match message", cfg.onNoMatch?.message, tpl.onNoMatch?.message]] as const)
+        .filter(([, mine, example]) => mine && mine === example).map(([field]) => field);
+      if (same.length) issues.push(issue("advisory", "content", "template_text_unchanged", s.screenKey, `The ${same.join(", ")} is still the catalogue's example text — replace it with this mission's own wording.`));
+    }
   }
 
   // ---- definition-level references
@@ -647,6 +658,17 @@ export function validateMission(model: MissionModel, ctx: ValidationContext = {}
     if (bad.length > 5) issues.push(issue("blocking", "structure", "cannot_reach_complete", null, `…and ${bad.length - 5} more paths that cannot reach Complete.`));
 
     const complete = paths.filter((p) => p.outcome === "complete");
+    // A completion condition met before any completion screen (Final QA
+    // LOW-2): the run finishes there and the authored message is never shown.
+    // Its Trail entries are unaffected — they are derived from the version's
+    // completion screen whether or not it is visited (derive_trail_entries).
+    const endings = new Set(screens.filter((s) => s.type === "completion").map((s) => s.screenKey));
+    if (endings.size) {
+      const early = new Set(complete.filter((p) => !p.screens.some((k) => endings.has(k))).map((p) => p.screens[p.screens.length - 1] ?? null));
+      for (const at of early) {
+        issues.push(issue("advisory", "logic", "completion_screen_skipped", at, "The completion condition is met here, so the mission finishes before any completion screen — its message will not be shown on this route (its Trail entries are still recorded)."));
+      }
+    }
     // required content cannot be bypassed
     for (const s of screens) {
       if (!(s.configuration as { required?: boolean } | null)?.required) continue;

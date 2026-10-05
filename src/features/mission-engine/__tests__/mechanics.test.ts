@@ -93,26 +93,8 @@ describe("Kit QR codes", () => {
 });
 
 import { PDFDocument, PDFName } from "pdf-lib";
-import { inflateSync } from "node:zlib";
 import { fillText, renderPrint } from "../print";
 import { printDef } from "../definition";
-
-/** The text a PDF draws: its content streams, inflated, with hex strings decoded. */
-function drawnText(bytes: Uint8Array): string {
-  const raw = Buffer.from(bytes);
-  const out: string[] = [];
-  let i = 0;
-  for (;;) {
-    const s = raw.indexOf("stream", i);
-    if (s < 0) break;
-    const start = raw[s + 6] === 0x0d ? s + 8 : s + 7;
-    const end = raw.indexOf("endstream", start);
-    if (end < 0) break;
-    try { out.push(inflateSync(raw.subarray(start, end)).toString("latin1")); } catch { /* not a Flate stream */ }
-    i = end + 9;
-  }
-  return out.join("\n").replace(/<([0-9A-Fa-f]+)>/g, (_, h: string) => Buffer.from(h, "hex").toString("latin1"));
-}
 
 describe("dynamic printables", () => {
   const state = { ...emptyMissionState, variables: { code: "RIVER-7", clues: ["a", "b"] } };
