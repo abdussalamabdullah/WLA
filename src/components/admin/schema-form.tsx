@@ -45,6 +45,9 @@ const SCREEN_REFS = new Set(["next", "to", "otherwise", "convergeAt", "screenKey
 
 const humanise = (k: string) => LABELS[k] ?? k.replace(/([A-Z])/g, " $1").replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase());
 
+/** "Trail entries" → "Trail entry", "Options" → "Option" (labels for one item). */
+const singular = (s: string) => s.replace(/ies$/, "y").replace(/([^s])s$/, "$1");
+
 function unwrap(s: AnyZod): { schema: AnyZod; optional: boolean; defaultValue?: unknown } {
   let cur = s;
   let optional = false;
@@ -175,7 +178,7 @@ export function SchemaForm({
         <ol className="flex flex-col gap-[var(--space-s)]">
           {list.map((item, i) => (
             <li key={i} className="flex flex-col gap-[4px]">
-              <SchemaForm schema={el} value={item} label={`${humanise(fieldKey).replace(/s$/, "")} ${i + 1}`} onChange={(v) => set(list.map((x, j) => (j === i ? v : x)))} />
+              <SchemaForm schema={el} value={item} label={`${singular(humanise(fieldKey))} ${i + 1}`} onChange={(v) => set(list.map((x, j) => (j === i ? v : x)))} />
               <div className="flex flex-wrap gap-[var(--space-xs)]">
                 <button type="button" className={smallBtn} disabled={i === 0} onClick={() => { const n = [...list]; [n[i - 1], n[i]] = [n[i], n[i - 1]]; set(n); }}>Move up<span className="sr-only"> item {i + 1}</span></button>
                 <button type="button" className={smallBtn} disabled={i === list.length - 1} onClick={() => { const n = [...list]; [n[i + 1], n[i]] = [n[i], n[i + 1]]; set(n); }}>Move down<span className="sr-only"> item {i + 1}</span></button>
@@ -186,7 +189,7 @@ export function SchemaForm({
           ))}
         </ol>
         <button type="button" className={cn(smallBtn, "self-start")} onClick={() => set([...list, emptyFor(el)])}>
-          Add {humanise(fieldKey).replace(/s$/, "").toLowerCase() || "item"}
+          Add {singular(humanise(fieldKey)).toLowerCase() || "item"}
         </button>
       </div>
     );

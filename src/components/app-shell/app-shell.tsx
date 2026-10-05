@@ -105,7 +105,8 @@ export function AppShell({
     <div className="min-h-dvh bg-[var(--color-background)]">
       {/* ---------------------------------------------------------- header */}
       <header className="sticky top-0 z-30 print:hidden border-b border-[var(--color-border)] bg-[var(--color-background)]">
-        <div className="flex min-h-[64px] items-center gap-[var(--space-m)] px-[var(--space-m)] lg:px-[var(--space-l)]">
+        {/* flex-wrap: at 200% text on a phone the child switcher drops to its own line instead of widening the page (WCAG 1.4.4). */}
+        <div className="flex min-h-[64px] flex-wrap items-center gap-x-[var(--space-m)] gap-y-[var(--space-xs)] px-[var(--space-m)] py-[var(--space-xs)] lg:px-[var(--space-l)]">
           <button
             type="button"
             onClick={() => setOpen((v) => !v)}
@@ -131,7 +132,7 @@ export function AppShell({
           </Link>
 
           {identity && (
-            <div className="ml-auto flex items-center gap-[var(--space-s)]">
+            <div className="ml-auto flex min-w-0 max-w-full items-center gap-[var(--space-s)]">
               {identity.action}
               {identity.label && (
                 <span className="hidden items-center gap-[var(--space-xs)] text-[length:var(--text-small)] text-[var(--color-text-muted)] sm:inline-flex">

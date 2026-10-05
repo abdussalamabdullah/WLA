@@ -21,7 +21,7 @@ export default async function AdminOverviewPage() {
 
   return (
     <AdminPage title="Overview" intro="A quick view of what is happening in the Academy.">
-      <div className="grid grid-cols-2 gap-[var(--space-m)] sm:grid-cols-3 lg:grid-cols-4">
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,10rem),1fr))] gap-[var(--space-m)]">
         <Stat label="Parents" value={overview?.parents ?? 0} />
         <Stat label="Children" value={overview?.children ?? 0} />
         <Stat label="Active learners" value={overview?.active_learners ?? 0} hint="Last 30 days" />

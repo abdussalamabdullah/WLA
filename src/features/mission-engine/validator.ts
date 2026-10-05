@@ -3,7 +3,7 @@ import { assetKeysIn } from "./media";
 import { contractFor } from "./contract";
 import { commonOf, commonScreenConfig, missionDefinition, screenByKey, type MissionModel } from "./definition";
 import type { MissionScreen } from "./navigation";
-import { EngineRefusal, applyQr, completionCondition, startRun, step } from "./runtime";
+import { EngineRefusal, applyQr, checkpointWait, completionCondition, startRun, step } from "./runtime";
 import { emptyMissionState, screenConfigByType, type MissionInteraction, type MissionStateData } from "./schemas";
 import { acceptsValue, effect as effectSchema, opsByType, type VariableDeclaration } from "./variables";
 
@@ -94,6 +94,17 @@ function sampleInputs(screen: MissionScreen, state: MissionStateData, model: Mis
  * each variant is a separate starting state. Time is frozen far in the future
  * so timed and checkpoint stages are open.
  */
+/**
+ * A step that, at a stage opening after a real-world interval (checkpoint
+ * `availableAfter`), comes back once the stage has opened — as a child does.
+ * Simulated time is otherwise constant, and such a stage would look like a
+ * dead end to QA (found by the no-code Builder run, D-105).
+ */
+function stepAcrossWaits(model: MissionModel, state: MissionStateData, key: string, input: MissionInteraction, now: Date) {
+  const wait = checkpointWait(model, key, state, now);
+  return step(model, state, key, input, wait > 0 ? new Date(now.getTime() + (wait + 1) * 1000) : now);
+}
+
 export function simulate(model: MissionModel, opts: { maxPaths?: number; maxSteps?: number } = {}): PathReport[] {
   const maxPaths = opts.maxPaths ?? 400;
   const maxSteps = opts.maxSteps ?? Math.max(60, model.screens.length * 4);
@@ -143,7 +154,7 @@ export function simulate(model: MissionModel, opts: { maxPaths?: number; maxStep
     for (const input of inputs) {
       let r;
       try {
-        r = step(model, f.state, f.key, input, later);
+        r = stepAcrossWaits(model, f.state, f.key, input, later);
       } catch (e) {
         if (e instanceof EngineRefusal) continue;
         throw e;
@@ -694,7 +705,7 @@ function simulateGains(model: MissionModel) {
       if (!screen || f.steps > model.screens.length * 4) continue;
       for (const input of sampleInputs(screen, f.state, model)) {
         try {
-          const r = step(model, f.state, f.key, input, later);
+          const r = stepAcrossWaits(model, f.state, f.key, input, later);
           if (!r.ok) continue;
           r.state.unlocked.forEach((u) => unlocks.add(u));
           r.state.firedEvents.forEach((e) => events.add(e));

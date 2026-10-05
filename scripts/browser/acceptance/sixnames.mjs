@@ -88,12 +88,14 @@ for (const [name, d1, d2] of PLANS) {
   await b.waitUrl(/\/active/, 40000); await b.goto("/academy/missions/six-names/active", 600);
 
   const seen = []; let pausedChecked = false, mcChecked = false, evidenceHiddenChecked = false, changedAfterTracker = null;
-  let lastTracker1 = false;
+  let lastTracker1 = false, textFieldSeen = false, judged = false, sortResumed = null;
   for (let step = 0; step < 45; step++) {
     const t = await screenTitle(); const body = await mainText(); const h = await html();
     seen.push(t);
     if (process.env.TRACE) console.log(`   step ${step}: [${t}] ${await b.url()} | ${(await b.eval("[...document.querySelectorAll('main button')].map(x=>x.innerText.trim().replace(/\\n/g,' / ')).join(' | ')")).slice(0, 400)}`);
     if (/\/complete/.test(await b.url())) break;
+    // Six Names collects no written reflection anywhere (Build Brief).
+    if (await b.eval("!!document.querySelector('main textarea, main input[type=text]')")) textFieldSeen = true;
 
     // Branch protection: the unused consequences' text must not be anywhere in the page payload.
     for (const [k, txt] of Object.entries(C1)) if (k !== d1 && h.includes(txt)) chk(`${name}: unused D1 consequence "${k}" never reaches the page`, false, t);
@@ -104,7 +106,10 @@ for (const [name, d1, d2] of PLANS) {
       await b.click(D1[d1], { selector: "main button" }); await clickMain(/^confirm response$/i); seen.push("__d1"); continue;
     }
     if (/Decision 2/.test(t) && !seen.includes("__d2")) { await b.click(D2[d2], { selector: "main button" }); await clickMain(/^confirm response$/i); seen.push("__d2"); continue; }
-    if (/What do you stand by/.test(t)) { await b.click("I stand by both decisions.", { selector: "main button" }); await clickMain(/^confirm$/i); continue; }
+    if (/What do you stand by/.test(t)) {
+      chk(`${name}: Judgement offers its cards without marking any right or wrong`, !/\b(correct|incorrect|wrong|right answer)\b/i.test(body));
+      await b.click("I stand by both decisions.", { selector: "main button" }); await clickMain(/^confirm$/i); judged = true; continue;
+    }
     if (/What happened$/.test(t)) {
       chk(`${name}: consequence 1 is the ${d1} one`, body.includes(C1[d1]));
       // Mission Control opens and closes without advancing (configured here)
@@ -161,7 +166,19 @@ for (const [name, d1, d2] of PLANS) {
       for (let i = 0; i < 12; i++) {
         await b.eval("(()=>{const g=document.querySelector('main [role=group]'); const x=g&&g.querySelector('button'); if(x && x.getAttribute('aria-pressed')!=='true') x.click();})()");
         await sleep(200);
-        if (await b.has(/^(next|continue)$/i, "main button")) { await b.click(/^(next|continue)$/i, { selector: "main button" }); await sleep(300); await waitSettled(); if (!/actually know/.test(await screenTitle())) break; continue; }
+        if (await b.has(/^(next|continue)$/i, "main button")) {
+          await b.click(/^(next|continue)$/i, { selector: "main button" }); await sleep(300); await waitSettled();
+          if (!/actually know/.test(await screenTitle())) break;
+          // Interruption (D-100): reload mid-sort; the child is on the same item.
+          if (sortResumed === null) {
+            const before = (await mainText()).split("\n").slice(0, 6).join("|");
+            await b.goto("/academy/missions/six-names/active", 600); await sleep(800);
+            const after = (await mainText()).split("\n").slice(0, 6).join("|");
+            sortResumed = before === after;
+            chk(`${name}: a reload mid-sort returns to the same item`, sortResumed, `${before} ≠ ${after}`);
+          }
+          continue;
+        }
         break;
       }
       continue;
@@ -192,6 +209,18 @@ for (const [name, d1, d2] of PLANS) {
   chk(`${name}: run pinned to Six Names v2 and complete (D-17)`, prog[0]?.mission_version === 2 && prog[0]?.status === "complete", JSON.stringify(prog));
   const sd = (await svc(`mission_state?progress_id=eq.${prog[0]?.id}&select=state_data`))[0]?.state_data;
   chk(`${name}: stored choices are exactly the path played`, sd?.choices?.decision1 === { ask: "ask_about_list", stop: "stop_claim_spreading" }[d1] && sd?.choices?.decision2 === { pause: "ask_everyone_pause", share: "share_the_role", away: "noor_steps_away" }[d2], JSON.stringify(sd?.choices));
+  chk(`${name}: no free-text field anywhere in Six Names`, !textFieldSeen);
+  const resp = await svc(`mission_responses?progress_id=eq.${prog[0]?.id}&select=screen_key,value`);
+  chk(`${name}: no written answer is stored for the run`, resp.every((r) => typeof r.value !== "string" || r.value.length === 0), JSON.stringify(resp).slice(0, 200));
+  chk(`${name}: the Judgement was made and recorded as the child's choice`, judged && Object.keys(sd?.choices ?? {}).length >= 3, JSON.stringify(sd?.choices));
+  // No cross-child leakage: the Trail shows exactly this child's entries, and no other child appears.
+  await b.goto("/academy/missions/six-names/trail", 800);
+  const mine = (await svc(`mission_evidence?child_id=eq.${kid.id}&select=id`)).length;
+  const shown = await b.eval("document.querySelectorAll('main li[id^=entry-]').length");
+  const others = kids.filter((k) => k.id !== kid.id).map((k) => k.display_name).filter((n) => !kid.display_name.includes(n));
+  const pageHtml = await html();
+  chk(`${name}: the Trail shows exactly this child's entries (${mine})`, shown === mine && mine > 0, `${shown} shown / ${mine} own`);
+  chk(`${name}: no other child's name or record appears`, !others.some((n) => pageHtml.includes(n)));
   const unused1 = d1 === "ask" ? "consequence1_stop" : "consequence1_ask";
   chk(`${name}: the unused consequence was never visited`, !sd?.visitedScreens?.includes(unused1), JSON.stringify(sd?.visitedScreens));
   results[name] = { d1, d2, screens: seen.filter((s) => !s.startsWith("__")).length, trail: trail.slice(0, 400) };
