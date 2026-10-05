@@ -229,10 +229,10 @@ real return gap could be measured without waiting. Nothing else was altered.
 
 | ID | Severity | Route / feature | Reproduction | Impact | Status |
 | --- | --- | --- | --- | --- | --- |
-| LOW-1 | LOW | `/account` | Sign in as a parent with many child profiles and open Account. The page reads each child's missions and code status separately (several queries per child). | 85 children: 26–32s, and one load fell into "We couldn't load your account" while other QA ran. A normal family: 2.6–7.6s, against 1.7–2.9s for My Missions (with a 2.3s base round trip to staging from the test machine). Families of realistic size are served; the page scales linearly with children. | Open. Batch the per-child reads. |
-| LOW-2 | LOW | Builder Mission QA | Set a completion condition that is met before the completion screen (e.g. "response wrap exists", with wrap → done). | The run completes on the condition and the authored completion screen's message is never shown. The completion page's own closure copy still appears, and QA does not warn, because completion screens are exempt from the unreachable-screen check. | Open. Add an advisory. |
-| LOW-3 | LOW | Builder catalogue templates | Add a code-entry screen and leave Hint unchanged. | The template's example hint ("Use the cipher wheel from your Mission Kit.") is published to children. QA does not flag unchanged template example text. | Open. Add an advisory, or make the example a placeholder. |
-| LOW-4 | LOW | Lint | `npm run lint` | 2 unused-variable warnings (`device-real.mjs:21`, `mechanics.test.ts:101`). | Open, cosmetic. |
+| LOW-1 | LOW | `/account` | Sign in as a parent with many child profiles and open Account. The page reads each child's missions and code status separately (several queries per child). | 85 children: 26–32s, and one load fell into "We couldn't load your account" while other QA ran. A normal family: 2.6–7.6s, against 1.7–2.9s for My Missions (with a 2.3s base round trip to staging from the test machine). Families of realistic size are served; the page scales linearly with children. | **Fixed** (D-107): three family-wide reads; 85 children 1.4–1.6s, normal family 1.4–1.6s. |
+| LOW-2 | LOW | Builder Mission QA | Set a completion condition that is met before the completion screen (e.g. "response wrap exists", with wrap → done). | The run completes on the condition and the authored completion screen's message is never shown. The completion page's own closure copy still appears, and QA does not warn, because completion screens are exempt from the unreachable-screen check. | **Fixed** (D-107): advisory `completion_screen_skipped`. |
+| LOW-3 | LOW | Builder catalogue templates | Add a code-entry screen and leave Hint unchanged. | The template's example hint ("Use the cipher wheel from your Mission Kit.") is published to children. QA does not flag unchanged template example text. | **Fixed** (D-107): advisory `template_text_unchanged`. |
+| LOW-4 | LOW | Lint | `npm run lint` | 2 unused-variable warnings (`device-real.mjs:21`, `mechanics.test.ts:101`). | **Fixed** (D-107): lint 0 warnings. |
 
 **QA limitations** (not defects):
 
@@ -286,3 +286,20 @@ Before or during acceptance:
 The QA parent and its `QA …` children (including R5, Final, Keys, Dropoff and Fallback). Missions `qa-final-2u3zf`
 (v1 archived, v2 published but not in the catalogue, v3 draft with tilt/shake screens) and its unpublished copy,
 plus the earlier `qa-*` missions. All are unpublished from the public catalogue.
+
+---
+
+## Cleanup after Final QA (D-107)
+
+LOW-1 to LOW-4 were fixed with no scope change. After the fixes:
+- typecheck clean, lint **0 errors / 0 warnings**, build OK;
+- unit **714 / 714**, security **166 / 0**, Six Names SQL **64 / 0**, Six Names unit **103 / 103**.
+
+In the browser, on the rebuilt production server:
+- `account.mjs` 6/6;
+- Account rows match the database (missions, status and code for 12 children), every child is listed once, and no
+  other family appears;
+- `/account` takes **1.4–1.6s** for both an 85-child and a normal account, the same as My Missions;
+- both advisories appear on `qa-final-2u3zf` v3 and do not block publishing.
+
+Six Names content and behaviour are unchanged. OPEN-14 and OPEN-15 are untouched.

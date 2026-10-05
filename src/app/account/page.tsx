@@ -1,6 +1,5 @@
 import Link from "next/link";
-import { getMissionCollection } from "@/features/missions/queries";
-import { requireOwnedChild } from "@/lib/permissions";
+import { getFamilyMissionCollections } from "@/features/missions/queries";
 import { STATUS_LABEL } from "@/components/mission/mission-status";
 import type { MissionStatus } from "@/types/database";
 import { BoardPermissions } from "@/components/account/board-permissions";
@@ -31,26 +30,14 @@ export default async function AccountPage() {
   try {
     const { user } = await requireParent();
     email = user.email;
-    [children, board] = await Promise.all([listChildren(), familyContributions()]);
-    // Each child's missions and access code, each read through the
-    // ownership chain (requireOwnedChild inside both queries).
-    perChild = await Promise.all(
-      children.map(async (c) => {
-        const [collection, owned] = await Promise.all([getMissionCollection(c.id), requireOwnedChild(c.id)]);
-        const { data: credential } = await owned.supabase
-          .from("child_access_credentials")
-          .select("id")
-          .eq("child_id", c.id)
-          .is("revoked_at", null)
-          .maybeSingle();
-        return {
-          id: c.id,
-          name: c.display_name,
-          missions: collection.map((m) => ({ title: m.mission.title, slug: m.mission.slug, status: m.status })),
-          codeActive: Boolean(credential),
-        };
-      }),
-    );
+    // Each child's missions and access code, for the whole family in three
+    // reads (LOW-1) — scoped to this parent inside the queries.
+    let family: Awaited<ReturnType<typeof getFamilyMissionCollections>>;
+    [children, board, family] = await Promise.all([listChildren(), familyContributions(), getFamilyMissionCollections()]);
+    perChild = family.map((c) => ({
+      ...c,
+      missions: c.missions.map((m) => ({ title: m.mission.title, slug: m.mission.slug, status: m.status })),
+    }));
   } catch {
     return (
       <main className="wla-container py-[var(--space-2xl)]">

@@ -18,7 +18,6 @@ await fetch(`${SB}/rest/v1/mission_entitlements`, { method: "POST", headers: H, 
 
 const b = await launch({ port: 9579, args: ["--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream", "--use-file-for-fake-video-capture=/tmp/wla-qa/qr-camera.y4m"] });
 await b.viewport(390, 844, true);
-const main = () => b.eval("(document.querySelector('main')||document.body).innerText");
 const settle = async () => { for (let i = 0; i < 200; i++) { const busy = await b.eval("[...document.querySelectorAll('button')].some(x=>/…$/.test(x.innerText.trim()))").catch(() => true); if (!busy) break; await sleep(250); } await sleep(700); };
 await uiLogin(b, q.email, q.password);
 await b.cookies([{ name: "wla_active_child", value: kid.id }]);

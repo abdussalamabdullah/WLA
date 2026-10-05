@@ -1,6 +1,7 @@
 import "server-only";
 
-import { requireEntitledMission, requireOwnedChild } from "@/lib/permissions";
+import { requireEntitledMission, requireOwnedChild, requireParent } from "@/lib/permissions";
+import { listChildren } from "@/features/children/queries";
 import type {
   MissionProgressRow,
   MissionResourceRow,
@@ -41,8 +42,16 @@ export async function getMissionCollection(
     .select("mission_id, status, last_activity_at")
     .eq("child_id", child.id);
 
+  return buildCollection(entitlements, progressRows ?? []);
+}
+
+type EntitlementRow = { mission_id: string; missions: unknown };
+type ProgressSummary = { mission_id: string; status: string; last_activity_at: string | null };
+
+/** One child's collection from their entitlement and progress rows, in My Missions order. */
+function buildCollection(entitlements: EntitlementRow[], progressRows: ProgressSummary[]): MissionCollectionItem[] {
   const progressByMission = new Map(
-    (progressRows ?? []).map((p) => [p.mission_id, p]),
+    progressRows.map((p) => [p.mission_id, p]),
   );
 
   const collection = entitlements
@@ -80,6 +89,40 @@ export async function getMissionCollection(
       RANK[a.status] - RANK[b.status] ||
       (b.lastActivityAt ?? "").localeCompare(a.lastActivityAt ?? ""),
   );
+}
+
+/**
+ * Every child's collection and access-code status for the Account page, in
+ * three reads for the whole family rather than several per child (found in
+ * Final QA: LOW-1). The child ids come from `listChildren`, which is scoped
+ * to the authenticated parent inside its query — never from the browser —
+ * and RLS applies to every read here as well.
+ */
+export async function getFamilyMissionCollections(): Promise<
+  { id: string; name: string; missions: MissionCollectionItem[]; codeActive: boolean }[]
+> {
+  const { supabase } = await requireParent();
+  const children = await listChildren();
+  if (!children.length) return [];
+  const ids = children.map((c) => c.id);
+
+  const [ent, prog, cred] = await Promise.all([
+    supabase.from("mission_entitlements").select("child_id, mission_id, missions(*)").in("child_id", ids).eq("status", "active"),
+    supabase.from("mission_progress").select("child_id, mission_id, status, last_activity_at").in("child_id", ids),
+    supabase.from("child_access_credentials").select("child_id").in("child_id", ids).is("revoked_at", null),
+  ]);
+  if (ent.error || prog.error || cred.error) throw new Error("family_collections_unavailable");
+
+  const withCode = new Set((cred.data ?? []).map((c) => c.child_id));
+  return children.map((c) => ({
+    id: c.id,
+    name: c.display_name,
+    missions: buildCollection(
+      (ent.data ?? []).filter((e) => e.child_id === c.id),
+      (prog.data ?? []).filter((p) => p.child_id === c.id),
+    ),
+    codeActive: withCode.has(c.id),
+  }));
 }
 
 export type MissionHomeData = {

@@ -97,3 +97,29 @@ describe("age and child-language checks backed by WLA authority (D-102)", () => 
     expect(codes(m("Hello."))).toContain("advisory:language_rules_pending");
   });
 });
+
+describe("Final QA authoring advisories (LOW-2, LOW-3)", () => {
+  const ending = sc("end", "completion", 99, { message: "You crossed." });
+  const issuesOf = (screens: MissionScreen[], definition: unknown, r: unknown = null) =>
+    validateMission(buildModel({ definition, screens, completionRule: r })).issues;
+
+  it("warns when the completion condition is met before the completion screen", () => {
+    const screens = [sc("a", "content", 1, { next: "wrap" }), sc("wrap", "response", 2, { prompt: "Why?", next: "end" }), ending];
+    const early = issuesOf(screens, { completion: { ref: { response: "wrap" }, op: "exists" } });
+    const hit = early.find((i) => i.code === "completion_screen_skipped");
+    expect(hit?.severity).toBe("advisory");
+    expect(hit?.screenKey).toBe("wrap");
+    // Reaching the completion screen first is the ordinary case: no warning.
+    expect(issuesOf(screens, { completion: { ref: { visited: "end" }, op: "exists" } }).map((i) => i.code)).not.toContain("completion_screen_skipped");
+  });
+
+  it("warns when the code-entry example wording is left unchanged, and only then", () => {
+    const code = (cfg: Record<string, unknown>) => [sc("c", "code_entry", 1, { prompt: "What is the code?", outcomes: [{ id: "ok", match: { values: ["X"] } }], next: "end", ...cfg }), ending];
+    const def = { completion: { ref: { visited: "end" }, op: "exists" } };
+    const tpl = issuesOf(code({ hint: "Use the cipher wheel from your Mission Kit." }), def).find((i) => i.code === "template_text_unchanged");
+    expect(tpl?.severity).toBe("advisory");
+    expect(tpl?.detail).toMatch(/hint/);
+    expect(issuesOf(code({ hint: "Look at the back of your card." }), def).map((i) => i.code)).not.toContain("template_text_unchanged");
+    expect(issuesOf(code({}), def).map((i) => i.code)).not.toContain("template_text_unchanged");
+  });
+});
