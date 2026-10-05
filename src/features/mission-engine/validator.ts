@@ -206,6 +206,15 @@ function refsIn(value: unknown, out: Ref[] = []): Ref[] {
 }
 
 const BANNED = /\b(score|scores|points|badge|badges|streak|streaks|leaderboard|ranking|rank|winner|you win|you lose|level up|xp)\b/i;
+/**
+ * Judging language (D-102). Authority: the Six Names Build Brief ("does not
+ * mark the choice as right or wrong"; "neither branch is labelled correct or
+ * incorrect"), Architecture §4 completion ("closure, not performance") and
+ * D-87 (input not accepted is guidance, never "wrong").
+ */
+const JUDGING = /\b(correct|incorrect|wrong answer|right answer|well done|great job|good job|you passed|you failed)\b/i;
+/** WLA platform age range — Brief, PRD and Website Master: "children aged 7–15". */
+export const PLATFORM_AGES = { min: 7, max: 15 } as const;
 
 function childText(s: MissionScreen): string[] {
   const out: string[] = [];
@@ -499,8 +508,12 @@ export function validateMission(model: MissionModel, ctx: ValidationContext = {}
 
     // Mission Control materials point at real Kit resources
     for (const item of c.support ?? []) {
+      // Mission Control's one route away from the screen is a "materials" link
+      // into the Kit; the way back is the Kit → Mission Home → Continue, which
+      // lands on this exact screen because state is server-held. That return
+      // is only valid if the item it sends the child to exists (D-103).
       if (item.kind === "materials" && item.resource && ctx.kitTitles && !ctx.kitTitles.includes(item.resource)) {
-        issues.push(issue("advisory", "assets", "missing_kit_resource", s.screenKey, `Mission Control points at "${item.resource}", which is not in the Kit.`));
+        issues.push(issue("blocking", "assets", "mission_control_no_return", s.screenKey, `Mission Control sends the child to "${item.resource}", which is not in the Kit — there would be nothing to return from.`));
       }
       if (item.when) for (const r of conditionRefs(item.when)) checkRef(r, s.screenKey, null);
     }
@@ -512,6 +525,16 @@ export function validateMission(model: MissionModel, ctx: ValidationContext = {}
         issues.push(issue("advisory", "language", "gamification_language", s.screenKey, `"${t.match(BANNED)?.[0]}" — WLA does not use scores, points, badges, streaks or rankings.`));
         break;
       }
+    }
+    for (const t of texts) {
+      if (JUDGING.test(t)) {
+        issues.push(issue("advisory", "language", "judging_language", s.screenKey, `"${t.match(JUDGING)?.[0]}" — WLA missions don't mark what a child does as right or wrong.`));
+        break;
+      }
+    }
+    // Designer Brief: avoid "bubbly interface language". A narrow, explicit heuristic.
+    if (texts.some((t) => /!{2,}/.test(t)) || texts.join(" ").split("!").length - 1 >= 3) {
+      issues.push(issue("advisory", "language", "bubbly_language", s.screenKey, "Several exclamation marks — WLA's voice is calm (Designer Brief: avoid bubbly interface language)."));
     }
     const words = texts.join(" ").split(/[.!?]\s/).map((x) => x.trim().split(/\s+/).length);
     if (words.some((n) => n > 35)) issues.push(issue("advisory", "language", "long_sentence", s.screenKey, "A sentence runs past 35 words; consider splitting it for children."));
@@ -526,6 +549,17 @@ export function validateMission(model: MissionModel, ctx: ValidationContext = {}
     checkEffects(e.effects, null);
     if (e.goto && !keys.has(e.goto)) issues.push(issue("blocking", "structure", "broken_reference", null, `Event "${e.key}" goes to "${e.goto}", which is not a screen.`));
   }
+  // Printables: conditions, images and pages (D-101). Fit is checked by rendering (print-qa.ts).
+  for (const p of def.prints) {
+    const conds = [p.when, ...p.fields.map((f) => f.when), ...p.images.map((i) => i.when), ...(p.pages ?? []).map((g) => g.when)];
+    for (const c of conds) if (c) { for (const r of conditionRefs(c)) checkRef(r, null, null); unsatisfiable(c, null); }
+    for (const im of p.images) {
+      const a = assets.get(im.asset);
+      if (!a) issues.push(issue("blocking", "assets", "missing_asset", null, `Printable "${p.key}" places image "${im.asset}", which is not in this version's media.`));
+      else if (!["image", "diagram", "map"].includes(a.kind)) issues.push(issue("blocking", "assets", "print_image_kind", null, `Printable "${p.key}" places "${im.asset}", which is ${a.kind}, not a picture.`));
+    }
+    if (!p.fields.length && !p.images.length && !p.pages) issues.push(issue("advisory", "assets", "print_adds_nothing", null, `Printable "${p.key}" adds nothing to its base — use the Kit resource itself.`));
+  }
   for (const q of def.qr) {
     if (q.when) { for (const r of conditionRefs(q.when)) checkRef(r, null, null); unsatisfiable(q.when, null); }
     checkEffects(q.effects, null);
@@ -536,6 +570,18 @@ export function validateMission(model: MissionModel, ctx: ValidationContext = {}
     if (!d) issues.push(issue("blocking", "logic", "undeclared_variable", null, `Pool "${p.key}" stores into "${p.storeAs}", which is not declared.`));
     else if (p.pick > 1 && d.type !== "list") issues.push(issue("blocking", "logic", "invalid_effect", null, `Pool "${p.key}" draws ${p.pick} items into ${d.type} "${d.key}"; use a list.`));
     if (p.items.filter((i) => i.weight > 0).length < p.pick) issues.push(issue("blocking", "logic", "pool_too_small", null, `Pool "${p.key}" cannot draw ${p.pick} items.`));
+  }
+  // ages: the platform serves 7–15 (D-102)
+  if (ctx.ages && (ctx.ages.min < PLATFORM_AGES.min || ctx.ages.max > PLATFORM_AGES.max || ctx.ages.min > ctx.ages.max)) {
+    issues.push(issue("blocking", "content", "age_range_outside_platform", null, `This mission is for ages ${ctx.ages.min}–${ctx.ages.max}; WLA missions are for children aged ${PLATFORM_AGES.min}–${PLATFORM_AGES.max}.`));
+  }
+  for (const v of def.variants) if (v.ageBand && (v.ageBand.min < PLATFORM_AGES.min || v.ageBand.max > PLATFORM_AGES.max)) {
+    issues.push(issue("blocking", "content", "age_band_outside_platform", null, `Variant "${v.id}" is for ages ${v.ageBand.min}–${v.ageBand.max}, outside WLA's ${PLATFORM_AGES.min}–${PLATFORM_AGES.max}.`));
+  }
+  // Reading level and vocabulary per age band are defined by the Mission
+  // Manual, which is not in the repository (OPEN-15). Not invented; said so.
+  if (screens.length) {
+    issues.push(issue("advisory", "language", "language_rules_pending", null, "Reading-level and vocabulary checks are not applied: they need the WLA Mission Manual (OPEN-15). Check child-facing copy by hand."));
   }
   // variants: complete and consistent
   if (def.variants.length) {

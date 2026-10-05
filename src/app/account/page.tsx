@@ -1,4 +1,8 @@
 import Link from "next/link";
+import { getMissionCollection } from "@/features/missions/queries";
+import { requireOwnedChild } from "@/lib/permissions";
+import { STATUS_LABEL } from "@/components/mission/mission-status";
+import type { MissionStatus } from "@/types/database";
 import { BoardPermissions } from "@/components/account/board-permissions";
 import { familyContributions } from "@/features/mission-board/board";
 import { ErrorState } from "@/components/system/states";
@@ -22,11 +26,31 @@ export default async function AccountPage() {
   let email: string | undefined;
   let children: { id: string; display_name: string }[] = [];
   let board: Awaited<ReturnType<typeof familyContributions>> = [];
+  let perChild: { id: string; name: string; missions: { title: string; slug: string; status: MissionStatus }[]; codeActive: boolean }[] = [];
 
   try {
     const { user } = await requireParent();
     email = user.email;
     [children, board] = await Promise.all([listChildren(), familyContributions()]);
+    // Each child's missions and access code, each read through the
+    // ownership chain (requireOwnedChild inside both queries).
+    perChild = await Promise.all(
+      children.map(async (c) => {
+        const [collection, owned] = await Promise.all([getMissionCollection(c.id), requireOwnedChild(c.id)]);
+        const { data: credential } = await owned.supabase
+          .from("child_access_credentials")
+          .select("id")
+          .eq("child_id", c.id)
+          .is("revoked_at", null)
+          .maybeSingle();
+        return {
+          id: c.id,
+          name: c.display_name,
+          missions: collection.map((m) => ({ title: m.mission.title, slug: m.mission.slug, status: m.status })),
+          codeActive: Boolean(credential),
+        };
+      }),
+    );
   } catch {
     return (
       <main className="wla-container py-[var(--space-2xl)]">
@@ -77,20 +101,79 @@ export default async function AccountPage() {
         </div>
       </dl>
 
-      {children.length > 0 && (
+      {/*
+        Each child's missions — Plan §1: entitlements live in the account area.
+        What a child HAS, with its status in words; opening them switches the
+        Academy to that child (D-74). No purchase history or prices here.
+      */}
+      {perChild.length > 0 && (
         <section aria-labelledby="account-children" className="mt-[var(--space-2xl)]">
           <h2 id="account-children" className="text-[length:var(--text-h3)]">Missions</h2>
-          <ul className="mt-[var(--space-s)] flex flex-col">
-            {children.map((c) => (
+          <ul className="mt-[var(--space-s)] flex flex-col gap-[var(--space-l)]">
+            {perChild.map((c) => (
               <li key={c.id}>
-                <OpenChildMissions childId={c.id} name={c.display_name} />
+                <h3 className="font-medium">{c.name}</h3>
+                {c.missions.length === 0 ? (
+                  <p className="text-[length:var(--text-small)] text-[var(--color-text-muted)]">No missions yet.</p>
+                ) : (
+                  <ul className="mt-[var(--space-xs)] flex flex-col gap-[2px] text-[length:var(--text-small)]">
+                    {c.missions.map((m) => (
+                      <li key={m.slug}>{m.title} — {STATUS_LABEL[m.status]}</li>
+                    ))}
+                  </ul>
+                )}
+                <OpenChildMissions childId={c.id} name={c.name} />
               </li>
             ))}
           </ul>
         </section>
       )}
 
-      <BoardPermissions rows={board} />
+      {/*
+        Privacy and permissions — Plan §1 keeps them in the account area.
+        States only what the Academy already does (Architecture §3, §15, §16;
+        D-58, D-73); the retention policy itself is OPEN-14 and is not invented.
+      */}
+      <section aria-labelledby="privacy-permissions" className="mt-[var(--space-2xl)] border-t border-[var(--color-border)] pt-[var(--space-l)]">
+        <h2 id="privacy-permissions" className="text-[length:var(--text-h3)]">Privacy and permissions</h2>
+        <ul className="mt-[var(--space-s)] flex flex-col gap-[var(--space-s)] wla-measure">
+          <li>Each child&rsquo;s Mission Trail is private to them. Nothing in it is shared unless you give permission for the Mission Board.</li>
+          <li>
+            Child access codes let a child open only their own missions — never purchases, settings or another child.
+            {perChild.length > 0 && (
+              <ul className="mt-[var(--space-xs)] flex flex-col gap-[2px] text-[length:var(--text-small)]">
+                {perChild.map((c) => (
+                  <li key={c.id}>
+                    {c.name}: {c.codeActive ? "a code is active" : "no code"} ·{" "}
+                    <Link href={`/account/children/${c.id}`} className="inline-flex min-h-[var(--target-min)] items-center underline decoration-[var(--color-border-strong)] underline-offset-4">
+                      Manage<span className="sr-only"> {c.name}&rsquo;s profile and code</span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </li>
+          <li>Deleting a child profile deletes their missions, progress and Mission Trail.</li>
+        </ul>
+        {board.length > 0 ? (
+          <BoardPermissions rows={board} nested />
+        ) : (
+          <p className="mt-[var(--space-m)] wla-measure text-[length:var(--text-small)] text-[var(--color-text-muted)]">
+            Mission Board: nothing has been offered. If a child offers something, you&rsquo;ll decide here.
+          </p>
+        )}
+      </section>
+
+      {/* Help and support — the approved support copy (Website Master §10). */}
+      <section aria-labelledby="account-support" className="mt-[var(--space-2xl)] border-t border-[var(--color-border)] pt-[var(--space-l)]">
+        <h2 id="account-support" className="text-[length:var(--text-h3)]">Need help?</h2>
+        <p className="mt-[var(--space-xs)] wla-measure">Already have a mission? Find it in My Missions.</p>
+        <div className="mt-[var(--space-s)] flex flex-wrap gap-[var(--space-l)]">
+          <Link href="/academy/my-missions" className="inline-flex min-h-[var(--target-min)] items-center text-[length:var(--text-label)] underline decoration-[var(--color-border-strong)] underline-offset-4">Go to My Missions →</Link>
+          <Link href="/academy/help" className="inline-flex min-h-[var(--target-min)] items-center text-[length:var(--text-label)] underline decoration-[var(--color-border-strong)] underline-offset-4">Academy help →</Link>
+          <Link href="/missions" className="inline-flex min-h-[var(--target-min)] items-center text-[length:var(--text-label)] underline decoration-[var(--color-border-strong)] underline-offset-4">Explore Missions →</Link>
+        </div>
+      </section>
 
       {/*
         Family Mission Guide — account side (Enhancement Plan §1, Architecture

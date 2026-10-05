@@ -156,3 +156,19 @@ export async function readKitBase(missionId: string, version: number, title: str
   const { data: file } = await admin.storage.from("mission-resources").download(row.storage_path);
   return file ? new Uint8Array(await file.arrayBuffer()) : null;
 }
+
+/**
+ * Plan §5 — image files a printable places, at the run's pinned version. Same
+ * authorisation shape as signMedia: keys come from the pinned definition.
+ */
+export async function readMediaFiles(missionId: string, version: number, keys: string[]): Promise<Map<string, { bytes: Uint8Array; mime: string }>> {
+  const out = new Map<string, { bytes: Uint8Array; mime: string }>();
+  if (!keys.length) return out;
+  const admin = createAdminClient();
+  const { data } = await admin.from("mission_assets").select("key, storage_path").eq("mission_id", missionId).eq("version", version).in("key", keys);
+  for (const a of data ?? []) {
+    const { data: file } = await admin.storage.from("mission-media").download(a.storage_path);
+    if (file) out.set(a.key, { bytes: new Uint8Array(await file.arrayBuffer()), mime: file.type || (/\.png$/i.test(a.storage_path) ? "image/png" : "image/jpeg") });
+  }
+  return out;
+}

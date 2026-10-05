@@ -337,3 +337,18 @@ describe("authoring checks for the library", () => {
     expect(codes(model("hotspot", { prompt: "h", image: { src: "/x.svg", alt: " " }, regions: [{ id: "r", label: "R", x: 0, y: 0, w: 5, h: 5 }] }))).toContain("missing_alt_text");
   });
 });
+
+describe("code/cipher attempts are reported (Plan §13; the metric was dead)", () => {
+  it("a miss and a match each emit code_attempted with only a structural outcome", () => {
+    const miss = submit(code(), "nope");
+    expect(miss.events.find((e) => e.name === "code_attempted")).toMatchObject({ screen_key: "lib", detail: { outcome: "no_match" } });
+    const hit = submit(code(), "open the gate");
+    expect(hit.events.find((e) => e.name === "code_attempted")).toMatchObject({ detail: { outcome: "bridge" } });
+    expect(JSON.stringify(hit.events)).not.toContain("open the gate");
+  });
+
+  it("other screen types do not", () => {
+    const r = submit(model("numeric_entry", { prompt: "n" }), 3);
+    expect(r.events.some((e) => e.name === "code_attempted")).toBe(false);
+  });
+});

@@ -18,11 +18,12 @@ const linkButton =
  * and can withdraw anything, at any time. Withdrawal deletes it at once.
  * Shown only when there is something to decide or see; never a dashboard.
  */
-export function BoardPermissions({ rows }: { rows: Row[] }) {
+export function BoardPermissions({ rows, nested = false }: { rows: Row[]; nested?: boolean }) {
   if (!rows.length) return null;
+  const Heading = nested ? "h3" : "h2";
   return (
-    <section aria-labelledby="board-permissions" className="mt-[var(--space-2xl)] border-t border-[var(--color-border)] pt-[var(--space-l)]">
-      <h2 id="board-permissions" className="text-[length:var(--text-h3)]">Mission Board</h2>
+    <section aria-labelledby="board-permissions" className={nested ? "mt-[var(--space-l)]" : "mt-[var(--space-2xl)] border-t border-[var(--color-border)] pt-[var(--space-l)]"}>
+      <Heading id="board-permissions" className={nested ? "font-medium" : "text-[length:var(--text-h3)]"}>Mission Board</Heading>
       <p className="mt-[var(--space-xs)] wla-measure text-[var(--color-text-muted)]">
         What your children have offered to share. Names and details are taken out, WLA reviews everything first,
         and you can take anything back at any time.

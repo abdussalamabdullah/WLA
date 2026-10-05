@@ -716,3 +716,14 @@ set request.jwt.claim.sub = ''; set role anon;
 select chk_raises('anon cannot read the Board table', $$select * from board_contributions$$, 'permission denied');
 reset role;
 \echo ''
+\echo '=============== CODE ATTEMPTS IN INSIGHTS ==============='
+reset role;
+insert into analytics_events (name, mission_id, mission_version, screen_key, detail)
+values ('code_attempted', :'mid', 2, 'qa_code_screen', '{"outcome":"no_match"}'),
+       ('code_attempted', :'mid', 2, 'qa_code_screen', '{"outcome":"solved"}');
+set role authenticated; set request.jwt.claim.sub='aaaaaaaa-0000-0000-0000-000000000001';
+select chk('insights count code/cipher attempts per screen (the metric was always 0)',
+  exists (select 1 from jsonb_array_elements(admin_mission_insights(:'mid', 2)->'friction') f
+          where f->>'screen_key' = 'qa_code_screen' and (f->>'code_attempts')::int = 2));
+reset role;
+\echo ''

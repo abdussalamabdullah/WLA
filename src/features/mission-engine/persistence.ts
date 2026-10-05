@@ -11,6 +11,7 @@ import {
   saveRun as storeSave,
   signMedia,
   readKitBase,
+  readMediaFiles,
   type LoadedRun,
 } from "./store";
 import { assetKeysIn, resolveMedia } from "./media";
@@ -407,7 +408,10 @@ export async function printVia(gw: MissionGateway, key: string): Promise<{ title
   const base = await readKitBase(run.progress.mission_id, run.progress.mission_version, def.base);
   if (!base) return null;
   const { renderPrint } = await import("./print");
-  const bytes = await renderPrint(base, def, run.state);
+  const images = await readMediaFiles(run.progress.mission_id, run.progress.mission_version, def.images.map((i) => i.asset));
+  const { bytes, issues } = await renderPrint(base, def, run.state, { now, images });
+  // QA renders every variant before publication; this is the backstop.
+  if (issues.length) logError("print_output_issue", null, { print: def.key, codes: issues.map((i) => i.code).join(",") });
   await gw.events(run.progress.id, [{ name: "kit_opened", detail: { source: "print" } }]);
   return { title: def.title, bytes };
 }

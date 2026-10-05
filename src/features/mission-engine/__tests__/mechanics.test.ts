@@ -92,9 +92,10 @@ describe("Kit QR codes", () => {
   });
 });
 
-import { PDFDocument } from "pdf-lib";
+import { PDFDocument, PDFName } from "pdf-lib";
 import { inflateSync } from "node:zlib";
 import { fillText, renderPrint } from "../print";
+import { printDef } from "../definition";
 
 /** The text a PDF draws: its content streams, inflated, with hex strings decoded. */
 function drawnText(bytes: Uint8Array): string {
@@ -124,12 +125,12 @@ describe("dynamic printables", () => {
     const base = await PDFDocument.create();
     base.addPage([595, 842]);
     base.setTitle("Base");
-    const bytes = await renderPrint(await base.save(), { key: "card", title: "Your code card", base: "Card", fields: [{ text: "{{var.code}}", page: 0, x: 20, y: 30, size: 18 }, { text: "x", page: 9, x: 0, y: 0, size: 12 }] }, state);
+    const { bytes, drawn } = await renderPrint(await base.save(), printDef.parse({ key: "card", title: "Your code card", base: "Card", fields: [{ text: "{{var.code}}", page: 0, x: 20, y: 30, size: 18 }, { text: "x", page: 9, x: 0, y: 0, size: 12 }] }), state);
     const out = await PDFDocument.load(bytes);
     expect(out.getPageCount()).toBe(1);
     expect(out.getTitle()).toBe("Your code card");
     expect(bytes.length).toBeGreaterThan((await base.save()).length);
-    expect(drawnText(bytes)).toContain("RIVER-7");
+    expect(drawn.map((d) => d.text)).toContain("RIVER-7");
   });
 
   it("QA catches a missing base, an undeclared field and an unknown printable", () => {
@@ -192,5 +193,58 @@ describe("timed stages (server time)", () => {
     expect(() => step(timed, entered(20), "t", { kind: "timer_expired", screenKey: "t" }, now)).toThrow();
     const r = step(timed, entered(28.5), "t", { kind: "timer_expired", screenKey: "t" }, now);
     expect(r.ok && r.nextScreenKey).toBe("n");
+  });
+});
+
+describe("printables to the WLA print standard (D-101)", () => {
+  const mk = async (pages = 2) => { const d = await PDFDocument.create(); for (let i = 0; i < pages; i++) d.addPage([595, 842]); return d.save(); };
+  const st = (vars: Record<string, unknown>, extra: Partial<typeof emptyMissionState> = {}) => ({ ...emptyMissionState, variables: vars, ...extra });
+
+  it("sets fields in WLA's own typefaces (embedded Karla/Fraunces, not Helvetica)", async () => {
+    const { bytes, issues, drawn } = await renderPrint(await mk(1), printDef.parse({ key: "c", title: "Card", base: "B", fields: [{ text: "Hello", x: 10, y: 10, font: "display" }, { text: "World", x: 10, y: 30 }] }), st({}));
+    expect(issues).toEqual([]);
+    expect(drawn.map((d) => [d.text, d.font])).toEqual([["Hello", "display"], ["World", "body"]]);
+    const doc = await PDFDocument.load(bytes);
+    const baseFonts = doc.context.enumerateIndirectObjects()
+      .map(([, o]) => (o as { get?: (k: unknown) => unknown }).get?.(PDFName.of("BaseFont")))
+      .filter(Boolean).map(String);
+    expect(baseFonts.some((f) => /Fraunces/.test(f))).toBe(true);
+    expect(baseFonts.some((f) => /Karla/.test(f))).toBe(true);
+    expect(baseFonts.some((f) => /Helvetica/.test(f))).toBe(false);
+  });
+
+  it("shrinks long text to fit its width, and reports text that cannot fit even at 8pt", async () => {
+    const def = printDef.parse({ key: "c", title: "Card", base: "B", fields: [{ text: "{{var.clue}}", x: 10, y: 10, size: 20, maxWidth: 40 }] });
+    expect((await renderPrint(await mk(1), def, st({ clue: "The old mill" }))).issues).toEqual([]);
+    const long = (await renderPrint(await mk(1), def, st({ clue: "x".repeat(120) }))).issues;
+    expect(long.map((i) => i.code)).toContain("print_field_overflow");
+  });
+
+  it("reports anything placed off the page or on a page the base lacks", async () => {
+    const def = printDef.parse({ key: "c", title: "Card", base: "B", fields: [{ text: "far", x: 300, y: 10 }, { text: "p3", page: 2, x: 1, y: 1 }] });
+    const codes = (await renderPrint(await mk(1), def, st({}))).issues.map((i) => i.code);
+    expect(codes).toEqual(expect.arrayContaining(["print_field_off_page", "print_page_missing"]));
+  });
+
+  it("prints conditional fields only when they hold", async () => {
+    const def = printDef.parse({ key: "c", title: "Card", base: "B", fields: [{ text: "ROUTE-NORTH", x: 10, y: 10, when: { ref: { var: "route" }, op: "eq", value: "north" } }] });
+    expect((await renderPrint(await mk(1), def, st({ route: "north" }))).drawn.map((d) => d.text)).toContain("ROUTE-NORTH");
+    expect((await renderPrint(await mk(1), def, st({ route: "south" }))).drawn).toEqual([]);
+  });
+
+  it("selects pages per variant", async () => {
+    const def2 = printDef.parse({ key: "c", title: "Cards", base: "B", pages: [{ page: 0 }, { page: 1, when: { ref: { variant: true }, op: "eq", value: "hard" } }] });
+    const easy = await PDFDocument.load((await renderPrint(await mk(2), def2, st({}, { variant: "easy" }))).bytes);
+    const hard = await PDFDocument.load((await renderPrint(await mk(2), def2, st({}, { variant: "hard" }))).bytes);
+    expect([easy.getPageCount(), hard.getPageCount()]).toEqual([1, 2]);
+  });
+
+  it("places a variant's image, and reports one that is missing", async () => {
+    const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==", "base64");
+    const def = printDef.parse({ key: "c", title: "Card", base: "B", images: [{ asset: "map", x: 10, y: 10, w: 50, h: 40 }] });
+    const ok = await renderPrint(await mk(1), def, st({}), { images: new Map([["map", { bytes: new Uint8Array(png), mime: "image/png" }]]) });
+    expect(ok.issues).toEqual([]);
+    expect(Buffer.from(ok.bytes).toString("latin1")).toMatch(/\/Subtype\s*\/Image/);
+    expect((await renderPrint(await mk(1), def, st({}))).issues.map((i) => i.code)).toContain("print_image_missing");
   });
 });
