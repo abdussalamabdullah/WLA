@@ -131,10 +131,7 @@ const anonQr = await fetch(`${BASE}/q/${SLUG}/tower`, { redirect: "manual" });
 chk("anonymous: a QR scan asks to sign in and comes back", anonQr.status === 303 && /\/login\?next=%2Fq%2F/.test(anonQr.headers.get("location") || ""), `${anonQr.status} ${anonQr.headers.get("location")}`);
 
 await uiLogin(b, q.email, q.password);
-await b.goto("/academy/my-missions", 800);
-if (await b.has(new RegExp(CHILD), "main button")) await b.click(new RegExp(CHILD), { selector: "main button" });
-else { await b.click(/Missions/, { selector: "header button" }); await sleep(300); await b.click(new RegExp(CHILD), { selector: "header button, header [role=menuitem], header a" }); }
-await sleep(1500);
+await b.cookies([{ name: "wla_active_child", value: kid.id }]);
 await b.goto(`/academy/missions/${SLUG}`, 1000);
 await b.click(/^(start|continue) mission/i, { selector: "main button, main a" }); await b.waitUrl(/\/active/, 40000);
 await b.waitText(/Before you start/, 20000);
