@@ -40,4 +40,4 @@ for (const [w, h, mob] of SIZES) {
     if (w === 1180) await b.shot(`a11y3-${WHO}-${p.replace(/\W+/g, "_")}-1180`);
   }
 }
-summary();
+summary(); process.exit(0);

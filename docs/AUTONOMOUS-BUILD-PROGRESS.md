@@ -268,3 +268,32 @@ screen-reader-only text escaping admin table scroll regions (D-98).
 checklist, exact-resource QR — built and tested (4 unit tests, browser QR anchor 2/2).
 
 **Migrations:** 37 local, 37 staging, in parity. Six Names `published = false`, v2 content untouched.
+
+---
+
+## Phase 11 — Remaining gaps and QA through the real UI (2026-10-05) · COMPLETE
+
+Started from the verification of 2026-10-05 (MORE IMPLEMENTATION REQUIRED).
+
+**Implementation (commit `5f9a33d`, D-100–D-104):** code/cipher attempts emitted (the insights metric was always 0);
+interruption-proof drafts for response, multi-choice, tracker and sort; Account: each child's missions with
+status, privacy and permissions, approved support copy; printables in WLA typefaces with fit, conditional fields,
+per-variant images and pages, and print-output QA per variant; authority-backed age (7–15) and language checks,
+reading-level rules explicitly not applied (OPEN-15); Mission Control return invariant tested and enforced;
+object recognition assessed as not required by any approved mission.
+
+**QA through the real UI (commit `28f7f48`, D-105, D-106):**
+- `forms-lifecycle.mjs` 29/29 — a mission built only through the generated forms, condition builder and
+  mission-logic editor; publish; rollback to a v2 draft edited through the forms; duplication with files.
+- `forms-learner.mjs` 26/26 — pool, event, Mission Control audio, video + captions + transcript, layers, a real
+  checkpoint wait, interruption/resume, Trail relations, analytics insights on the real run.
+- `device-real.mjs` 9/9 — compass from an emulated orientation feed; QR read from a camera feed by
+  BarcodeDetector; graded on the server; camera stopped; no upload.
+- `text200.mjs` 52/52 — 200% text and zoom-200%.
+
+**Defects found by these runs and fixed:** D-105 (mission QA could not open a stage after a real-world interval, so
+such missions could not be published); D-106 (header and stats grids overflowed at 200% text on phones).
+
+**Final regression on `28f7f48`:** Six Names six branches 216/216 (fresh children, one pass); mechanics 21/21;
+account 6/6; a11y 52/52; staging security 67/0; staging lifecycle 54/0; local security 166/0; Six Names SQL 64/0;
+712 unit tests. Report: `docs/AUTONOMOUS-BUILD-COMPLETION-REPORT.md`.
