@@ -81,6 +81,7 @@ await P.goto(`/academy/missions/${SLUG}`, 1000);
 if (!(await P.has(/^(start|continue) mission/i, "main button, main a"))) console.log("HOME:", (await main(P)).slice(0, 300).replace(/\n+/g, " | "), "URL", await P.url());
 await P.click(/^(start|continue) mission/i, { selector: "main button, main a" }); await P.waitUrl(/\/active/, 40000);
 await P.waitText(/What did you try first/, 20000);
+for (let i = 0; i < 60 && !(await P.eval("!!document.querySelector('main textarea, main input:not([type=hidden])')")); i++) await sleep(500);
 await P.fill("main textarea, main input:not([type=hidden])", `I'm ${kid.display_name}. I tried the stepping stones first, then went round (ref ${stamp}q). Email me at robin@example.com`);
 await P.click(/save and continue|continue/i, { selector: "main button" }); await P.waitUrl(/\/complete/, 40000);
 await P.goto(`/account/children/${kid.id}`, 800);
