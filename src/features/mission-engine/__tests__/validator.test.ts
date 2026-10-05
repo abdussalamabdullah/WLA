@@ -69,3 +69,31 @@ describe("automated mission QA — each check fires on the mission it is for", (
     expect(codes(screens)).toContain("gamification_language");
   });
 });
+
+describe("age and child-language checks backed by WLA authority (D-102)", () => {
+  const sc2 = (screenKey: string, type: string, sequence: number, configuration: unknown, title: string | null = "T", body: string | null = null) =>
+    ({ screenKey, type: type as never, title, body, sequence, configuration });
+  const m = (body: string, definition: Record<string, unknown> = {}) => buildModel({
+    definition: { completion: { ref: { visited: "a" }, op: "exists" }, ...definition },
+    screens: [sc2("a", "content", 1, { next: "end" }, "Start", body), sc2("end", "completion", 2, { message: "Done" })],
+    completionRule: null,
+  });
+  const codes = (model: ReturnType<typeof m>, ages?: { min: number; max: number }) => validateMission(model, { ages }).issues.map((i) => `${i.severity}:${i.code}`);
+
+  it("blocks a mission age range outside WLA's 7–15", () => {
+    expect(codes(m("Hello."), { min: 5, max: 9 })).toContain("blocking:age_range_outside_platform");
+    expect(codes(m("Hello."), { min: 8, max: 12 })).not.toContain("blocking:age_range_outside_platform");
+  });
+  it("blocks a variant age band outside 7–15", () => {
+    const model = m("Hello.", { variables: [{ key: "n", type: "number", visibility: "hidden", default: 1 }], variants: [{ id: "young", label: "Young", ageBand: { min: 4, max: 6 }, values: { n: 1 } }] });
+    expect(codes(model, { min: 7, max: 11 })).toContain("blocking:age_band_outside_platform");
+  });
+  it("flags judging language and bubbly exclamations as advisory", () => {
+    expect(codes(m("That is the correct answer."))).toContain("advisory:judging_language");
+    expect(codes(m("Amazing!! Brilliant!"))).toContain("advisory:bubbly_language");
+    expect(codes(m("What did you notice about the list?"))).not.toContain("advisory:judging_language");
+  });
+  it("says plainly that reading-level rules are not applied (OPEN-15)", () => {
+    expect(codes(m("Hello."))).toContain("advisory:language_rules_pending");
+  });
+});

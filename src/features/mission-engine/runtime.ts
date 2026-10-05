@@ -67,6 +67,9 @@ export type StepResult =
       events: AnalyticsDraft[];
     };
 
+/** Screen types whose submissions are code/cipher/symbol attempts (analytics §13). */
+const CODE_TYPES = new Set<string>(["code_entry", "token_sequence"]);
+
 /** How early a `timer_expired` may arrive and still count (clock skew, latency). */
 export const TIMER_TOLERANCE_SECONDS = 2;
 
@@ -257,7 +260,11 @@ export function step(
         ok: false,
         state: { ...state0, attempts: { ...state0.attempts, [screen.screenKey]: attempts } },
         failure: { code: v.code, message: v.message },
-        events: [{ name: "validation_failed", screen_key: screen.screenKey, detail: { outcome: v.code } }],
+        events: [
+          { name: "validation_failed", screen_key: screen.screenKey, detail: { outcome: v.code } },
+          // Code/cipher attempts (Plan §13): every try counts, matched or not.
+          ...(CODE_TYPES.has(screen.type) ? [{ name: "code_attempted", screen_key: screen.screenKey, detail: { outcome: v.code } }] : []),
+        ],
       };
     }
   }
@@ -273,6 +280,9 @@ export function step(
   const settled = settle(model, state, now, decls);
   state = settled.state;
   const events: AnalyticsDraft[] = [...(("events" in out && out.events) || []), ...settled.events];
+  if (interaction.kind === "submit" && CODE_TYPES.has(screen.type)) {
+    events.push({ name: "code_attempted", screen_key: screen.screenKey, detail: { outcome: state.outcomes[screen.screenKey] ?? "accepted" } });
+  }
 
   // ---- Mission Trail (F6): a marker on this screen saves evidence mid-mission.
   const evidence: EvidenceDraft[] = [];

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { clearDrafts, useDraft } from "./draft";
 import { Field, Input } from "@/components/ui/field";
 import { PrimaryAction, ScreenFrame, SelectableOption } from "./shared";
 import {
@@ -205,13 +206,16 @@ export function ChoiceScreen({
 export function MultiChoiceScreen({
   screen,
   state,
+  missionSlug,
   onAdvance,
   isPending,
   error,
 }: ScreenComponentProps) {
   const config = parseScreenConfig("multi_choice", screen.configuration);
   const saved = state.multiChoices[screen.screenKey] ?? [];
-  const [selected, setSelected] = useState<string[]>(saved);
+  // A partial selection survives an accidental reload (D-100); the saved
+  // server choice remains the starting point.
+  const [selected, setSelected] = useDraft<string[]>({ missionSlug, screen }, "selected", saved);
 
   const target = config.selectExactly;
   const complete = selected.length === target;
@@ -238,13 +242,14 @@ export function MultiChoiceScreen({
           label="Confirm"
           disabled={!complete}
           isPending={isPending}
-          onClick={() =>
+          onClick={() => {
+            clearDrafts({ missionSlug, screen });
             onAdvance({
               kind: "multi_choice",
               screenKey: screen.screenKey,
               optionIds: selected,
-            })
-          }
+            });
+          }}
         />
       }
     >
@@ -284,6 +289,7 @@ export function MultiChoiceScreen({
 export function TrackerScreen({
   screen,
   state,
+  missionSlug,
   onAdvance,
   isPending,
   error,
@@ -293,7 +299,7 @@ export function TrackerScreen({
     string,
     number
   >;
-  const [positions, setPositions] = useState<Record<string, number>>(saved);
+  const [positions, setPositions] = useDraft<Record<string, number>>({ missionSlug, screen }, "positions", saved);
 
   const complete =
     !config.required ||
@@ -311,13 +317,14 @@ export function TrackerScreen({
           label="Continue"
           disabled={!complete}
           isPending={isPending}
-          onClick={() =>
+          onClick={() => {
+            clearDrafts({ missionSlug, screen });
             onAdvance({
               kind: "tracker",
               screenKey: screen.screenKey,
               positions,
-            })
-          }
+            });
+          }}
         />
       }
     >
@@ -373,12 +380,13 @@ export function TrackerScreen({
 export function ResponseScreen({
   screen,
   state,
+  missionSlug,
   onAdvance,
   isPending,
   error,
 }: ScreenComponentProps) {
   const config = parseScreenConfig("response", screen.configuration);
-  const [value, setValue] = useState("");
+  const [value, setValue] = useDraft({ missionSlug, screen }, "value", "");
   const answered = state.respondedScreens.includes(screen.screenKey);
   const ready = !config.required || value.trim().length > 0;
 
@@ -394,13 +402,14 @@ export function ResponseScreen({
           label="Save and continue"
           disabled={!ready}
           isPending={isPending}
-          onClick={() =>
+          onClick={() => {
+            clearDrafts({ missionSlug, screen });
             onAdvance({
               kind: "response",
               screenKey: screen.screenKey,
               value: value.trim(),
-            })
-          }
+            });
+          }}
         />
       }
     >

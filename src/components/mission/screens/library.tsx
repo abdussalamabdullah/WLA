@@ -8,6 +8,7 @@ import { parseScreenConfig, type ScreenComponentProps } from "@/features/mission
 import type { MissionScreen } from "@/features/mission-engine/navigation";
 import { cn } from "@/lib/utils";
 import { CameraScan } from "./device";
+import { clearDrafts, useDraft } from "./draft";
 
 /**
  * THE INTERACTION LIBRARY — components (Enhancement Plan §4, D-86).
@@ -106,45 +107,6 @@ function LibFrame({
 }
 
 
-/**
- * In-progress input survives an accidental reload or a dropped connection
- * (Plan §11: "preserve interaction state through accidental interruption").
- * Kept in this browser tab only (sessionStorage), keyed by mission and screen,
- * cleared when the input is submitted. The saved value is applied after
- * hydration, so the server and the first client render agree; storage that
- * is blocked or full simply means nothing is restored.
- */
-function draftKey(p: Props, name: string) {
-  return `wla-draft:${p.missionSlug}:${p.screen.screenKey}:${name}`;
-}
-function useDraft<T>(p: Props, name: string, initial: T | (() => T)): [T, (v: T | ((prev: T) => T)) => void] {
-  const key = draftKey(p, name);
-  const [value, setValue] = useState<T>(initial);
-  useEffect(() => {
-    let saved: T | undefined;
-    try {
-      const raw = sessionStorage.getItem(key);
-      if (raw) saved = JSON.parse(raw) as T;
-    } catch { /* storage unavailable */ }
-    if (saved !== undefined) queueMicrotask(() => setValue(saved as T));
-  }, [key]);
-  const set = (v: T | ((prev: T) => T)) =>
-    setValue((prev) => {
-      const next = typeof v === "function" ? (v as (prev: T) => T)(prev) : v;
-      try { sessionStorage.setItem(key, JSON.stringify(next)); } catch { /* storage unavailable */ }
-      return next;
-    });
-  return [value, set];
-}
-function clearDrafts(p: Props) {
-  try {
-    const prefix = draftKey(p, "");
-    for (let i = sessionStorage.length - 1; i >= 0; i--) {
-      const k = sessionStorage.key(i);
-      if (k?.startsWith(prefix)) sessionStorage.removeItem(k);
-    }
-  } catch { /* storage unavailable */ }
-}
 
 const submit = (p: Props, value: unknown) => {
   clearDrafts(p);

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { clearDrafts, readDraft, useDraft, writeDraft } from "./draft";
 import Link from "next/link";
 import { PrimaryAction, ScreenFrame, SelectableOption } from "./shared";
 import {
@@ -138,6 +139,7 @@ export function ListObject({
  */
 export function SortItemsScreen({
   screen,
+  missionSlug,
   onAdvance,
   isPending,
   error,
@@ -179,13 +181,23 @@ export function SortItemsScreen({
      * hydration. A fixed authored order would sidestep both, but the Build
      * Brief asks for a shuffle and a fixed order is not one.
      */
+    // After an accidental reload, keep the order the child was working
+    // through (D-100) — otherwise their place would point at another item.
+    const w = { missionSlug, screen: { screenKey: screen.screenKey } };
+    const saved = readDraft<string[]>(w, "order");
+    const restored = saved && saved.length === config.items.length
+      ? saved.flatMap((id) => config.items.filter((i) => i.id === id))
+      : null;
+    const next = restored && restored.length === config.items.length ? restored : shuffle(config.items);
+    writeDraft(w, "order", next.map((i) => i.id));
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setItems(shuffle(config.items));
+    setItems(next);
     // Re-shuffles only if the child lands on a different sorting screen.
-  }, [screen.screenKey, config.shuffle, config.items]);
+  }, [screen.screenKey, config.shuffle, config.items, missionSlug]);
 
-  const [index, setIndex] = useState(0);
-  const [selected, setSelected] = useState<string | null>(null);
+  // How far through the sort the child is survives an accidental reload (D-100).
+  const [index, setIndex] = useDraft({ missionSlug, screen }, "index", 0);
+  const [selected, setSelected] = useDraft<string | null>({ missionSlug, screen }, "selected", null);
 
   const item = items[index];
   const isLast = index === items.length - 1;
@@ -204,9 +216,10 @@ export function SortItemsScreen({
           <PrimaryAction
             label={config.actionLabel ?? "Continue"}
             isPending={isPending}
-            onClick={() =>
-              onAdvance({ kind: "visit", screenKey: screen.screenKey })
-            }
+            onClick={() => {
+              clearDrafts({ missionSlug, screen });
+              onAdvance({ kind: "visit", screenKey: screen.screenKey });
+            }}
           />
         ) : (
           <PrimaryAction

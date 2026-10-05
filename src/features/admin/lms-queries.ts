@@ -167,7 +167,10 @@ export async function draftQaReport(missionId: string, version: number) {
       screenKey: p.screen_key,
       detail: p.detail,
     }));
-  return { model, issues: [...issues, ...fromSql], paths, media };
+  // Print-output QA: render every printable for every variant (D-101).
+  const { printQa } = await import("./print-qa");
+  const fromPrints = await printQa(model, resources, media.rows);
+  return { model, issues: [...issues, ...fromSql, ...fromPrints], paths, media };
 }
 
 /**

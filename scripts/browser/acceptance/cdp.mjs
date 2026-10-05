@@ -7,11 +7,11 @@ export const BASE = process.env.BASE ?? "http://localhost:3100";
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 export { sleep };
 
-export async function launch({ port = 9420, out = process.env.QA_OUT ?? "/tmp/wla-qa/out" } = {}) {
+export async function launch({ port = 9420, out = process.env.QA_OUT ?? "/tmp/wla-qa/out", args = [] } = {}) {
   mkdirSync(out, { recursive: true });
   const proc = spawn(CHROME, [
     `--remote-debugging-port=${port}`, "--headless=new", "--disable-gpu", "--hide-scrollbars",
-    "--no-first-run", "--no-default-browser-check", `--user-data-dir=${out}/profile-${port}-${Date.now()}`, "about:blank",
+    "--no-first-run", "--no-default-browser-check", `--user-data-dir=${out}/profile-${port}-${Date.now()}`, ...args, "about:blank",
   ], { stdio: "ignore" });
   let target;
   for (let i = 0; i < 80 && !target; i++) {

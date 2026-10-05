@@ -141,10 +141,38 @@ export const printDef = z
             x: z.number().min(0),
             y: z.number().min(0),
             size: z.number().min(6).max(72).default(14),
+            /** WLA typography: Karla for body and labels, Fraunces for display lines. */
+            font: z.enum(["body", "body_bold", "display"]).default("body"),
+            /** Millimetres available; longer text is set smaller (to 8pt), never clipped silently. */
+            maxWidth: z.number().positive().optional(),
+            align: z.enum(["left", "center"]).default("left"),
+            /** Printed only when this holds (e.g. a clue only on one route). */
+            when: condition.optional(),
           })
           .strict(),
       )
-      .min(1),
+      .default([]),
+    /** Per-variant images from this version's media (PNG or JPEG), placed in millimetres. */
+    images: z
+      .array(
+        z
+          .object({
+            asset: z.string().min(1),
+            page: z.number().int().min(0).default(0),
+            x: z.number().min(0),
+            y: z.number().min(0),
+            w: z.number().positive(),
+            h: z.number().positive(),
+            when: condition.optional(),
+          })
+          .strict(),
+      )
+      .default([]),
+    /**
+     * Which pages of the base to include, in order — e.g. only the constraint
+     * cards this variant uses. Omitted: every page.
+     */
+    pages: z.array(z.object({ page: z.number().int().min(0), when: condition.optional() }).strict()).optional(),
     when: condition.optional(),
   })
   .strict();
