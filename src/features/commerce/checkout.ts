@@ -9,8 +9,14 @@ import type { ChildProfileRow, MissionRow } from "@/types/database";
 /**
  * STRIPE CHECKOUT — Sprint 8.
  *
- * Flow: Public Mission → purchase → Stripe Checkout → verified webhook →
- * child entitlement → My Missions → Mission Home.
+ * Flow: Public Mission → sign in or create an account (returning to the
+ * purchase) → purchase → Stripe Checkout → verified webhook → child
+ * entitlement → My Missions → Mission Home.
+ *
+ * Who bought it is never inferred from the email typed into Stripe. The parent
+ * is the authenticated session at the moment the session is created, recorded
+ * in `checkout_intents` with the verified child before the parent leaves; the
+ * webhook resolves the entitlement from that row.
  *
  * The browser never supplies a price, a currency or an unverified child.
  * Everything chargeable is read from the database at session-creation time.
@@ -61,7 +67,12 @@ export async function acquireMission({
   childId: string;
   missionSlug: string;
   origin: string;
-}): Promise<{ kind: "granted" } | { kind: "checkout"; url: string }> {
+}): Promise<
+  | { kind: "granted"; childId: string }
+  | { kind: "owned"; childId: string }
+  | { kind: "processing"; childId: string }
+  | { kind: "checkout"; childId: string; url: string }
+> {
   const { user } = await requireParent();
 
   // Step 2 — ownership. Throws AccessError if the child is not this parent's.
@@ -89,19 +100,76 @@ export async function acquireMission({
     .maybeSingle();
 
   if (existing) {
-    return { kind: "granted" };
+    return { kind: "owned", childId: child.id };
   }
 
   // Step 5 — the server decides, from the mission row.
   if (mission.is_free) {
     await grantFreeEntitlement(child.id, mission.id);
-    return { kind: "granted" };
+    return { kind: "granted", childId: child.id };
+  }
+
+  // Step 4b — a payment already made but not yet confirmed by the webhook is
+  // not a reason to take a second one.
+  if (await settlePriorCheckouts(supabase, child.id, mission.id)) {
+    return { kind: "processing", childId: child.id };
   }
 
   return {
     kind: "checkout",
+    childId: child.id,
     url: (await createCheckoutSession({ child, mission, user, origin })).url,
   };
+}
+
+/**
+ * Before a new Checkout for this child and mission, settle the earlier ones.
+ *
+ * A Stripe session stays payable for 24 hours. Without this, a parent who
+ * abandoned one tab and started again in another could pay twice: the unique
+ * entitlement makes the second grant a no-op, but the second charge is real,
+ * and refunds are not automated (D-20).
+ *
+ *   - an earlier session that was PAID but whose webhook has not arrived yet
+ *     → returns true, and no new session is made
+ *   - an earlier session still OPEN → expired, so only the new one can be paid
+ *
+ * Read through the parent's own client: "parent reads own checkout intents"
+ * scopes it to this family. Stripe is asked for each session's real status;
+ * nothing here is taken from the browser. If Stripe cannot be reached the
+ * earlier session is left alone and a new one is made — failing to start a
+ * purchase is worse than the narrow chance of a duplicate that the webhook
+ * would still never turn into a second entitlement.
+ */
+async function settlePriorCheckouts(
+  supabase: Awaited<ReturnType<typeof requireOwnedChild>>["supabase"],
+  childId: string,
+  missionId: string,
+): Promise<boolean> {
+  const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const { data: prior } = await supabase
+    .from("checkout_intents")
+    .select("stripe_session_id")
+    .eq("child_id", childId)
+    .eq("mission_id", missionId)
+    .gte("created_at", since)
+    .order("created_at", { ascending: false })
+    .limit(5);
+
+  let paid = false;
+  for (const { stripe_session_id: id } of prior ?? []) {
+    try {
+      const session = await stripe().checkout.sessions.retrieve(id);
+      if (session.status === "complete" && session.payment_status === "paid") {
+        paid = true;
+      } else if (session.status === "open") {
+        await stripe().checkout.sessions.expire(id);
+      }
+    } catch {
+      // Unknown — see above.
+    }
+  }
+  return paid;
 }
 
 /**
@@ -195,7 +263,10 @@ async function createCheckoutSession({
         },
       ],
       customer_email: user.email,
-      success_url: `${origin}/academy/my-missions?purchase=complete`,
+      // My Missions reads `purchase=success` to say the mission WILL appear
+      // once confirmed. It was `complete`, which nothing read, so the parent
+      // came back from paying to no word at all.
+      success_url: `${origin}/academy/my-missions?purchase=success`,
       cancel_url: `${origin}/purchase/${mission.slug}?cancelled=1`,
       // Metadata is a convenience for the webhook; checkout_intents is the
       // authoritative record of who this was for.

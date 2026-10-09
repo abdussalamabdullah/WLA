@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { safeNext } from "@/lib/safe-next";
 
 /**
  * Email confirmation and password-reset landing.
@@ -11,11 +12,8 @@ export async function GET(request: NextRequest) {
   const code = searchParams.get("code");
   const next = searchParams.get("next");
 
-  // Same open-redirect guard as the sign-in action.
-  const destination =
-    next && next.startsWith("/") && !next.startsWith("//")
-      ? next
-      : "/academy/my-missions";
+  // The same open-redirect guard as sign-in (lib/safe-next).
+  const destination = safeNext(next);
 
   if (!code) {
     return NextResponse.redirect(`${origin}/login?error=link_invalid`);

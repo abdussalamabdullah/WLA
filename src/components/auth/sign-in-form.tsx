@@ -63,7 +63,7 @@ export function SignInForm({ next }: { next?: string }) {
         <p className="text-[var(--color-text-muted)]">
           No account yet?{" "}
           <Link
-            href="/signup"
+            href={next ? `/signup?next=${encodeURIComponent(next)}` : "/signup"}
             className="text-[var(--color-text)] underline decoration-[var(--color-border-strong)] underline-offset-4"
           >
             Create one

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { SignInForm } from "@/components/auth/sign-in-form";
-import { FormError } from "@/components/ui/field";
+import { FormError, FormNotice } from "@/components/ui/field";
 
 export const metadata = { title: "Sign in" };
 
@@ -29,6 +29,12 @@ export default async function LoginPage({
           Have a child code?
         </Link>
       </p>
+
+      {next?.startsWith("/purchase/") && (
+        <div className="mt-[var(--space-l)]">
+          <FormNotice message="Sign in or create an account to get this mission. We'll bring you straight back to it." />
+        </div>
+      )}
 
       <div className="mt-[var(--space-xl)] flex flex-col gap-[var(--space-l)]">
         {error && <FormError message={LINK_ERRORS[error]} />}

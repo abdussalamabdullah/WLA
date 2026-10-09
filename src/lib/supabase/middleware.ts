@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { publicEnv } from "@/lib/env";
 import { boundedFetch } from "./fetch";
+import { safeNext } from "@/lib/safe-next";
 
 /**
  * Routes requiring a PARENT session specifically. A child session is not
@@ -108,11 +109,11 @@ export async function updateSession(request: NextRequest) {
 
   // A signed-in child on the child sign-in screen is handled by the page
   // itself, which can verify the session properly rather than trust a cookie.
+  // Already signed in: go where they were heading (e.g. back to a purchase),
+  // through the same open-redirect guard as the sign-in action.
   if (user && AUTH_ROUTES.includes(pathname)) {
-    const url = request.nextUrl.clone();
-    url.pathname = "/academy/my-missions";
-    url.search = "";
-    return NextResponse.redirect(url);
+    const target = safeNext(request.nextUrl.searchParams.get("next"));
+    return NextResponse.redirect(new URL(target, request.nextUrl.origin));
   }
 
   return response;

@@ -5,8 +5,6 @@ import type { MissionStatus } from "@/types/database";
 import { BoardPermissions } from "@/components/account/board-permissions";
 import { familyContributions } from "@/features/mission-board/board";
 import { ErrorState } from "@/components/system/states";
-import { Button } from "@/components/ui/button";
-import { signOutAction } from "@/features/auth/actions";
 import { listChildren } from "@/features/children/queries";
 import { requireParent } from "@/lib/permissions";
 import { OpenChildMissions } from "@/components/account/open-child-missions";
@@ -69,6 +67,13 @@ export default async function AccountPage() {
               className="inline-flex min-h-[var(--target-min)] items-center text-[length:var(--text-label)] underline decoration-[var(--color-border-strong)] underline-offset-4 hover:decoration-[var(--color-primary)]"
             >
               Manage
+            </Link>
+            {/* Adding a child is also where their access code is made (D-108). */}
+            <Link
+              href="/account/children/new"
+              className="inline-flex min-h-[var(--target-min)] items-center text-[length:var(--text-label)] underline decoration-[var(--color-border-strong)] underline-offset-4 hover:decoration-[var(--color-primary)]"
+            >
+              Add a child
             </Link>
           </dd>
         </div>
@@ -175,12 +180,6 @@ export default async function AccountPage() {
           Mission Kit and Mission Trail. The guide will be available here soon.
         </p>
       </section>
-
-      <form action={signOutAction} className="mt-[var(--space-xl)]">
-        <Button variant="secondary" type="submit">
-          Sign out
-        </Button>
-      </form>
     </main>
   );
 }

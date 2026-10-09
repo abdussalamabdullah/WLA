@@ -43,8 +43,15 @@ export default async function MissionDetailPage({
 
       <div className="mt-[var(--space-xl)]">
         {/* Price is shown on the purchase page, read from the mission row. */}
+        {/*
+          The ONLY way into a purchase: the Academy's /purchase route, which
+          is behind sign-in (returning here after it) so the Checkout session
+          is tied to an authenticated parent. The public site's "Get <mission>"
+          must link to the same URL — never to a Stripe Payment Link, which
+          would take a payment no parent or child could be matched to.
+        */}
         <ButtonLink href={`/purchase/${mission.slug}`} size="large">
-          Get this mission
+          Get {mission.title}
         </ButtonLink>
       </div>
     </main>

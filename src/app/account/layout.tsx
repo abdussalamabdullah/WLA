@@ -1,36 +1,20 @@
-import Link from "next/link";
+import { AcademyShell } from "@/components/academy/academy-shell";
 
 /**
  * ACCOUNT SHELL.
  *
  * Brief §18 / §6.1: the parent's experience should be "available when needed
- * without turning the Academy into a parent dashboard." So this sits beside
- * the Academy rather than inside it, and stays deliberately plain.
+ * without turning the Academy into a parent dashboard." The account pages stay
+ * plain; what they share with the rest of the parent's Academy is its shell —
+ * My Missions, Mission Board, Account, Help, Log out and the child switcher.
+ *
+ * It used to render a header of its own, so opening Account dropped the parent
+ * out of their navigation. One shell, one place it is defined.
  */
 export default function AccountLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  return (
-    <div className="min-h-dvh">
-      <header className="border-b border-[var(--color-border)]">
-        <div className="wla-container flex min-h-[64px] items-center justify-between gap-[var(--space-m)]">
-          <Link
-            href="/academy/my-missions"
-            className="font-[family-name:var(--font-serif)] text-[length:var(--text-h3)]"
-          >
-            Within Lab Academy
-          </Link>
-          <Link
-            href="/academy/my-missions"
-            className="inline-flex min-h-[var(--target-min)] items-center text-[length:var(--text-label)] underline decoration-[var(--color-border-strong)] underline-offset-4 hover:decoration-[var(--color-primary)]"
-          >
-            Back to missions
-          </Link>
-        </div>
-      </header>
-      {children}
-    </div>
-  );
+  return <AcademyShell audience="parent">{children}</AcademyShell>;
 }

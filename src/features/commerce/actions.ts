@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { acquireMission, CheckoutError } from "./checkout";
 import { AccessError } from "@/lib/permissions";
+import { setActiveChild } from "@/features/children/active-child";
 import type { FormState } from "@/features/auth/schemas";
 
 /**
@@ -15,8 +16,11 @@ import type { FormState } from "@/features/auth/schemas";
  * acquired. The server reads `is_free` from the mission row and routes
  * accordingly:
  *
- *   free → entitlement granted directly, back to My Missions
- *   paid → Stripe Checkout, entitlement created by the verified webhook
+ *   free  → entitlement granted directly, back to My Missions
+ *   owned → nothing to do; back to My Missions, which says so
+ *   paid  → Stripe Checkout, entitlement created by the verified webhook
+ *           (or, if an earlier payment for it is awaiting the webhook, no
+ *           second Checkout — back to My Missions to wait for it)
  *
  * The child is verified against the authenticated parent before either path
  * runs (`requireOwnedChild`), so a submitted id belonging to another family
@@ -51,10 +55,26 @@ export async function acquireMissionAction(
     return { error: "We couldn't add that mission. Please try again." };
   }
 
+  /*
+   * My Missions shows the ACTIVE child's collection, so make it the child the
+   * mission is for — otherwise a parent who bought for one child while another
+   * was selected comes back to a page where the mission never appears.
+   * `setActiveChild` re-verifies ownership; the cookie carries no authority.
+   */
+  await setActiveChild(result.childId).catch(() => {});
+  revalidatePath("/academy", "layout");
+
   // Outside the try: redirect() throws by design.
   if (result.kind === "granted") {
-    revalidatePath("/academy/my-missions");
     redirect("/academy/my-missions?added=1");
+  }
+  if (result.kind === "owned") {
+    redirect("/academy/my-missions?owned=1");
+  }
+  if (result.kind === "processing") {
+    // Paid already; the webhook has not confirmed it yet. Same wording as the
+    // return from Stripe — it WILL appear, not that it has.
+    redirect("/academy/my-missions?purchase=success");
   }
 
   redirect(result.url);

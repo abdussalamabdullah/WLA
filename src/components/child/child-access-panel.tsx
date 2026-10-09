@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useActionState } from "react";
 import {
   generateChildCodeAction,
@@ -9,6 +8,7 @@ import {
 } from "@/features/child-auth/parent-actions";
 import { Button } from "@/components/ui/button";
 import { FormError } from "@/components/ui/field";
+import { RevealedCode } from "@/components/child/revealed-code";
 
 const initial: ChildCodeState = {};
 
@@ -56,21 +56,8 @@ export function ChildAccessPanel({
 
       {/* The one moment the code is visible. */}
       {genState.code && (
-        <div className="mt-[var(--space-m)] rounded-[var(--radius-surface)] border border-[var(--color-border-strong)] bg-[var(--color-surface-sage)] p-[var(--space-m)]">
-          <p className="text-[length:var(--text-small)]">
-            {childName}&rsquo;s new code. Write it down now &mdash; it
-            can&rsquo;t be shown again.
-          </p>
-          <p className="mt-[var(--space-s)] font-[family-name:var(--font-serif)] text-[length:var(--text-h1)] tracking-[0.12em]">
-            {genState.code}
-          </p>
-          <p className="mt-[var(--space-s)] text-[length:var(--text-small)] text-[var(--color-text-muted)]">
-            They enter it at{" "}
-            <Link href="/child/login" className="underline underline-offset-4">
-              Child sign in
-            </Link>
-            . Making a new code stops the old one working.
-          </p>
+        <div className="mt-[var(--space-m)]">
+          <RevealedCode code={genState.code} childName={childName} />
         </div>
       )}
 
