@@ -314,7 +314,7 @@ describe("free missions", () => {
     expect(grant).toContain('onConflict: "child_id,mission_id"');
     expect(grant).toContain("ignoreDuplicates: true");
     // And asking twice short-circuits before granting at all.
-    expect(checkout).toContain('return { kind: "granted" };');
+    expect(checkout).toContain('return { kind: "owned", childId: child.id };');
   });
 
   it("a free mission never reaches Stripe", () => {

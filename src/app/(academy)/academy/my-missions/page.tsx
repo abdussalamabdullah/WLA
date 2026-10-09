@@ -34,9 +34,9 @@ export const metadata = { title: "My Missions" };
 export default async function MyMissionsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ purchase?: string; added?: string }>;
+  searchParams: Promise<{ purchase?: string; added?: string; owned?: string }>;
 }) {
-  const { purchase, added } = await searchParams;
+  const { purchase, added, owned } = await searchParams;
 
   let actor;
   try {
@@ -129,9 +129,16 @@ export default async function MyMissionsPage({
             <FormNotice message="Thank you. Once the payment is confirmed, this mission will appear here." />
           </div>
         )}
+        {/* It read `${added} can now be given missions.` — "1 can now be
+            given missions." — since the only sender is the free grant. */}
         {added && (
           <div className="mb-[var(--space-l)]">
-            <FormNotice message={`${added} can now be given missions.`} />
+            <FormNotice message="The mission has been added." />
+          </div>
+        )}
+        {owned && (
+          <div className="mb-[var(--space-l)]">
+            <FormNotice message="This mission is already in My Missions." />
           </div>
         )}
 

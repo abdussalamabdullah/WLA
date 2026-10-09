@@ -6,6 +6,7 @@ import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { logWarn } from "@/lib/observability/logger";
 import { clearActiveChild } from "@/features/children/active-child";
+import { safeNext, safeNextOrNull } from "@/lib/safe-next";
 import {
   fieldErrorsFrom,
   newPasswordSchema,
@@ -28,19 +29,6 @@ import {
  * change only this file and the two form components.
  */
 
-/**
- * Only same-origin relative paths may be used as a post-login destination.
- * Rejects `//evil.com` and absolute URLs — otherwise `?next=` is an open
- * redirect.
- */
-function safeNext(next: string | null | undefined): string {
-  if (!next) return "/academy/my-missions";
-  if (!next.startsWith("/") || next.startsWith("//")) {
-    return "/academy/my-missions";
-  }
-  return next;
-}
-
 async function originUrl(path: string): Promise<string> {
   const h = await headers();
   const host = h.get("x-forwarded-host") ?? h.get("host");
@@ -62,13 +50,23 @@ export async function signUpAction(
     return { fieldErrors: fieldErrorsFrom(parsed.error) };
   }
 
+  /*
+   * Where they were going before they had an account — e.g. the mission they
+   * chose to buy. Without one, a new account goes to add a child, as before.
+   * It survives email confirmation by riding on the callback link.
+   */
+  const destination =
+    safeNextOrNull(formData.get("next")?.toString()) ?? "/account/children";
+
   const supabase = await createClient();
   const { data, error } = await supabase.auth.signUp({
     email: parsed.data.email,
     password: parsed.data.password,
     options: {
       data: { name: parsed.data.name || null },
-      emailRedirectTo: await originUrl("/auth/callback?next=/account/children"),
+      emailRedirectTo: await originUrl(
+        `/auth/callback?next=${encodeURIComponent(destination)}`,
+      ),
     },
   });
 
@@ -99,7 +97,7 @@ export async function signUpAction(
     };
   }
 
-  redirect("/account/children");
+  redirect(destination);
 }
 
 export async function signInAction(

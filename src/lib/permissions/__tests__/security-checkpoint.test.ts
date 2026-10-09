@@ -347,32 +347,43 @@ describe("7. Parent ID derivation", () => {
 
 // ──────────────────────────────────────────────────────── 8. redirect validation ──
 describe("8. Redirect validation", () => {
-  it("sign-in rejects absolute and protocol-relative destinations", () => {
-    expect(read("features/auth/actions.ts")).toContain(
-      '!next.startsWith("/") || next.startsWith("//")',
-    );
+  // One guard, lib/safe-next, used by every place a `next` is followed.
+  for (const file of [
+    "features/auth/actions.ts",
+    "app/auth/callback/route.ts",
+    "lib/supabase/middleware.ts",
+    "features/children/actions.ts",
+  ]) {
+    it(`${file} validates next= through lib/safe-next`, () => {
+      expect(read(file)).toMatch(/from "@\/lib\/safe-next"/);
+      expect(read(file)).toMatch(/safeNext(OrNull)?\(/);
+    });
+  }
+
+  it("sign-up no longer ignores next=, and validates it", () => {
+    const signUp = read("features/auth/actions.ts");
+    const body = signUp.slice(signUp.indexOf("export async function signUpAction"), signUp.indexOf("export async function signInAction"));
+    expect(body).toContain('safeNextOrNull(formData.get("next")');
+    expect(body).toContain("encodeURIComponent(destination)");
   });
 
-  it("the email callback applies the same guard", () => {
-    expect(read("app/auth/callback/route.ts")).toContain(
-      'next.startsWith("/") && !next.startsWith("//")',
-    );
-  });
+  it("the guard logic is correct for known attack shapes (the real function)", async () => {
+    const { safeNext } = await import("@/lib/safe-next");
 
-  it("the guard logic is correct for known attack shapes", () => {
-    // Mirrors safeNext(); kept in sync by the assertions above.
-    const safe = (next: string | null) =>
-      !next || !next.startsWith("/") || next.startsWith("//")
-        ? "/academy/my-missions"
-        : next;
-
-    expect(safe("//evil.example")).toBe("/academy/my-missions");
-    expect(safe("https://evil.example")).toBe("/academy/my-missions");
-    expect(safe("javascript:alert(1)")).toBe("/academy/my-missions");
-    expect(safe(null)).toBe("/academy/my-missions");
-    expect(safe("/academy/missions/six-names")).toBe(
-      "/academy/missions/six-names",
-    );
+    expect(safeNext("//evil.example")).toBe("/academy/my-missions");
+    expect(safeNext("https://evil.example")).toBe("/academy/my-missions");
+    expect(safeNext("javascript:alert(1)")).toBe("/academy/my-missions");
+    // Browsers read /\ as //, so these are protocol-relative in disguise.
+    expect(safeNext("/\\evil.example")).toBe("/academy/my-missions");
+    expect(safeNext("/\\/evil.example")).toBe("/academy/my-missions");
+    // URL parsers strip tab/newline before resolving: /\t/evil → //evil.
+    expect(safeNext("/\t/evil.example")).toBe("/academy/my-missions");
+    expect(safeNext("/\n/evil.example")).toBe("/academy/my-missions");
+    expect(safeNext(null)).toBe("/academy/my-missions");
+    expect(safeNext("")).toBe("/academy/my-missions");
+    expect(safeNext("/academy/missions/six-names")).toBe("/academy/missions/six-names");
+    expect(safeNext("/purchase/mars-bridge")).toBe("/purchase/mars-bridge");
+    expect(safeNext("//evil.example", "/account/children")).toBe("/account/children");
   });
 });
 

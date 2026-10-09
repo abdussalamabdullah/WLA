@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireOwnedChild } from "@/lib/permissions";
 import { logWarn } from "@/lib/observability/logger";
+import { issueChildAccessCode } from "./issue-code";
 
 /**
  * Parent-side management of a child's access code — brief §4, §5.
@@ -30,26 +31,19 @@ export async function generateChildCodeAction(
 ): Promise<ChildCodeState> {
   const childId = String(formData.get("childId") ?? "");
 
-  // The family boundary, re-asserted here as well as inside the function.
-  // Defence in depth: the RPC checks it too, and both must agree.
-  let supabase;
-  try {
-    ({ supabase } = await requireOwnedChild(childId));
-  } catch {
-    return { error: "That child profile does not belong to this account." };
-  }
-
-  const { data, error } = await supabase.rpc("generate_child_access_code", {
-    p_child_id: childId,
-  });
-
-  if (error || !data) {
-    logWarn("child_code_generate_failed", { childId, reason: error?.message });
-    return { error: "We couldn't make a code just now. Please try again." };
+  // The family boundary is asserted inside, and again by the RPC.
+  const issued = await issueChildAccessCode(childId);
+  if ("error" in issued) {
+    return {
+      error:
+        issued.error === "not_owned"
+          ? "That child profile does not belong to this account."
+          : "We couldn't make a code just now. Please try again.",
+    };
   }
 
   revalidatePath(`/account/children/${childId}`);
-  return { code: data as unknown as string };
+  return { code: issued.code };
 }
 
 export async function revokeChildCodeAction(

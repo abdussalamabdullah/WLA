@@ -23,11 +23,23 @@ import { getActiveChildId } from "@/features/children/active-child";
  * The CHILD sidebar has no Account and no child switcher (brief §3). That is
  * not merely hidden: a child session cannot reach /account at all — middleware
  * sends it away and every parent query needs a parent session.
+ *
+ * `audience="parent"` is for the account area, which is parent-only by route
+ * and by every query on it. There the shell is the parent's regardless of a
+ * child cookie lying in the same browser: resolving the actor would let that
+ * cookie win (as it must on learner pages) and put the child's sidebar —
+ * no Account, no switcher — around the parent's family settings.
  */
-export async function AcademyShell({ children }: { children: ReactNode }) {
-  const actor = await resolveAcademyActor();
+export async function AcademyShell({
+  children,
+  audience = "learner",
+}: {
+  children: ReactNode;
+  audience?: "learner" | "parent";
+}) {
+  const actor = audience === "parent" ? null : await resolveAcademyActor();
 
-  if (actor.kind === "child") {
+  if (actor?.kind === "child") {
     const nav: NavItem[] = [
       { href: "/academy/my-missions", label: "My Missions", icon: <IconMissions />, prefix: true },
       { href: "/academy/mission-board", label: "Mission Board", icon: <IconBoard /> },

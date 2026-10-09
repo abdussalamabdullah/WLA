@@ -926,9 +926,13 @@ describe("a child can find their own way in (D-58)", () => {
     expect(code("src/app/(auth)/login/page.tsx")).toMatch(/href="\/child\/login"/);
   });
   it("the parent's code panel links to it rather than printing a path", () => {
-    const panel = code("src/components/child/child-access-panel.tsx");
-    expect(panel).toMatch(/<Link href="\/child\/login"/);
-    expect(panel).not.toMatch(/<strong>\/child\/login<\/strong>/);
+    // Both places a code is revealed — the profile's panel and adding a child
+    // (D-108) — render the one RevealedCode, which carries the link.
+    const revealed = code("src/components/child/revealed-code.tsx");
+    expect(revealed).toMatch(/<Link href="\/child\/login"/);
+    expect(revealed).not.toMatch(/<strong>\/child\/login<\/strong>/);
+    expect(code("src/components/child/child-access-panel.tsx")).toMatch(/<RevealedCode /);
+    expect(code("src/components/profile/child-form.tsx")).toMatch(/<RevealedCode/);
   });
 });
 

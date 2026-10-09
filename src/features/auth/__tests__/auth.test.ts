@@ -83,12 +83,11 @@ describe("auth security properties", () => {
   const actions = read("features/auth/actions.ts");
 
   it("blocks open redirects through ?next=", () => {
-    // Both the sign-in action and the email callback must reject absolute and
-    // protocol-relative destinations.
-    expect(actions).toContain('!next.startsWith("/") || next.startsWith("//")');
-    expect(read("app/auth/callback/route.ts")).toContain(
-      'next.startsWith("/") && !next.startsWith("//")',
-    );
+    // Sign-in, sign-up and the email callback share one guard (lib/safe-next);
+    // its behaviour is asserted in the security checkpoint, §8.
+    expect(actions).toContain('import { safeNext, safeNextOrNull } from "@/lib/safe-next"');
+    expect(actions).toContain('redirect(safeNext(formData.get("next")');
+    expect(read("app/auth/callback/route.ts")).toContain("safeNext(next)");
   });
 
   it("does not reveal whether an account exists", () => {

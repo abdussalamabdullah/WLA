@@ -41,3 +41,30 @@ describe("the session middleware does not sign people out when auth is unreachab
     expect(location(r)).toMatch(/\/login/);
   });
 });
+
+describe("the purchase journey survives sign-in", () => {
+  it("an anonymous visitor to a purchase is sent to sign in, carrying where they were going", async () => {
+    const r = await updateSession(req("/purchase/mars-bridge"));
+    expect(location(r)).toMatch(/\/login\?next=%2Fpurchase%2Fmars-bridge$/);
+  });
+
+  it("an already signed-in parent on /login?next= goes on to it, not to My Missions", async () => {
+    userResult = { data: { user: { id: "p" } }, error: null };
+    const r = await updateSession(req("/login?next=%2Fpurchase%2Fmars-bridge"));
+    expect(location(r)).toBe("http://localhost/purchase/mars-bridge");
+  });
+
+  it("…and the same applies on /signup", async () => {
+    userResult = { data: { user: { id: "p" } }, error: null };
+    const r = await updateSession(req("/signup?next=%2Fpurchase%2Fmars-bridge"));
+    expect(location(r)).toBe("http://localhost/purchase/mars-bridge");
+  });
+
+  it("a hostile next= is not followed", async () => {
+    userResult = { data: { user: { id: "p" } }, error: null };
+    for (const next of ["//evil.example", "https://evil.example", "/\\evil.example"]) {
+      const r = await updateSession(req(`/login?next=${encodeURIComponent(next)}`));
+      expect(location(r)).toBe("http://localhost/academy/my-missions");
+    }
+  });
+});

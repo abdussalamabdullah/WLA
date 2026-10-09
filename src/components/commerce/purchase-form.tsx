@@ -44,8 +44,9 @@ export function PurchaseForm({
           Add a child profile first — missions belong to a child, not to the
           account.
         </p>
+        {/* Comes back here afterwards, so the mission isn't lost. */}
         <ButtonLink
-          href="/account/children/new"
+          href={`/account/children/new?next=${encodeURIComponent(`/purchase/${missionSlug}`)}`}
           className="mt-[var(--space-m)] inline-block"
         >
           Add a profile
@@ -56,9 +57,14 @@ export function PurchaseForm({
 
   if (available.length === 0) {
     return (
-      <p className="wla-measure text-[var(--color-text-muted)]">
-        Everyone on this account already has {missionTitle}.
-      </p>
+      <div>
+        <p className="wla-measure text-[var(--color-text-muted)]">
+          Everyone on this account already has {missionTitle}.
+        </p>
+        <ButtonLink href="/academy/my-missions" className="mt-[var(--space-m)] inline-block">
+          Go to My Missions
+        </ButtonLink>
+      </div>
     );
   }
 

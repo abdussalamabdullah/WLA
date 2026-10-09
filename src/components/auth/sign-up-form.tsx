@@ -10,8 +10,12 @@ import { emptyFormState } from "@/features/auth/schemas";
 /**
  * The account being created belongs to the parent/guardian (Architecture §3).
  * The copy says so, so nobody creates an account "for" a child.
+ *
+ * `next` is where they were heading — e.g. the mission they chose to buy — and
+ * is carried through so creating an account does not lose it. The server
+ * re-validates it (lib/safe-next); this only passes it along.
  */
-export function SignUpForm() {
+export function SignUpForm({ next }: { next?: string }) {
   const [state, formAction, isPending] = useActionState(
     signUpAction,
     emptyFormState,
@@ -19,6 +23,7 @@ export function SignUpForm() {
 
   return (
     <form action={formAction} className="flex flex-col gap-[var(--space-l)]">
+      {next && <input type="hidden" name="next" value={next} />}
       <FormError message={state.error} />
       <FormNotice message={state.notice} />
 
@@ -70,7 +75,7 @@ export function SignUpForm() {
       <p className="text-[length:var(--text-small)] text-[var(--color-text-muted)]">
         Already have an account?{" "}
         <Link
-          href="/login"
+          href={next ? `/login?next=${encodeURIComponent(next)}` : "/login"}
           className="text-[var(--color-text)] underline decoration-[var(--color-border-strong)] underline-offset-4"
         >
           Sign in
