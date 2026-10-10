@@ -478,3 +478,35 @@ sending domain, and `NEXT_PUBLIC_SITE_URL` for the link.
 accessibility 0 issues across 14 pages · responsive 0 overflow across 16
 page×width combinations · admin editor saves without touching `published`,
 `version`, `completion_rule` or price.
+
+---
+
+# Fresh-database version lifecycle — 2026-10-10 (D-111)
+
+**Found:** building a local Supabase stack from scratch for the Six Names demo,
+Six Names came up with **0 `mission_versions` rows** and its Kit and parent note
+at **v1** while `missions.version` is 2. A v2 run found no Kit and no note, and
+`private.mission_file_released` refused every Kit file even once uploaded.
+
+**Cause:** the backfills in `20260929100000` and `20260929110000` act on rows
+that already exist. Staging had its seeds first; a fresh database runs every
+migration, then the seeds. The 2026-09-28 "applies from an empty database"
+results above pre-date both migrations and stand. From 2026-09-29 the harness
+(`scripts/local-db.sh`) re-ran the backfill by hand with the immutability
+triggers disabled, so the regression runners never saw the real path.
+
+**Fixed:** `private.backfill_mission_version_lifecycle()`, called by the last
+seed. The harness now runs that seed — no manual backfill, no disabled trigger.
+
+| Check (throwaway PostgreSQL 16 cluster, real migrations + seeds) | Result |
+| ----------------------------------------------------------------- | ------ |
+| `scripts/run-version-lifecycle.sh`                                | **64 / 64 PASS** |
+| …the same suite on the pre-fix path (no lifecycle seed)           | 19 FAIL — reproduces the bug |
+| `scripts/run-six-names-branches.sh` (now on the real path)        | 64 / 64 PASS |
+| `scripts/run-security-regression.sh` (now on the real path)       | 166 / 166 PASS |
+| Six Names v2 `validate_mission_version`                           | 0 blocking, 0 advisory |
+| Re-applying the migration to a populated database                 | succeeds, 0 initialised, no row changed |
+
+**Not run:** a true `supabase db reset` — on the working local stack it would
+erase the demo account and its Stripe test purchase. Hosted staging: migration
+not deployed (read-only preflight only).
