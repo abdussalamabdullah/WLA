@@ -15,6 +15,7 @@ const db: {
   intents: { stripe_session_id: string }[];
 } = { mission: null, entitlement: null, intents: [] };
 const adminWrites: { table: string; op: string; row: Row }[] = [];
+let failIntentInsert = false;
 
 const stripeSessions = {
   create: vi.fn(),
@@ -58,7 +59,7 @@ vi.mock("@/lib/supabase/admin", () => ({
     from: (table: string) => ({
       insert: async (row: Row) => {
         adminWrites.push({ table, op: "insert", row });
-        return { error: null };
+        return { error: failIntentInsert ? { message: "insert failed" } : null };
       },
       upsert: async (row: Row) => {
         adminWrites.push({ table, op: "upsert", row });
@@ -77,6 +78,7 @@ beforeEach(() => {
   db.entitlement = null;
   db.intents = [];
   adminWrites.length = 0;
+  failIntentInsert = false;
   for (const fn of Object.values(stripeSessions)) fn.mockReset();
   stripeSessions.create.mockResolvedValue({ id: "cs_new", url: "https://checkout.stripe.example/cs_new" });
 });
@@ -162,5 +164,22 @@ describe("free missions", () => {
     expect(await go()).toEqual({ kind: "granted", childId: "child-1" });
     expect(stripeSessions.create).not.toHaveBeenCalled();
     expect(adminWrites[0]).toMatchObject({ table: "mission_entitlements", op: "upsert", row: { child_id: "child-1", source: "free" } });
+  });
+});
+
+describe("an unrecorded Checkout is never handed to the parent", () => {
+  it("expires the session and fails before any payment when the intent cannot be written", async () => {
+    failIntentInsert = true;
+    stripeSessions.expire.mockResolvedValue({});
+    // Without the intent the webhook would take the money and grant nothing.
+    await expect(go()).rejects.toMatchObject({ name: "CheckoutError", reason: "provider" });
+    expect(stripeSessions.create).toHaveBeenCalledTimes(1);
+    expect(stripeSessions.expire).toHaveBeenCalledWith("cs_new");
+  });
+
+  it("still fails closed if Stripe cannot expire it", async () => {
+    failIntentInsert = true;
+    stripeSessions.expire.mockRejectedValue(new Error("stripe down"));
+    await expect(go()).rejects.toMatchObject({ name: "CheckoutError", reason: "provider" });
   });
 });
