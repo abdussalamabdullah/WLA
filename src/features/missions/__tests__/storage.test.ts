@@ -911,13 +911,44 @@ describe("My Missions ordering", () => {
   });
 });
 
-describe("public Mission Detail exists only for a published mission", () => {
-  it("asks the database for a published row and 404s otherwise", () => {
-    const page = code("src/app/(public)/missions/[slug]/page.tsx");
-    expect(page).toMatch(/\.eq\("published", true\)/);
-    expect(page).toMatch(/if \(!mission\) notFound\(\)/);
-    // the heading comes from the row, never from the URL
-    expect(page).not.toMatch(/\{slug\}<\/h1>/);
+describe("temporary public Mission Detail (D-109)", () => {
+  const page = () => code("src/app/(public)/missions/[slug]/page.tsx");
+
+  it("renders only a catalogue entry and 404s otherwise", () => {
+    expect(page()).toMatch(/findPublicMission\(slug\)/);
+    expect(page()).toMatch(/if \(!mission\) notFound\(\)/);
+    // the heading comes from the entry, never from the URL
+    expect(page()).not.toMatch(/\{slug\}<\/h1>/);
+  });
+
+  it("shows price and duration only from a published row", () => {
+    const q = code("src/features/public-site/queries.ts");
+    expect(q).toMatch(/\.eq\("published", true\)/);
+    // the static catalogue carries copy, never commercial data (D-09)
+    expect(code("src/features/public-site/catalogue.ts")).not.toMatch(
+      /^\s*(price|priceLabel|price_minor|duration)\??:/m,
+    );
+  });
+
+  it("is not indexed: the missions layout sets noindex, nofollow", () => {
+    expect(code("src/app/(public)/missions/layout.tsx")).toMatch(
+      /robots:\s*\{\s*index:\s*false,\s*follow:\s*false\s*\}/,
+    );
+  });
+
+  it("keeps its <dl> valid: each Fact is the only wrapper, placed by className", () => {
+    // A second <div> between <dl> and a Fact's own wrapper is invalid HTML.
+    expect(page()).not.toMatch(/<div[^>]*>\s*<Fact\b/);
+    expect(page()).toMatch(/<Fact term="Leaves behind" className="md:col-start-2">/);
+    expect(page().match(/term="Leaves behind"/g)).toHaveLength(1);
+  });
+
+  it("its CTA leads only to /purchase, which still refuses unpublished missions", () => {
+    expect(page()).toMatch(/href=\{`\/purchase\/\$\{mission\.slug\}`\}/);
+    expect(page()).not.toMatch(/\/academy\/missions|buy\.stripe\.com|acquireMission/);
+    expect(code("src/features/commerce/queries.ts")).toMatch(
+      /getPurchasableMission[\s\S]*?\.eq\("published", true\)/,
+    );
   });
 });
 
