@@ -90,11 +90,25 @@ export async function POST(request: Request) {
    * The intent row was written server-side before the parent left for
    * Checkout, so it cannot have been influenced by the browser.
    */
-  const { data: intent } = await admin
+  const { data: intent, error: intentError } = await admin
     .from("checkout_intents")
     .select("child_id, mission_id, amount_minor, currency")
     .eq("stripe_session_id", session.id)
     .maybeSingle();
+
+  /*
+   * A failed LOOKUP is not "no intent". Treated as one, a paid session whose
+   * read merely timed out was marked processed and never retried — the family
+   * charged, the mission never granted. Release the claim and 500 so Stripe
+   * delivers it again, exactly as for a failed entitlement write below.
+   */
+  if (intentError) {
+    logError("stripe_intent_lookup_failed", intentError, {
+      sessionId: session.id,
+    });
+    await admin.from("stripe_events").delete().eq("id", event.id);
+    return NextResponse.json({ error: "Lookup failed" }, { status: 500 });
+  }
 
   if (!intent) {
     // A gift purchase has no child yet — it creates a gift record instead,

@@ -4,6 +4,7 @@ import Stripe from "stripe";
 import { stripeEnv } from "@/lib/env";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireOwnedChild, requireParent } from "@/lib/permissions";
+import { logError } from "@/lib/observability/logger";
 import type { ChildProfileRow, MissionRow } from "@/types/database";
 
 /**
@@ -294,7 +295,8 @@ async function createCheckoutSession({
    *
    * Service-role because the table is deliberately client-unwritable.
    */
-  await createAdminClient().from("checkout_intents").insert({
+  const admin = createAdminClient();
+  const { error: intentError } = await admin.from("checkout_intents").insert({
     stripe_session_id: session.id,
     parent_id: user.id,
     child_id: child.id,
@@ -302,6 +304,26 @@ async function createCheckoutSession({
     amount_minor: mission.price_minor,
     currency: mission.currency,
   });
+
+  /*
+   * Without the intent the webhook cannot tell whose purchase this is, and
+   * would take the payment and grant nothing. So an unrecorded session is
+   * never handed to the parent: it is expired (best effort — it is unpayable
+   * anyway once nobody holds its URL) and the purchase fails before any money
+   * moves.
+   */
+  if (intentError) {
+    logError("checkout_intent_insert_failed", intentError, {
+      sessionId: session.id,
+    });
+    await stripe()
+      .checkout.sessions.expire(session.id)
+      .catch(() => {});
+    throw new CheckoutError(
+      "We couldn't start the payment. Please try again.",
+      "provider",
+    );
+  }
 
   return { url: session.url };
 }
