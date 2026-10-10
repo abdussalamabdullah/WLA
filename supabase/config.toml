@@ -77,6 +77,9 @@ sql_paths = [
   "./seed/six_names_v2_screens.sql",
   "./seed/six_names_v2_kit.sql",
   "./seed/six_names_parent_note_document.sql",
+  # D-111. MUST STAY LAST: initialises the version lifecycle of the missions
+  # seeded above, which the migrations' own backfills ran too early to see.
+  "./seed/mission_version_lifecycle.sql",
 ]
 
 [db.network_restrictions]
