@@ -21,11 +21,24 @@ import { logError, logWarn } from "@/lib/observability/logger";
  * deliver the same event more than once even after a success:
  *
  *   1. `stripe_events` — the event id is a primary key, so recording it IS
- *      the lock. A duplicate delivery loses the insert race and exits before
- *      doing any work.
- *   2. `unique (child_id, mission_id)` on mission_entitlements — even if both
- *      layers above were bypassed, a second grant is a no-op.
+ *      the lock. ONLY a unique violation means "already claimed" (D-112);
+ *      any other claim error is the database failing, and is answered 500 so
+ *      Stripe delivers again — never 200, which would end retries for a
+ *      payment nothing has granted.
+ *   2. `unique (child_id, mission_id)` on mission_entitlements — a second
+ *      grant is a no-op, and the access email goes only with the grant that
+ *      actually inserted the row.
+ *
+ * A duplicate `checkout.session.completed` is RECONCILED rather than dropped
+ * (D-112): it re-runs the same verified, idempotent path. A delivery that
+ * already granted changes nothing; one whose earlier attempt failed after
+ * claiming — and whose claim could not be released — still grants, instead
+ * of being acknowledged forever as a duplicate. The duplicate path never
+ * releases a claim: the claim may belong to a delivery still in flight.
  */
+
+/** Postgres unique_violation: the event id is already in the ledger. */
+const UNIQUE_VIOLATION = "23505";
 
 export const runtime = "nodejs"; // raw body required for signature verification
 
@@ -56,25 +69,33 @@ export async function POST(request: Request) {
 
   /*
    * Claim the event. The primary key makes this the idempotency lock: a
-   * duplicate delivery fails the insert and returns without side effects.
+   * duplicate delivery fails the insert with 23505. For any event but a
+   * checkout completion that ends it; a completion is reconciled (above).
    *
-   * Claiming BEFORE the work (rather than marking after) is deliberate —
-   * two concurrent deliveries cannot both proceed. The cost is that a crash
-   * mid-processing would leave the event claimed but unapplied; the unique
-   * constraint on entitlements plus Stripe's dashboard replay covers that,
-   * and a double grant is the worse failure.
+   * Claiming BEFORE the work (rather than marking after) is deliberate. A
+   * crash mid-processing leaves the event claimed but unapplied; the next
+   * delivery of it is then reconciled (below), and the unique constraint on
+   * entitlements means a double grant cannot happen either way.
    */
   const { error: claimError } = await admin
     .from("stripe_events")
     .insert({ id: event.id, type: event.type });
 
+  let duplicate = false;
   if (claimError) {
-    // Already processed. 200 so Stripe stops retrying.
-    return NextResponse.json({ received: true, duplicate: true });
+    if (claimError.code !== UNIQUE_VIOLATION) {
+      // Not "already processed" — the ledger could not be written. Nothing was
+      // claimed, so a retry starts clean.
+      logError("stripe_event_claim_failed", claimError, { eventId: event.id });
+      return NextResponse.json({ error: "Claim failed" }, { status: 500 });
+    }
+    duplicate = true;
   }
 
   if (event.type !== "checkout.session.completed") {
-    return NextResponse.json({ received: true });
+    return duplicate
+      ? NextResponse.json({ received: true, duplicate: true })
+      : NextResponse.json({ received: true });
   }
 
   const session = event.data.object;
@@ -106,7 +127,7 @@ export async function POST(request: Request) {
     logError("stripe_intent_lookup_failed", intentError, {
       sessionId: session.id,
     });
-    await admin.from("stripe_events").delete().eq("id", event.id);
+    if (!duplicate) await releaseClaim(admin, event);
     return NextResponse.json({ error: "Lookup failed" }, { status: 500 });
   }
 
@@ -140,40 +161,98 @@ export async function POST(request: Request) {
   }
 
   // Service-role: the purchaser may not have an active session right now.
-  const { error } = await admin.from("mission_entitlements").upsert(
-    {
-      child_id: intent.child_id,
-      mission_id: intent.mission_id,
-      source: "purchase",
-      status: "active",
-      stripe_payment_intent_id:
-        typeof session.payment_intent === "string"
-          ? session.payment_intent
-          : null,
-    },
-    { onConflict: "child_id,mission_id", ignoreDuplicates: true },
-  );
+  // ON CONFLICT DO NOTHING ... RETURNING: `inserted` is empty when the row
+  // already existed, so a duplicate or concurrent delivery grants nothing new.
+  const { data: inserted, error } = await admin
+    .from("mission_entitlements")
+    .upsert(
+      {
+        child_id: intent.child_id,
+        mission_id: intent.mission_id,
+        source: "purchase",
+        status: "active",
+        stripe_payment_intent_id:
+          typeof session.payment_intent === "string"
+            ? session.payment_intent
+            : null,
+      },
+      { onConflict: "child_id,mission_id", ignoreDuplicates: true },
+    )
+    .select("id");
 
   if (error) {
     logError("stripe_entitlement_failed", error, { sessionId: session.id });
-    // Release the claim so Stripe's retry can genuinely re-run this.
-    await admin.from("stripe_events").delete().eq("id", event.id);
+    // Release the claim so Stripe's retry can genuinely re-run this. On the
+    // duplicate path the claim is not ours, and the retry reconciles anyway.
+    if (!duplicate) await releaseClaim(admin, event);
     // 500 so Stripe retries — a dropped entitlement means a paying family
     // cannot reach the mission they bought.
     return NextResponse.json({ error: "Entitlement failed" }, { status: 500 });
   }
 
   /*
-   * Confirm access by email (D-27).
+   * Confirm access by email (D-27) — only for the delivery that created the
+   * entitlement, so a duplicate never sends a second message.
    *
-   * Strictly after the entitlement exists, and deliberately not awaited into
-   * the success path: sendMissionAccessEmail never throws, and a send failure
-   * must not turn a completed purchase into a 500 that Stripe retries. The
+   * Strictly after the entitlement exists, and never able to fail the success
+   * path: sendMissionAccessEmail never throws, and a send failure must not
+   * turn a completed purchase into a 500 that Stripe retries. The
    * entitlement is the thing that matters; the email is a courtesy.
    */
-  await notifyAccessGranted(admin, intent.child_id, intent.mission_id);
+  if ((inserted ?? []).length > 0) {
+    await notifyAccessGranted(admin, intent.child_id, intent.mission_id);
+  } else {
+    await flagIfRevoked(admin, intent.child_id, intent.mission_id, session.id);
+  }
 
-  return NextResponse.json({ received: true });
+  return duplicate
+    ? NextResponse.json({ received: true, duplicate: true })
+    : NextResponse.json({ received: true });
+}
+
+/**
+ * Give the event back to Stripe's retry. If even this fails, the event stays
+ * claimed — and the retry is then reconciled as a duplicate, which still
+ * grants. A failed release is logged as an error: the database was failing.
+ */
+async function releaseClaim(
+  admin: ReturnType<typeof createAdminClient>,
+  event: Stripe.Event,
+): Promise<void> {
+  const { error } = await admin.from("stripe_events").delete().eq("id", event.id);
+  if (error) {
+    logError("stripe_claim_release_failed", error, { eventId: event.id });
+  }
+}
+
+/**
+ * The grant found a row already there. Normally it is active — a duplicate or
+ * an earlier grant — and nothing is wrong. If it is REVOKED, the family has
+ * paid for access they still do not have. Revocation is only ever undone
+ * explicitly (D-20), so this does not reactivate it; it makes the payment
+ * visible so someone can reinstate or refund. Never fails the webhook.
+ */
+async function flagIfRevoked(
+  admin: ReturnType<typeof createAdminClient>,
+  childId: string,
+  missionId: string,
+  sessionId: string,
+): Promise<void> {
+  const { data: existing, error } = await admin
+    .from("mission_entitlements")
+    .select("status")
+    .eq("child_id", childId)
+    .eq("mission_id", missionId)
+    .maybeSingle();
+  if (error) {
+    logWarn("stripe_existing_entitlement_unread", { sessionId });
+  } else if (existing && existing.status !== "active") {
+    logError(
+      "stripe_paid_entitlement_revoked",
+      new Error("paid for a mission whose entitlement is revoked"),
+      { sessionId },
+    );
+  }
 }
 
 /**

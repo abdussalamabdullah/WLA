@@ -248,6 +248,12 @@ async function createCheckoutSession({
   try {
     session = await stripe().checkout.sessions.create({
       mode: "payment",
+      // Card only (D-113), so a completed session is a PAID session. Left to
+      // the dashboard's dynamic payment methods, a delayed method (Bacs, bank
+      // transfer) would complete Checkout as `unpaid` and settle later in an
+      // event the webhook does not handle — money taken, nothing granted.
+      // Wallets that pay by card (Apple Pay, Google Pay) are part of `card`.
+      payment_method_types: ["card"],
       line_items: [
         {
           quantity: 1,

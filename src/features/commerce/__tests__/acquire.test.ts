@@ -106,6 +106,16 @@ describe("a fresh purchase", () => {
     expect(adminWrites.some((w) => w.table === "mission_entitlements")).toBe(false);
   });
 
+  it("offers card only, so a completed Checkout is a paid one (D-113)", async () => {
+    await go();
+    const sent = stripeSessions.create.mock.calls[0][0];
+    expect(sent.payment_method_types).toEqual(["card"]);
+    expect(sent.mode).toBe("payment");
+    // Nothing that would let Stripe choose methods from the dashboard instead.
+    expect(sent).not.toHaveProperty("automatic_payment_methods");
+    expect(sent).not.toHaveProperty("payment_method_configuration");
+  });
+
   it("refuses another family's child before Stripe is touched", async () => {
     await expect(go("child-of-someone-else")).rejects.toBeInstanceOf(AccessError);
     expect(stripeSessions.create).not.toHaveBeenCalled();

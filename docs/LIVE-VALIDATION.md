@@ -552,3 +552,32 @@ v2 with state and responses unchanged.
 Before deploying, staging's mission flags were restored after manual QA had
 published Six Names (free) and Builder Bridge: one guarded transaction, one row
 each, `published` / `is_free` only, all QA data kept.
+
+# Audit findings M1, M3, L1 — 2026-10-11 (D-112, D-113, D-114)
+
+All local and automated. **Nothing here was run against hosted staging, a live
+or hosted Stripe endpoint, or production**, and the new migration
+`20261011120000_kit_rows_follow_release` is not applied to staging.
+
+| Check | Result |
+| ----- | ------ |
+| `npx vitest run src/app/api/webhooks/stripe` — claim, retry, reconcile, idempotency, revoked, paid/amount/currency | **20 / 20 PASS** |
+| …the same tests against the previous route | 7 FAIL — reproduces M1 |
+| Two concurrent psql sessions on a throwaway cluster (real schema) | concurrent claim waits then `23505`; rolled-back claim frees the id; racing grants return 1 row between them (1 entitlement); DO NOTHING leaves a revoked row revoked |
+| `acquire.test.ts` card-only check | PASS; FAILS against the previous `checkout.ts` |
+| `scripts/run-kit-release.sh` (throwaway PostgreSQL 16, real migrations + seeds, real roles and claims) | **39 / 39 PASS** |
+| …the same suite with the previous policies and `child_session_resources` restored | 9 FAIL — reproduces L1 |
+| `scripts/run-security-regression.sh` | 166 / 166 PASS |
+| `scripts/run-six-names-branches.sh` | 64 / 64 PASS |
+| `scripts/run-version-lifecycle.sh` | 64 / 64 PASS |
+| `npm test` | 769 / 769 PASS (39 files) |
+| `npm run typecheck`, `npm run lint` | clean |
+
+The webhook tests use a stubbed signature check and an in-memory database
+that reproduces the two Postgres behaviours the route depends on (23505 on a
+second claim; ON CONFLICT DO NOTHING ... RETURNING on a second grant). They do
+not prove Stripe's own retry timing or a real database outage.
+
+**Still unverified:** a real Stripe redelivery and "Resend event" against a
+hosted endpoint; that the live Stripe account's Checkout shows card (and card
+wallets) only; the policies on staging. The browser suites were not re-run.
