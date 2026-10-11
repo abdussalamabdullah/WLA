@@ -508,5 +508,47 @@ seed. The harness now runs that seed — no manual backfill, no disabled trigger
 | Re-applying the migration to a populated database                 | succeeds, 0 initialised, no row changed |
 
 **Not run:** a true `supabase db reset` — on the working local stack it would
-erase the demo account and its Stripe test purchase. Hosted staging: migration
-not deployed (read-only preflight only).
+erase the demo account and its Stripe test purchase. The working local stack
+has not had the migration applied (it predates the commit); every throwaway
+cluster above has.
+
+## Hosted staging deployment — 2026-10-11
+
+Commit `2905cd7` pushed to `origin/academy-mvp` (fast-forward from `ec1bcab`),
+then migration `20261010120000_seeded_mission_version_lifecycle` applied to
+hosted staging. Staging is now at **`20261010120000`** (38 migrations). No
+frontend was deployed: there is no staging frontend, and GitHub shows no
+Vercel status or deployment on the repo. Production untouched.
+
+**Re-run before pushing `2905cd7`:** the three runners above (64 / 64, 64 / 64,
+166 / 166), `npm test` (751 / 751, 39 files), `npm run typecheck` and
+`npm run lint` clean.
+
+**How it was applied:** `supabase db push --db-url <session pooler> --skip-vault`
+(CLI 2.116.0), no `--include-seed`. In that version each migration file and
+its history row go to the server as one pipelined batch — one implicit
+transaction — so a failure would have left neither. The seed is not needed on
+an environment whose missions already have a lifecycle.
+
+| Check | Before | After |
+| ----- | ------ | ----- |
+| Pending migrations (local vs staging) | only `20261010120000` | none — 38 applied, matching the 38 local files |
+| `--dry-run` | lists only `20261010120000`; seeds `[]`, roles `[]` | — |
+| Missions with no version rows / partial lifecycle | 0 / 0 | 0 / 0 |
+| Function `private.backfill_mission_version_lifecycle()` | absent | owner `postgres`, SECURITY INVOKER, `search_path=public`; EXECUTE held only by `postgres` (not PUBLIC, `anon`, `authenticated`, `service_role`) |
+| Missions (24), version rows (31), screens (211), Kit rows (28), parent notes (20) | digest | identical |
+| Entitlements (131), progress (110), state (110), responses (103) | digest | identical |
+| Six Names | unpublished, not free, £12.00 GBP, v2 | unchanged |
+| Builder Bridge | unpublished | unchanged |
+| Published missions | 0 | 0 |
+
+The only differences before → after were the migration count and the
+function's existence. A close-out re-check (read-only transactions) matched
+both the post-deploy snapshot and the earlier post-QA snapshot byte for byte:
+the QA gift entitlement for Six Names is still active with its child profile,
+access credential and sessions unchanged, and its run is still in progress on
+v2 with state and responses unchanged.
+
+Before deploying, staging's mission flags were restored after manual QA had
+published Six Names (free) and Builder Bridge: one guarded transaction, one row
+each, `published` / `is_free` only, all QA data kept.
