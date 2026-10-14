@@ -7,6 +7,10 @@ import { EngineRefusal, applyQr, checkpointWait, completionCondition, startRun, 
 import { emptyMissionState, screenConfigByType, type MissionInteraction, type MissionStateData } from "./schemas";
 import { acceptsValue, effect as effectSchema, opsByType, type VariableDeclaration } from "./variables";
 import { templateFor } from "./interactions/catalog";
+import { friendlyFirstIssue } from "./issue-text";
+
+/** How a broken reference names its source, in the builder's own words. */
+const REF_KIND_TEXT: Record<string, string> = { next: "Its “Goes to”", otherwise: "Its “Otherwise goes to”", route: "A route", option: "An option" };
 
 /**
  * AUTOMATED MISSION QA (Enhancement Plan §12 "Automated mission QA", Part 6).
@@ -253,7 +257,7 @@ export function validateMission(model: MissionModel, ctx: ValidationContext = {}
 
   // ---- the definition itself
   const parsedDef = missionDefinition.safeParse(def);
-  if (!parsedDef.success) issues.push(issue("blocking", "structure", "invalid_definition", null, parsedDef.error.issues[0]?.message ?? "Invalid definition."));
+  if (!parsedDef.success) issues.push(issue("blocking", "structure", "invalid_definition", null, friendlyFirstIssue(parsedDef.error.issues, "Mission logic")));
   if (!screens.length) {
     issues.push(issue("blocking", "structure", "no_screens", null, "This version has no screens yet. Add at least one screen before publishing."));
     return { issues, paths: [] };
@@ -406,14 +410,13 @@ export function validateMission(model: MissionModel, ctx: ValidationContext = {}
       issues.push(issue("blocking", "structure", "unknown_screen_type", s.screenKey, `"${s.type}" is not a screen type the Academy can render.`));
       continue;
     }
-    const schema = (screenConfigByType as Record<string, { safeParse: (x: unknown) => { success: boolean; error?: { issues: { path: PropertyKey[]; message: string }[] } } }>)[s.type];
+    const schema = (screenConfigByType as Record<string, { safeParse: (x: unknown) => { success: boolean; error?: { issues: { path: PropertyKey[]; message: string; code?: string }[] } } }>)[s.type];
     const parsed = schema?.safeParse(s.configuration);
     if (schema && !parsed?.success) {
-      const first = parsed?.error?.issues[0];
-      issues.push(issue("blocking", "structure", "invalid_config", s.screenKey, `${first?.path.join(".") || "configuration"}: ${first?.message}`));
+      issues.push(issue("blocking", "structure", "invalid_config", s.screenKey, friendlyFirstIssue(parsed?.error?.issues)));
     }
     const common = commonScreenConfig.safeParse(s.configuration ?? {});
-    if (!common.success) issues.push(issue("blocking", "structure", "invalid_config", s.screenKey, common.error.issues[0]?.message ?? "Invalid configuration."));
+    if (!common.success) issues.push(issue("blocking", "structure", "invalid_config", s.screenKey, friendlyFirstIssue(common.error.issues)));
     const c = commonOf(s);
     const cfg = (s.configuration ?? {}) as Record<string, unknown>;
 
@@ -424,7 +427,7 @@ export function validateMission(model: MissionModel, ctx: ValidationContext = {}
     for (const r of c.routes ?? []) targets.push(["route", r.to]);
     if (Array.isArray(cfg.options)) for (const o of cfg.options as { next?: string }[]) if (o.next) targets.push(["option", o.next]);
     for (const [kind, t] of targets) {
-      if (!keys.has(t)) issues.push(issue("blocking", "structure", "broken_reference", s.screenKey, `A ${kind} goes to "${t}", which is not a screen in this version.`));
+      if (!keys.has(t)) issues.push(issue("blocking", "structure", "broken_reference", s.screenKey, `${REF_KIND_TEXT[kind] ?? `A ${kind}`} goes to "${t}", which is not a screen in this version.`));
     }
 
     // dead ends: an explicit way on is required (except the completion screen)

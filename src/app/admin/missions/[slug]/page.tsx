@@ -5,6 +5,9 @@ import { adminMissionVersions } from "@/features/admin/lms-queries";
 import { MissionForm } from "@/components/admin/mission-form";
 import { AdminPage, DataTable, Td, StatusTag } from "@/components/admin/admin-page";
 import { VersionActions, DeleteMissionPanel, RestoreVersionButton, DuplicateMissionPanel } from "@/components/admin/version-actions";
+import { MissionStatusSummary } from "@/components/admin/builder-overview";
+import { UnsavedChangesProvider } from "@/components/admin/unsaved-changes";
+import { missionStatusLines } from "@/features/admin/mission-status";
 
 export async function generateMetadata({
   params,
@@ -45,11 +48,18 @@ export default async function EditMissionPage({
     (v) => v.status === "draft" || v.status === "in_review",
   );
   const totalRuns = versions.reduce((n, v) => n + Number(v.runs), 0);
+  const statusLines = missionStatusLines({
+    versions: versions.map((v) => ({ version: v.version, status: v.status as string })),
+    catalogueVisible: mission.published,
+    isFree: mission.is_free,
+    priceMinor: mission.price_minor,
+  });
 
   return (
+    <UnsavedChangesProvider>
     <AdminPage
       title={mission.title}
-      intro={`${mission.slug} · currently serving version ${mission.version} to new learners.`}
+      intro={`Address: /missions/${mission.slug}`}
       action={
         <Link
           href="/admin/missions"
@@ -59,6 +69,10 @@ export default async function EditMissionPage({
         </Link>
       }
     >
+      <div className="mb-[var(--space-2xl)] max-w-[40rem]">
+        <MissionStatusSummary lines={statusLines} />
+      </div>
+
       <section className="max-w-[40rem]">
         <h2 className="text-[length:var(--text-h3)]">Details</h2>
         <p className="mt-[var(--space-xs)] wla-measure text-[length:var(--text-small)] text-[var(--color-text-muted)]">
@@ -130,5 +144,6 @@ export default async function EditMissionPage({
         </div>
       </section>
     </AdminPage>
+    </UnsavedChangesProvider>
   );
 }

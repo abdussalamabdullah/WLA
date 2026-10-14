@@ -4,6 +4,7 @@ import { createContext, useContext, useId, useState, type ReactNode } from "reac
 import type { z } from "zod";
 import { condition as conditionSchema } from "@/features/mission-engine/conditions";
 import { cn } from "@/lib/utils";
+import { humanise, singular, SCREEN_REFS, REF_KINDS, OPS } from "@/features/mission-engine/field-labels";
 
 /**
  * SCHEMA-DRIVEN AUTHORING FORMS (Enhancement Plan §12).
@@ -22,6 +23,8 @@ type AnyZod = z.ZodType & { def: Record<string, unknown>; description?: string }
 /** What the author can pick from: screens, variables, unlocks, events, assets. */
 export type AuthoringVocabulary = {
   screens: string[];
+  /** Screen key → title, so references can be chosen by name (D-117). */
+  screenTitles?: Record<string, string>;
   variables: string[];
   unlocks: string[];
   events: string[];
@@ -30,23 +33,7 @@ export type AuthoringVocabulary = {
 const Vocab = createContext<AuthoringVocabulary>({ screens: [], variables: [], unlocks: [], events: [], assets: [] });
 export const VocabularyProvider = Vocab.Provider;
 
-const LABELS: Record<string, string> = {
-  next: "Goes to", to: "Goes to", otherwise: "Otherwise goes to", when: "Only when", requires: "Shown only when",
-  effects: "Changes to mission state", routes: "Routes (first match wins)", trail: "Mission Trail marker",
-  retry: "Retry", timer: "Timed stage", media: "Media", support: "Mission Control support",
-  convergeAt: "Branches meet again at", required: "Required on every route", missionControl: "Mission Control (basic)",
-  revealedBody: "Revealed content", concealedPrompt: "Before it opens", returnInstruction: "When to come back",
-  canonicalTracker: "Tracker values set here", fromInput: "Save the child's own answer",
-  relatesTo: "Relates to earlier evidence", storeAs: "Store the result in", availableAfter: "Opens after",
-  ageBand: "Age band", maxItems: "Most items", selectExactly: "Choose exactly", inputType: "Answer type",
-};
 const LONG = new Set(["body", "revealedBody", "prompt", "message", "instruction", "description", "returnInstruction", "concealedPrompt", "trailSummary", "confirmNote", "location"]);
-const SCREEN_REFS = new Set(["next", "to", "otherwise", "convergeAt", "screenKey", "goto", "unusedFrom", "fromResponse"]);
-
-const humanise = (k: string) => LABELS[k] ?? k.replace(/([A-Z])/g, " $1").replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase());
-
-/** "Trail entries" → "Trail entry", "Options" → "Option" (labels for one item). */
-const singular = (s: string) => s.replace(/ies$/, "y").replace(/([^s])s$/, "$1");
 
 function unwrap(s: AnyZod): { schema: AnyZod; optional: boolean; defaultValue?: unknown } {
   let cur = s;
@@ -222,6 +209,13 @@ export function SchemaForm({
 
   if (t === "string") {
     const listId = `${id}-list`;
+    if (SCREEN_REFS.has(fieldKey) && vocab.screens.length > 0) {
+      return (
+        <Row label={name} hint={hint} htmlFor={id}>
+          <ScreenRefField id={id} value={String(value ?? "")} onChange={onChange} screens={vocab.screens} titles={vocab.screenTitles ?? {}} />
+        </Row>
+      );
+    }
     const suggestions = SCREEN_REFS.has(fieldKey) ? vocab.screens : fieldKey === "var" || fieldKey === "storeAs" ? vocab.variables : fieldKey === "asset" ? vocab.assets : [];
     return (
       <Row label={name} hint={hint} htmlFor={id}>
@@ -265,6 +259,34 @@ export function SchemaForm({
   return <JsonField id={id} label={name} hint={hint} value={value} onChange={onChange} />;
 }
 
+/**
+ * Pick the screen a route leads to by its title. A key that is not (yet) a
+ * screen in this version stays visible and selected rather than being lost,
+ * and typing a key remains possible for wiring a screen not yet created.
+ */
+function ScreenRefField({ id, value, onChange, screens, titles }: { id: string; value: string; onChange: (v: unknown) => void; screens: string[]; titles: Record<string, string> }) {
+  const [typing, setTyping] = useState(false);
+  const known = value === "" || screens.includes(value);
+  if (typing) {
+    return (
+      <div className="flex flex-col gap-[4px]">
+        <input id={id} className={inputCls} value={value} placeholder="screen_key" onChange={(e) => onChange(e.target.value)} />
+        <button type="button" className={cn(smallBtn, "self-start")} onClick={() => setTyping(false)}>Choose from the list instead</button>
+      </div>
+    );
+  }
+  return (
+    <div className="flex flex-col gap-[4px]">
+      <select id={id} className={inputCls} value={value} onChange={(e) => onChange(e.target.value)}>
+        <option value="">— Choose a screen —</option>
+        {!known && <option value={value}>{value} (not a screen in this version)</option>}
+        {screens.map((k) => <option key={k} value={k}>{titles[k] ? `${titles[k]} (${k})` : k}</option>)}
+      </select>
+      <button type="button" className={cn(smallBtn, "self-start text-[var(--color-text-muted)]")} onClick={() => setTyping(true)}>Type a screen key instead</button>
+    </div>
+  );
+}
+
 function JsonField({ id, label, hint, value, onChange }: { id: string; label: string; hint?: string; value: unknown; onChange: (v: unknown) => void }) {
   const [text, setText] = useState(() => (value === undefined ? "" : JSON.stringify(value, null, 2)));
   const [bad, setBad] = useState(false);
@@ -290,12 +312,6 @@ function JsonField({ id, label, hint, value, onChange }: { id: string; label: st
 
 // ------------------------------------------------------- condition builder --
 
-const REF_KINDS = [
-  ["var", "Variable"], ["choice", "Choice made on"], ["multi", "Options picked on"], ["response", "Answer given on"],
-  ["visited", "Screen reached"], ["revealed", "Revealed"], ["unlocked", "Unlocked"], ["handoff", "Handoff confirmed"],
-  ["event", "Event happened"], ["attempts", "Attempts on"], ["variant", "Variant"], ["elapsed", "Seconds since"],
-] as const;
-const OPS = [["eq", "is"], ["neq", "is not"], ["gt", ">"], ["gte", "≥"], ["lt", "<"], ["lte", "≤"], ["exists", "exists"], ["not_exists", "does not exist"], ["contains", "contains"], ["in", "is one of"]] as const;
 
 function parseValue(raw: string, op: string): unknown {
   if (op === "in") return raw.split(",").map((x) => parseValue(x.trim(), "eq"));

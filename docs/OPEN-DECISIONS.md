@@ -212,6 +212,30 @@ in `docs/source/`. Consequences until they arrive (D-75):
 
 # ✅ Previously blocked — now unblocked
 
+## OPEN-20 — Mandatory review before publishing · needs product decision
+
+Raised 2026-10-13 by the Mission Builder usability work (D-121). Nothing was
+changed pending this decision.
+
+**As built:** a draft can be marked "ready for review" (it must pass the
+automatic checks), returned to draft, or published directly. "In review" locks
+nothing and notifies no one; any admin can publish from either state. The
+builder now says exactly that rather than implying an approval step exists.
+
+**Questions:**
+
+1. Should a version have to be "ready for review" before it can be published?
+2. If so, may the person who built it also approve it, or must it be someone
+   else? That needs a notion of author and reviewer the admin does not have.
+3. Should anything happen when a version is marked ready — a notification is
+   on the standing prohibitions list, so this would need explicit approval.
+
+Making review mandatory would change `set_mission_version_status`'s legal
+transitions (a migration) and the publish panel. Until decided, the current
+transitions stand.
+
+---
+
 ## OPEN-03 — Mission Build Brief · UNBLOCKED 2026-09-26
 
 **Six Names Mission Build Brief v0.2** received and adopted as the working
@@ -259,8 +283,9 @@ can be published. `published` stays `false` until then.
 | 12  | Kit retention         | ✅ D-31                                    |
 | 13  | Six Names assets      | ⛔                                         |
 | 14  | Retention policy      | 🔴 policy pending; capability in scope     |
+| 20  | Review before publish | 🔴 needs you — see OPEN-20 below            |
 
-**11 resolved · 1 deferred · 1 needs you (OPEN-14) · 0 blocked on source material.**
+**11 resolved · 1 deferred · 2 need you (OPEN-14, OPEN-20) · 0 blocked on source material.**
 
 ---
 

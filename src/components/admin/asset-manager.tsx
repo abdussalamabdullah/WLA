@@ -1,10 +1,12 @@
 "use client";
 
-import { useActionState, useId, useState } from "react";
+import { useActionState, useEffect, useId, useState } from "react";
 import { deleteAssetAction, saveAssetAction, type AssetState } from "@/features/admin/asset-actions";
 import type { ResolvedAsset } from "@/features/mission-engine/media";
 import { Button } from "@/components/ui/button";
 import { Field, Input, FormError, FormNotice } from "@/components/ui/field";
+import { SectionHeader } from "./section-header";
+import { useDirtyForm, useSubmitWithoutReset, useUnsavedChanges, UnsavedNote } from "./unsaved-changes";
 
 const initial: AssetState = {};
 
@@ -40,14 +42,22 @@ export function AssetManager({
   resolved: ResolvedAsset[];
 }) {
   const [editing, setEditing] = useState<string | null>(null);
+  const { requestDiscard } = useUnsavedChanges();
   const byKey = new Map(resolved.map((a) => [a.key, a]));
   return (
     <section className="mt-[var(--space-2xl)]" aria-labelledby="media-assets">
-      <h2 id="media-assets" className="text-[length:var(--text-h3)]">Media</h2>
-      <p className="mt-[var(--space-xs)] wla-measure text-[var(--color-text-muted)]">
-        Pictures, diagrams, maps, sound and video that screens show. Use one on a screen by its key —
-        a media block, or <code>&quot;asset:key&quot;</code> wherever a screen asks for an image.
-      </p>
+      <SectionHeader
+        id="media-assets"
+        title="Media"
+        purpose="Optional. Pictures, diagrams, maps, sound and video that screens show."
+        more={
+          <>
+            <p>Upload a file here and give it a short key. A screen then shows it through its <em>Media</em> settings (under &ldquo;More behaviour&rdquo;), or wherever a screen asks for an image, by writing <code>asset:</code> and the key.</p>
+            <p className="mt-[var(--space-xs)]">Media is part of the mission&rsquo;s screens. It isn&rsquo;t the Mission Kit, which is what the family prints and keeps.</p>
+          </>
+        }
+        helpAnchor="kit-trail"
+      />
 
       {rows.length > 0 && (
         <ul className="mt-[var(--space-m)] flex flex-col gap-[var(--space-s)]">
@@ -70,20 +80,14 @@ export function AssetManager({
                     </div>
                   </div>
                   <div className="flex shrink-0 items-center gap-[var(--space-xs)]">
-                    <button type="button" onClick={() => setEditing(editing === r.key ? null : r.key)}
+                    <button type="button" aria-expanded={editing === r.key}
+                      onClick={() => (editing === r.key
+                        ? requestDiscard([`media:${r.key}`], () => setEditing(null))
+                        : requestDiscard(editing ? [`media:${editing}`] : [], () => setEditing(r.key)))}
                       className="min-h-[var(--target-min)] px-[var(--space-xs)] text-[length:var(--text-small)] underline decoration-[var(--color-border-strong)] underline-offset-4">
-                      {editing === r.key ? "Close" : "Edit"}
+                      {editing === r.key ? "Close" : "Edit"}<span className="sr-only"> media {r.key}</span>
                     </button>
-                    <form action={deleteAssetAction}>
-                      <input type="hidden" name="missionId" value={missionId} />
-                      <input type="hidden" name="slug" value={slug} />
-                      <input type="hidden" name="version" value={version} />
-                      <input type="hidden" name="key" value={r.key} />
-                      <button type="submit" aria-label={`Remove media ${r.key}`}
-                        className="min-h-[var(--target-min)] px-[var(--space-xs)] text-[length:var(--text-small)] underline decoration-[var(--color-border-strong)] underline-offset-4">
-                        Remove
-                      </button>
-                    </form>
+                    <RemoveAsset missionId={missionId} slug={slug} version={version} assetKey={r.key} />
                   </div>
                 </div>
                 {editing === r.key && (
@@ -107,15 +111,46 @@ export function AssetManager({
   );
 }
 
+/** Removing media asks once: a screen that still shows it would lose it. */
+function RemoveAsset({ missionId, slug, version, assetKey }: { missionId: string; slug: string; version: number; assetKey: string }) {
+  const [armed, setArmed] = useState(false);
+  if (!armed) {
+    return (
+      <button type="button" onClick={() => setArmed(true)}
+        className="min-h-[var(--target-min)] px-[var(--space-xs)] text-[length:var(--text-small)] text-[var(--color-text-muted)] underline decoration-[var(--color-border)] underline-offset-4">
+        Remove<span className="sr-only"> media {assetKey}</span>
+      </button>
+    );
+  }
+  return (
+    <form action={deleteAssetAction} className="flex items-center gap-[var(--space-xs)]">
+      <input type="hidden" name="missionId" value={missionId} />
+      <input type="hidden" name="slug" value={slug} />
+      <input type="hidden" name="version" value={version} />
+      <input type="hidden" name="key" value={assetKey} />
+      <button type="submit" className="min-h-[var(--target-min)] text-[length:var(--text-small)] font-medium text-[var(--color-error)] underline underline-offset-4">
+        Remove “{assetKey}”
+      </button>
+      <button type="button" onClick={() => setArmed(false)} className="min-h-[var(--target-min)] text-[length:var(--text-small)] text-[var(--color-text-muted)]">
+        Cancel
+      </button>
+    </form>
+  );
+}
+
 function AssetForm({ missionId, slug, version, row, asset }: { missionId: string; slug: string; version: number; row?: Row; asset?: ResolvedAsset }) {
   const [state, action, pending] = useActionState(saveAssetAction, initial);
+  const { ref, dirty, saved } = useDirtyForm(row ? `media:${row.key}` : "media:new", row ? `the media “${row.key}”` : "the new media");
+  // A new item's form stays open to add another, so it empties after adding.
+  useEffect(() => { if (state.ok) saved({ reset: !row }); }, [state]); // eslint-disable-line react-hooks/exhaustive-deps -- once per action result
+  const submit = useSubmitWithoutReset(action);
   const [kind, setKind] = useState(row?.kind ?? "image");
   const uid = useId();
   const id = (k: string) => `${uid}-${k}`;
   const err = (k: string) => state.fieldErrors?.[k];
   const visual = ["image", "diagram", "map", "animation"].includes(kind);
   return (
-    <form action={action} className="flex flex-col gap-[var(--space-m)]">
+    <form ref={ref} action={action} onSubmit={submit} className="flex flex-col gap-[var(--space-m)]">
       <input type="hidden" name="missionId" value={missionId} />
       <input type="hidden" name="slug" value={slug} />
       <input type="hidden" name="version" value={version} />
@@ -125,7 +160,7 @@ function AssetForm({ missionId, slug, version, row, asset }: { missionId: string
       {state.ok && <FormNotice message="Media saved." />}
 
       <div className="grid gap-[var(--space-m)] sm:grid-cols-2">
-        <Field label="Key" htmlFor={id("key")} error={err("key")} hint="Screens refer to it by this.">
+        <Field label="Key" htmlFor={id("key")} error={err("key")} hint={row ? "Screens refer to it by this. It can't change." : "A short name screens use to refer to it, e.g. bridge_photo. It can't change later."}>
           <Input id={id("key")} name="key" required defaultValue={row?.key ?? ""} readOnly={Boolean(row)} placeholder="bridge_photo" />
         </Field>
         <Field label="Kind" htmlFor={id("kind")} error={err("kind")}>
@@ -163,8 +198,9 @@ function AssetForm({ missionId, slug, version, row, asset }: { missionId: string
           <input id={id("captions")} name="captions" type="file" accept=".vtt,text/vtt" className="min-h-[var(--target-min)] text-[length:var(--text-label)]" />
         </Field>
       )}
-      <div>
+      <div className="flex flex-wrap items-center gap-[var(--space-m)]">
         <Button type="submit" isLoading={pending} loadingLabel="Saving…">{row ? "Save media" : "Add media"}</Button>
+        <UnsavedNote dirty={dirty} />
       </div>
     </form>
   );

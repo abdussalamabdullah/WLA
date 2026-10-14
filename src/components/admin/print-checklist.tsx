@@ -3,16 +3,17 @@ import type { ChecklistRow } from "@/features/admin/print-checklist";
 /** Plan §12 — what the family will print, and what in the mission needs it. */
 export function PrintChecklist({ rows, missing }: { rows: ChecklistRow[]; missing: { title: string; usedBy: string[] }[] }) {
   return (
-    <section aria-labelledby="print-checklist" className="mt-[var(--space-2xl)]">
-      <h2 id="print-checklist" className="text-[length:var(--text-h3)]">Print checklist</h2>
+    <section aria-labelledby="print-checklist" className="mt-[var(--space-xl)]">
+      <h3 id="print-checklist" className="text-[length:var(--text-label)] font-medium">Print checklist</h3>
       <p className="mt-[var(--space-xs)] wla-measure text-[length:var(--text-small)] text-[var(--color-text-muted)]">
-        Every Mission Kit resource, whether a family can print it, and what in this mission depends on it.
+        A check, not an editor: every Mission Kit resource, whether a family can print it, and what in this mission
+        depends on it. Anything the mission names that the Kit lacks is listed first.
       </p>
       {missing.length > 0 && (
         <ul className="mt-[var(--space-s)] flex flex-col gap-[var(--space-xs)]">
           {missing.map((m) => (
             <li key={m.title} className="text-[length:var(--text-small)] text-[var(--color-error)]">
-              Missing from the Kit: <strong>{m.title}</strong> — {m.usedBy.join("; ")}
+              <strong>Must fix:</strong> missing from the Kit: <strong>{m.title}</strong> — {m.usedBy.join("; ")}
             </li>
           ))}
         </ul>

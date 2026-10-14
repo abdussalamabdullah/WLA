@@ -1,11 +1,12 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useEffect } from "react";
 import { Field, FormError, FormNotice, Input } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
 import { saveMissionAction } from "@/features/admin/actions";
 import { emptyAdminState, type AdminFormState } from "@/features/admin/schemas";
 import { cn } from "@/lib/utils";
+import { useDirtyForm, useSubmitWithoutReset, UnsavedNote } from "./unsaved-changes";
 import type { MissionRow } from "@/types/database";
 
 const LABS = [
@@ -42,10 +43,13 @@ export function MissionForm({
   );
 
   const err = (name: string) => state.fieldErrors?.[name]?.[0];
+  const { ref, dirty, saved } = useDirtyForm("details", "the mission details");
+  const submit = useSubmitWithoutReset(action);
+  useEffect(() => { if (state.ok) saved(); }, [state]); // eslint-disable-line react-hooks/exhaustive-deps -- once per action result
   const liveRuns = versionUsage.filter((v) => v.runs > v.complete);
 
   return (
-    <form action={action} className="flex flex-col gap-[var(--space-xl)]">
+    <form ref={ref} action={action} onSubmit={submit} className="flex flex-col gap-[var(--space-xl)]">
       {state.ok && <FormNotice message={state.message} />}
       {!state.ok && state.message && <FormError message={state.message} />}
 
@@ -204,8 +208,8 @@ export function MissionForm({
         <Checkbox
           name="published"
           defaultChecked={mission.published}
-          label="Published"
-          hint="Published missions appear in the public catalogue and can be bought. Unpublished missions stay reachable for anyone already entitled."
+          label="Show in catalogue (available to buy)"
+          hint="Shown missions appear in the public catalogue and can be bought. Hidden missions stay reachable for anyone already entitled. This is separate from publishing a version: it doesn't change which version learners get."
         />
       </section>
 
@@ -240,6 +244,7 @@ export function MissionForm({
         <Button type="submit" size="large" isLoading={pending}>
           Save changes
         </Button>
+        <UnsavedNote dirty={dirty} />
       </div>
     </form>
   );

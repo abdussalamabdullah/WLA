@@ -19,10 +19,13 @@ export const metadata = { title: "Preview" };
  */
 export default async function PreviewPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ slug: string; version: string }>;
+  searchParams: Promise<{ from?: string | string[] }>;
 }) {
   const { slug, version: versionParam } = await params;
+  const { from } = await searchParams;
   const version = Number(versionParam);
   if (!Number.isInteger(version) || version < 1) notFound();
 
@@ -62,6 +65,8 @@ export default async function PreviewPage({
       missionSlug={mission.slug}
       version={version}
       backHref={`/admin/builder/${slug}/${version}`}
+      // "Preview from here" — only ever a key of THIS draft (checked in the preview).
+      startAt={typeof from === "string" ? from : null}
       completionRule={versionRow.completion_rule}
       definition={definition ?? {}}
       assets={media.resolved}

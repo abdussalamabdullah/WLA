@@ -36,15 +36,33 @@ export function buildEdges(screens: ScreenLite[], events: { key: string; goto?: 
   return edges;
 }
 
+/** A screen's role in the flow, in words — never shown by colour alone. */
+function kindOf(s: ScreenLite): string {
+  if (s.type === "completion") return "Completion — the end";
+  const c = (s.configuration ?? {}) as Record<string, unknown>;
+  if (s.type === "choice" || (Array.isArray(c.options) && (c.options as { next?: string }[]).some((o) => o.next))) return "Decision";
+  return s.type.replace(/_/g, " ").replace(/^./, (x) => x.toUpperCase());
+}
+
 export function FlowMap({
   screens,
   events = [],
   flagged = [],
+  unreachable = [],
+  onOpenScreen,
 }: {
   screens: ScreenLite[];
   events?: { key: string; goto?: string }[];
   /** Screen keys with a blocking QA issue. */
   flagged?: string[];
+  /**
+   * Screens the VALIDATOR found no route to. The layout's own reachability
+   * ignores the engine's fall-through by position, so it is not trusted to
+   * call a screen unreachable; only the validator is.
+   */
+  unreachable?: string[];
+  /** Open that screen's editor (D-120). */
+  onOpenScreen?: (key: string) => void;
 }) {
   if (!screens.length) return null;
   const ordered = [...screens].sort((a, b) => a.sequence - b.sequence);
@@ -72,18 +90,22 @@ export function FlowMap({
   for (const e of edges) if (e.from !== "__event") incoming.set(e.to, new Set([...(incoming.get(e.to) ?? []), e.from]));
   const converges = (k: string) => (incoming.get(k)?.size ?? 0) >= 2;
   const gated = (s: ScreenLite) => Boolean((s.configuration as { requires?: unknown } | null)?.requires);
+  const titleOf = (k: string) => ordered.find((x) => x.screen_key === k)?.title || k;
 
   const width = 32 + (Math.max(...columns.keys()) + 1) * (W + GX);
   const height = 32 + Math.max(...[...columns.values()].map((l) => l.length)) * (H + GY);
 
   return (
     <section aria-labelledby="flow-map" className="mt-[var(--space-xl)]">
-      <h2 id="flow-map" className="text-[length:var(--text-h3)]">Flow</h2>
+      <h3 id="flow-map" className="text-[length:var(--text-label)] font-medium">Flow map</h3>
       <p className="mt-[var(--space-xs)] wla-measure text-[length:var(--text-small)] text-[var(--color-text-muted)]">
-        Every way between screens. ◆ branches meet here · 🔒 shown only when its condition holds · ⚠ has a problem to fix.
+        Every way between screens, from the first screen on the left.{onOpenScreen ? " Select a screen to open it." : ""}
+      </p>
+      <p className="mt-[2px] wla-measure text-[length:var(--text-small)] text-[var(--color-text-muted)]">
+        Key: ◆ branches meet here · 🔒 shown only when its condition holds · ⚠ has a problem to fix · solid line: an option or “Goes to” · dashed: a route · dotted: “otherwise” or an event.
       </p>
       <div className="mt-[var(--space-s)] overflow-x-auto rounded-[var(--radius-surface)] border border-[var(--color-border)] bg-[var(--color-surface)]">
-        <svg width={width} height={height} role="img" aria-label="Mission flow diagram; the same flow follows as a list" className="block">
+        <svg width={width} height={height} role={onOpenScreen ? "group" : "img"} aria-label="Mission flow diagram; the same flow follows as a list" className="block">
           <defs>
             <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
               <path d="M0,0 L10,5 L0,10 z" fill="var(--color-text-muted)" />
@@ -109,14 +131,28 @@ export function FlowMap({
           {ordered.map((s) => {
             const p = pos.get(s.screen_key)!;
             const bad = flagged.includes(s.screen_key);
+            const lost = unreachable.includes(s.screen_key);
+            const name = s.title || s.screen_key;
+            const kind = kindOf(s);
+            const open = onOpenScreen ? () => onOpenScreen(s.screen_key) : undefined;
             return (
-              <g key={s.screen_key} transform={`translate(${p.x},${p.y})`}>
+              <g
+                key={s.screen_key}
+                transform={`translate(${p.x},${p.y})`}
+                role={open ? "button" : undefined}
+                tabIndex={open ? 0 : undefined}
+                aria-label={open ? `Open ${name} — ${kind}${bad ? ", has a problem to fix" : ""}${lost ? ", not reachable" : ""}` : undefined}
+                onClick={open}
+                onKeyDown={open ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(); } } : undefined}
+                className={open ? "cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus)]" : undefined}
+              >
                 <rect width={W} height={H} rx="8" fill={s.type === "completion" ? "var(--color-surface-sage)" : "var(--color-surface-raised)"}
-                  stroke={bad ? "var(--color-error)" : "var(--color-border-strong)"} strokeWidth={bad ? 2 : 1} />
+                  stroke={bad ? "var(--color-error)" : "var(--color-border-strong)"} strokeWidth={bad ? 2 : 1}
+                  strokeDasharray={lost ? "4 3" : undefined} />
                 <text x="10" y="22" fontSize="12" fontWeight="600" fill="var(--color-text)">
-                  {(converges(s.screen_key) ? "◆ " : "") + (gated(s) ? "🔒 " : "") + (bad ? "⚠ " : "") + (s.title || s.screen_key).slice(0, 22)}
+                  {(converges(s.screen_key) ? "◆ " : "") + (gated(s) ? "🔒 " : "") + (bad ? "⚠ " : "") + name.slice(0, 22)}
                 </text>
-                <text x="10" y="42" fontSize="10" fill="var(--color-text-muted)">{s.screen_key} · {s.type.replace(/_/g, " ")}</text>
+                <text x="10" y="42" fontSize="10" fill="var(--color-text-muted)">{lost ? "Not reachable · " : ""}{kind}</text>
               </g>
             );
           })}
@@ -124,18 +160,23 @@ export function FlowMap({
       </div>
 
       <details className="mt-[var(--space-s)]">
-        <summary className="inline-flex min-h-[var(--target-min)] cursor-pointer items-center text-[length:var(--text-small)]">Flow as a list</summary>
+        <summary className="inline-flex min-h-[var(--target-min)] cursor-pointer items-center text-[length:var(--text-small)]">Flow as a list{onOpenScreen ? " (each screen opens its editor)" : ""}</summary>
         <ul className="mt-[var(--space-xs)] flex flex-col gap-[4px] text-[length:var(--text-small)]">
           {ordered.map((s) => {
             const out = edges.filter((e) => e.from === s.screen_key);
             return (
               <li key={s.screen_key}>
-                <strong>{s.title || s.screen_key}</strong> ({s.screen_key}){converges(s.screen_key) ? " — branches meet here" : ""}{gated(s) ? " — conditional" : ""}{flagged.includes(s.screen_key) ? " — has a problem" : ""}
-                {out.length ? `: ${out.map((e) => `${e.label ? `${e.label} → ` : "→ "}${e.to}`).join("; ")}` : s.type === "completion" ? ": end" : ": no way on"}
+                {onOpenScreen ? (
+                  <button type="button" onClick={() => onOpenScreen(s.screen_key)} className="min-h-[var(--target-min)] text-left font-medium underline decoration-[var(--color-border-strong)] underline-offset-4">
+                    {s.title || s.screen_key}
+                  </button>
+                ) : <strong>{s.title || s.screen_key}</strong>}{" "}
+                ({kindOf(s)}){converges(s.screen_key) ? " — branches meet here" : ""}{gated(s) ? " — conditional" : ""}{flagged.includes(s.screen_key) ? " — has a problem" : ""}{unreachable.includes(s.screen_key) ? " — not reachable" : ""}
+                {out.length ? `: ${out.map((e) => `${e.label ? `${e.label} → ` : "→ "}${titleOf(e.to)}`).join("; ")}` : s.type === "completion" ? ": the end" : ": no way on"}
               </li>
             );
           })}
-          {events.filter((e) => e.goto).map((e) => <li key={e.key}>Event {e.key} interrupts to {e.goto}</li>)}
+          {events.filter((e) => e.goto).map((e) => <li key={e.key}>Event {e.key} interrupts to {titleOf(e.goto!)}</li>)}
         </ul>
       </details>
     </section>

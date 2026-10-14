@@ -34,6 +34,13 @@ export default async function BuilderIndexPage() {
 
   return (
     <AdminPage title="Mission Builder" intro="Build and review missions before they are published.">
+      <p className="mb-[var(--space-xl)] wla-measure text-[length:var(--text-small)] text-[var(--color-text-muted)]">
+        New to the builder?{" "}
+        <a href="/admin/help#building" className="inline-flex min-h-[var(--target-min)] items-center underline decoration-[var(--color-border-strong)] underline-offset-4">
+          Read how a mission is built
+        </a>
+        . Drafts are private: nothing here reaches a learner until a version is published.
+      </p>
       <section>
         <h2 className="text-[length:var(--text-h3)]">In progress</h2>
         <div className="mt-[var(--space-m)]">
@@ -54,7 +61,7 @@ export default async function BuilderIndexPage() {
                     <Td>{new Date(d.updated_at).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</Td>
                     <Td>
                       <Link href={`/admin/builder/${m.slug}/${d.version}`} className="inline-flex min-h-[var(--target-min)] items-center underline decoration-[var(--color-border-strong)] underline-offset-4">
-                        Open
+                        Open<span className="sr-only"> {m.title} version {d.version}</span>
                       </Link>
                     </Td>
                   </tr>
@@ -67,8 +74,9 @@ export default async function BuilderIndexPage() {
 
       <section className="mt-[var(--space-2xl)] max-w-[34rem]">
         <h2 className="text-[length:var(--text-h3)]">Start a new mission</h2>
-        <p className="mt-[var(--space-xs)] text-[var(--color-text-muted)]">
-          You can change everything except the address later.
+        <p className="mt-[var(--space-xs)] wla-measure text-[var(--color-text-muted)]">
+          This creates the mission, hidden from the catalogue, with an empty draft (version 1) to build in. You can
+          change everything except the address later.
         </p>
         <div className="mt-[var(--space-l)]">
           <NewMissionForm />

@@ -45,7 +45,7 @@ export function VersionActions({
           <input type="hidden" name="missionId" value={missionId} />
           <input type="hidden" name="slug" value={slug} />
           <Button type="submit" isLoading={creating} loadingLabel="Creating…" disabled={hasEditableDraft}>
-            Create new version
+            Create a new draft version
           </Button>
         </form>
 

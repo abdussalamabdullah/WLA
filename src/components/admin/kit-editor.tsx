@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useId, useState } from "react";
+import { useActionState, useEffect, useId, useState } from "react";
 import {
   saveKitResourceAction,
   deleteKitResourceAction,
@@ -11,6 +11,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Field, Input, FormError, FormNotice } from "@/components/ui/field";
 import { ParentNote } from "@/components/academy/parent-note";
+import { useDirtyForm, useSubmitWithoutReset, useUnsavedChanges, UnsavedNote } from "./unsaved-changes";
 
 const initial: KitState = {};
 
@@ -55,36 +56,48 @@ export function KitEditor({
 }) {
   const [editing, setEditing] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
+  const [flash, setFlash] = useState<string | null>(null);
+  const { requestDiscard } = useUnsavedChanges();
+  const open = [...(editing ? [`kit:${editing}`] : []), ...(adding ? ["kit:new"] : [])];
   const nextSort = resources.length
     ? Math.max(...resources.map((r) => r.sort_order)) + 10
     : 10;
 
   return (
-    <section className="mt-[var(--space-2xl)]">
+    <div className="mt-[var(--space-xl)]">
       <div className="flex flex-wrap items-baseline justify-between gap-[var(--space-m)]">
         <div>
-          <h2 className="text-[length:var(--text-h3)]">Mission Kit</h2>
+          <h3 className="text-[length:var(--text-label)] font-medium">Mission Kit</h3>
           <p className="mt-[2px] wla-measure text-[length:var(--text-small)] text-[var(--color-text-muted)]">
             Printables and resources this mission gives the child.
           </p>
         </div>
-        <Button type="button" variant="text" onClick={() => { setAdding((v) => !v); setEditing(null); }}>
+        <Button
+          type="button"
+          variant="text"
+          onClick={() => (adding
+            ? requestDiscard(["kit:new"], () => setAdding(false))
+            : requestDiscard(open, () => { setEditing(null); setAdding(true); setFlash(null); }))}
+        >
           {adding ? "Cancel" : "Add a resource"}
         </Button>
       </div>
+      {flash && <div className="mt-[var(--space-s)]"><FormNotice message={flash} /></div>}
 
       {adding && (
         <div className="mt-[var(--space-m)] rounded-[var(--radius-surface)] border border-[var(--color-border-strong)] bg-[var(--color-surface)] p-[var(--space-m)]">
           <ResourceForm
             missionId={missionId} slug={slug} version={version}
             resource={null} nextSort={nextSort} onDone={() => setAdding(false)}
+            onAdded={() => { setAdding(false); setFlash("Resource added."); }}
           />
         </div>
       )}
 
       {resources.length === 0 ? (
-        <p className="mt-[var(--space-m)] text-[var(--color-text-muted)]">
-          No resources yet.
+        <p className="mt-[var(--space-m)] wla-measure text-[var(--color-text-muted)]">
+          No resources yet. A physical or hybrid mission needs at least one before it can be published — usually the
+          printable the child works from.
         </p>
       ) : (
         <ol className="mt-[var(--space-m)] flex flex-col gap-[var(--space-s)]">
@@ -128,7 +141,11 @@ export function KitEditor({
                     id={r.id} direction="down" disabled={i === resources.length - 1} />
                   <button
                     type="button"
-                    onClick={() => { setEditing(editing === r.id ? null : r.id); setAdding(false); }}
+                    aria-expanded={editing === r.id}
+                    aria-label={`${editing === r.id ? "Close" : "Edit"} ${r.title}`}
+                    onClick={() => (editing === r.id
+                      ? requestDiscard([`kit:${r.id}`], () => setEditing(null))
+                      : requestDiscard(open, () => { setEditing(r.id); setAdding(false); }))}
                     className="min-h-[var(--target-min)] px-[var(--space-xs)] text-[length:var(--text-small)] underline decoration-[var(--color-border-strong)] underline-offset-4"
                   >
                     {editing === r.id ? "Close" : "Edit"}
@@ -149,17 +166,27 @@ export function KitEditor({
           ))}
         </ol>
       )}
-    </section>
+    </div>
   );
 }
 
 function ResourceForm({
-  missionId, slug, version, resource, nextSort, onDone,
+  missionId, slug, version, resource, nextSort, onDone, onAdded,
 }: {
   missionId: string; slug: string; version: number;
   resource: DraftResource | null; nextSort: number; onDone: () => void;
+  onAdded?: () => void;
 }) {
   const [state, action, pending] = useActionState(saveKitResourceAction, initial);
+  const formId = resource ? `kit:${resource.id}` : "kit:new";
+  const { requestDiscard } = useUnsavedChanges();
+  const { ref, dirty, saved } = useDirtyForm(formId, resource ? `the Kit resource “${resource.title}”` : "the new Kit resource");
+  const submit = useSubmitWithoutReset(action);
+  useEffect(() => {
+    if (!state.ok) return;
+    saved();
+    if (!resource) onAdded?.();
+  }, [state]); // eslint-disable-line react-hooks/exhaustive-deps -- once per action result
   const err = (k: string) => state.fieldErrors?.[k];
   /*
    * Unique per form. This form can be open beside the screen editor, which
@@ -170,7 +197,7 @@ function ResourceForm({
   const id = (field: string) => `resource-${uid}-${field}`;
 
   return (
-    <form action={action} className="flex flex-col gap-[var(--space-m)]">
+    <form ref={ref} action={action} onSubmit={submit} className="flex flex-col gap-[var(--space-m)]">
       <input type="hidden" name="missionId" value={missionId} />
       <input type="hidden" name="slug" value={slug} />
       <input type="hidden" name="version" value={version} />
@@ -180,16 +207,10 @@ function ResourceForm({
       {state.error && <FormError message={state.error} />}
       {state.ok && <FormNotice message="Resource saved." />}
 
-      <div className="grid gap-[var(--space-m)] sm:grid-cols-2">
-        <Field label="Name" htmlFor={id("title")} error={err("title")}>
-          <Input id={id("title")} name="title" required defaultValue={resource?.title ?? ""}
-            placeholder="Six Names Case Board" />
-        </Field>
-        <Field label="Position" htmlFor={id("sort_order")} error={err("sort_order")}>
-          <Input id={id("sort_order")} name="sort_order" type="number"
-            defaultValue={resource?.sort_order ?? nextSort} />
-        </Field>
-      </div>
+      <Field label="Name" htmlFor={id("title")} error={err("title")} hint="As families see it in the Mission Kit.">
+        <Input id={id("title")} name="title" required defaultValue={resource?.title ?? ""}
+          placeholder="Six Names Case Board" />
+      </Field>
 
       <Field label="Description" htmlFor={id("description")} error={err("description")}
         hint="Optional. What it is and when the child needs it.">
@@ -231,11 +252,22 @@ function ResourceForm({
         ))}
       </fieldset>
 
-      <div className="flex gap-[var(--space-s)]">
+      <details open={Boolean(err("sort_order")) || undefined}>
+        <summary className="inline-flex min-h-[var(--target-min)] cursor-pointer items-center text-[length:var(--text-small)] text-[var(--color-text-muted)]">Advanced: position</summary>
+        <div className="max-w-[12rem]">
+          <Field label="Position" htmlFor={id("sort_order")} error={err("sort_order")} hint="Order in the Kit. The arrows do the same.">
+            <Input id={id("sort_order")} name="sort_order" type="number"
+              defaultValue={resource?.sort_order ?? nextSort} />
+          </Field>
+        </div>
+      </details>
+
+      <div className="flex flex-wrap items-center gap-[var(--space-m)]">
         <Button type="submit" isLoading={pending} loadingLabel="Saving…">
           {resource ? "Save resource" : "Add resource"}
         </Button>
-        <Button type="button" variant="text" onClick={onDone}>Done</Button>
+        <Button type="button" variant="text" onClick={() => requestDiscard([formId], onDone)}>{resource ? "Close" : "Cancel"}</Button>
+        <UnsavedNote dirty={dirty} />
       </div>
     </form>
   );
@@ -304,24 +336,37 @@ function RemoveResource({
  * content. Text is required; a PDF is optional and, where present, is what
  * `/parents` serves.
  */
-export function ParentNoteEditor({
-  missionId, slug, version, content, documentPath, documentUrl,
+export function ParentNoteEditor(props: {
+  missionId: string; slug: string; version: number;
+  content: string | null; documentPath: string | null; documentUrl: string | null;
+}) {
+  const [generation, setGeneration] = useState(0);
+  return <ParentNoteForm key={generation} {...props} onDiscard={() => setGeneration((n) => n + 1)} />;
+}
+
+function ParentNoteForm({
+  missionId, slug, version, content, documentPath, documentUrl, onDiscard,
 }: {
   missionId: string; slug: string; version: number;
   content: string | null; documentPath: string | null; documentUrl: string | null;
+  onDiscard: () => void;
 }) {
   const [state, action, pending] = useActionState(saveParentNoteAction, initial);
   const [text, setText] = useState(content ?? "");
   const [previewing, setPreviewing] = useState(false);
+  const { requestDiscard } = useUnsavedChanges();
+  const { ref, dirty, saved } = useDirtyForm("note", "the note For Parents");
+  const submit = useSubmitWithoutReset(action);
+  useEffect(() => { if (state.ok) saved(); }, [state]); // eslint-disable-line react-hooks/exhaustive-deps -- once per action result
 
   return (
-    <section className="mt-[var(--space-2xl)] max-w-[46rem]">
-      <h2 className="text-[length:var(--text-h3)]">For Parents</h2>
+    <div className="mt-[var(--space-xl)] max-w-[46rem]">
+      <h3 className="text-[length:var(--text-label)] font-medium">For Parents</h3>
       <p className="mt-[2px] wla-measure text-[length:var(--text-small)] text-[var(--color-text-muted)]">
         A short note for the adult helping. Not shown to the child.
       </p>
 
-      <form action={action} className="mt-[var(--space-m)] flex flex-col gap-[var(--space-m)]">
+      <form ref={ref} action={action} onSubmit={submit} className="mt-[var(--space-m)] flex flex-col gap-[var(--space-m)]">
         <input type="hidden" name="missionId" value={missionId} />
         <input type="hidden" name="slug" value={slug} />
         <input type="hidden" name="version" value={version} />
@@ -357,12 +402,16 @@ export function ParentNoteEditor({
           </a>
         )}
 
-        <div className="flex flex-wrap gap-[var(--space-s)]">
+        <div className="flex flex-wrap items-center gap-[var(--space-s)]">
           <Button type="submit" isLoading={pending} loadingLabel="Saving…">Save parent note</Button>
+          {dirty && (
+            <Button type="button" variant="text" onClick={() => requestDiscard(["note"], onDiscard)}>Discard changes</Button>
+          )}
           <Button type="button" variant="text" aria-expanded={previewing}
             aria-controls="parent-note-preview" onClick={() => setPreviewing((v) => !v)}>
             {previewing ? "Hide preview" : "Preview"}
           </Button>
+          <UnsavedNote dirty={dirty} />
         </div>
       </form>
 
@@ -376,12 +425,12 @@ export function ParentNoteEditor({
           <p className="text-[length:var(--text-small)] text-[var(--color-text-muted)]">
             Preview — as a parent sees it{documentPath ? " if the document can't be opened" : ""}
           </p>
-          <h3 className="mt-[var(--space-s)] text-[length:var(--text-h3)]">For Parents</h3>
+          <p className="mt-[var(--space-s)] text-[length:var(--text-h3)]">For Parents</p>
           <div className="mt-[var(--space-m)]">
             <ParentNote content={text.trim() || null} />
           </div>
         </div>
       )}
-    </section>
+    </div>
   );
 }

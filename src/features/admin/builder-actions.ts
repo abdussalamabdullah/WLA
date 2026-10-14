@@ -7,6 +7,7 @@ import { requireAdmin } from "@/lib/permissions";
 import { screenConfigByType } from "@/features/mission-engine/schemas";
 import { completionRule } from "@/features/mission-engine/schemas";
 import { logWarn } from "@/lib/observability/logger";
+import { friendlyFirstIssue } from "@/features/mission-engine/issue-text";
 import type { Json, ScreenTypeDb, WlaLab } from "@/types/database";
 
 /**
@@ -94,6 +95,24 @@ export async function createVersionAction(_prev: BuilderState, formData: FormDat
   const fromVersion = /^\d+$/.test(fromRaw) ? Number(fromRaw) : null;
 
   const { supabase } = await requireAdmin();
+
+  /*
+   * One draft at a time (D-119). The interface already disables the button
+   * while a draft exists and while a request is pending; this refuses a
+   * repeated or stale submission too, so a double click cannot leave two
+   * drafts. The database function itself is unchanged.
+   */
+  const { data: open } = await supabase
+    .from("mission_versions")
+    .select("version")
+    .eq("mission_id", missionId)
+    .in("status", ["draft", "in_review"])
+    .limit(1)
+    .maybeSingle();
+  if (open) {
+    return { error: `Version ${open.version} is already a draft. Open it from the mission page, or publish it first.` };
+  }
+
   const { data, error } = await supabase.rpc("create_mission_version", {
     p_mission_id: missionId,
     ...(fromVersion ? { p_from_version: fromVersion } : {}),
@@ -125,6 +144,9 @@ export async function saveScreenAction(
   if (!/^[a-z0-9]+(_[a-z0-9]+)*$/.test(screenKey)) {
     return { fieldErrors: { screen_key: "Use lower-case words separated by underscores." } };
   }
+  // `admin_upsert_screen` saves BY KEY: a NEW screen given an existing key
+  // would silently replace that screen. Refuse instead (D-117).
+  const isNew = formData.get("isNew") === "1";
 
   let configuration: unknown;
   try {
@@ -140,15 +162,19 @@ export async function saveScreenAction(
 
   const parsed = schema.safeParse(configuration);
   if (!parsed.success) {
-    const first = parsed.error.issues[0];
-    return {
-      fieldErrors: {
-        configuration: `${first.path.join(".") || "configuration"}: ${first.message}`,
-      },
-    };
+    return { fieldErrors: { configuration: friendlyFirstIssue(parsed.error.issues) } };
   }
 
   const { supabase } = await requireAdmin();
+  if (isNew) {
+    const { data: existing } = await supabase.rpc("admin_draft_screens", {
+      p_mission_id: missionId,
+      p_version: version,
+    });
+    if ((existing ?? []).some((x: { screen_key: string }) => x.screen_key === screenKey)) {
+      return { fieldErrors: { screen_key: "Another screen in this version already uses this key. Choose a different one." } };
+    }
+  }
   const { error } = await supabase.rpc("admin_upsert_screen", {
     p_mission_id: missionId,
     p_version: version,
@@ -162,7 +188,7 @@ export async function saveScreenAction(
 
   if (error) {
     if (error.message.includes("version_not_editable")) {
-      return { error: "This version is published and cannot be changed. Create a new version." };
+      return { error: "This version is published and cannot be changed. Create a new draft version to make changes." };
     }
     logWarn("save_screen_failed", { missionId, reason: error.message });
     return { error: "We couldn't save that screen." };
@@ -221,8 +247,7 @@ export async function setCompletionRuleAction(
   // Same schema the engine evaluates completion with.
   const parsed = completionRule.safeParse(rule);
   if (!parsed.success) {
-    const first = parsed.error.issues[0];
-    return { fieldErrors: { rule: `${first.path.join(".") || "rule"}: ${first.message}` } };
+    return { fieldErrors: { rule: friendlyFirstIssue(parsed.error.issues, "The completion rule") } };
   }
 
   const { supabase } = await requireAdmin();
@@ -332,8 +357,7 @@ export async function saveDefinitionAction(
   const { missionDefinition } = await import("@/features/mission-engine/definition");
   const parsed = missionDefinition.safeParse(raw);
   if (!parsed.success) {
-    const first = parsed.error.issues[0];
-    return { fieldErrors: { definition: `${first.path.join(".") || "definition"}: ${first.message}` } };
+    return { fieldErrors: { definition: friendlyFirstIssue(parsed.error.issues, "Mission logic") } };
   }
   const { supabase } = await requireAdmin();
   const { error } = await supabase.rpc("admin_set_definition", {

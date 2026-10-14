@@ -48,6 +48,7 @@ export function MissionPreview({
   definition,
   backHref,
   assets = [],
+  startAt = null,
 }: {
   missionTitle: string;
   missionSlug: string;
@@ -59,6 +60,8 @@ export function MissionPreview({
   backHref: string;
   /** F7 — the draft's media, signed with the admin's session; resolved exactly as for a learner. */
   assets?: ResolvedAsset[];
+  /** Start at this screen ("Preview from here"), if it is one of this draft's. */
+  startAt?: string | null;
 }) {
   const assetMap = useMemo(() => new Map(assets.map((a) => [a.key, a])), [assets]);
   const model = useMemo(
@@ -66,6 +69,11 @@ export function MissionPreview({
     [definition, screens, completionRule],
   );
   const ordered = model.screens;
+  const firstKey = ordered[0]?.screenKey ?? null;
+  // Ignore anything that is not a screen of this draft.
+  const startKey = startAt && ordered.some((s) => s.screenKey === startAt) ? startAt : firstKey;
+  const startedMidway = startKey !== null && startKey !== firstKey;
+  const titleOf = (k: string) => ordered.find((s) => s.screenKey === k)?.title || k;
 
   /** A fresh run, exactly as startVia initialises one — seed and all. */
   const fresh = useCallback(() => {
@@ -74,9 +82,10 @@ export function MissionPreview({
     return startRun(model, emptyMissionState, first, new Date(), seed).state;
   }, [model, ordered]);
 
-  const [currentKey, setCurrentKey] = useState<string | null>(ordered[0]?.screenKey ?? null);
+  const [currentKey, setCurrentKey] = useState<string | null>(startKey);
   const [state, setState] = useState<MissionStateData>(() => fresh());
-  const [visited, setVisited] = useState<string[]>(ordered[0] ? [ordered[0].screenKey] : []);
+  const [visited, setVisited] = useState<string[]>(startKey ? [startKey] : []);
+  const [from, setFrom] = useState<string | null>(startedMidway ? startKey : null);
   const [finished, setFinished] = useState(false);
   const [stuck, setStuck] = useState<string | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
@@ -150,16 +159,19 @@ export function MissionPreview({
     setState(next);
     setCurrentKey(jumpKey);
     setVisited((v) => [...v, jumpKey]);
+    setFrom(jumpKey);
     setFinished(false);
     setStuck(null);
     setFailure(null);
   }
 
-  function restart() {
+  /** A fresh test run from the first screen, or from a chosen one. */
+  function restart(at: string | null = firstKey) {
     setState(fresh());
     setResponses({});
-    setCurrentKey(ordered[0]?.screenKey ?? null);
-    setVisited(ordered[0] ? [ordered[0].screenKey] : []);
+    setCurrentKey(at);
+    setVisited(at ? [at] : []);
+    setFrom(at && at !== firstKey ? at : null);
     setFinished(false);
     setStuck(null);
     setFailure(null);
@@ -171,8 +183,8 @@ export function MissionPreview({
       <div className="sticky top-0 z-30 border-b border-[var(--color-border-strong)] bg-[var(--color-surface-sage)]">
         <div className="wla-container flex min-h-[56px] flex-wrap items-center justify-between gap-[var(--space-s)] py-[var(--space-xs)]">
           <p className="text-[length:var(--text-small)]">
-            <strong>Preview</strong> · {missionTitle} v{version} · nothing here
-            is saved
+            <strong>Preview</strong> · {missionTitle} v{version} · a test run: nothing here
+            is saved, and no learner&rsquo;s progress is touched
           </p>
           <div className="flex flex-wrap items-center gap-[var(--space-m)]">
             <label className="inline-flex min-h-[var(--target-min)] items-center gap-[var(--space-xs)] text-[length:var(--text-small)]">
@@ -189,10 +201,10 @@ export function MissionPreview({
             </label>
             <button
               type="button"
-              onClick={restart}
+              onClick={() => restart()}
               className="min-h-[var(--target-min)] text-[length:var(--text-small)] underline decoration-[var(--color-border-strong)] underline-offset-4"
             >
-              Start again
+              Start again from the beginning
             </button>
             <Link
               href={backHref}
@@ -215,6 +227,14 @@ export function MissionPreview({
           Preview of {missionTitle}, version {version}
         </h1>
 
+        {from && !finished && (
+          <p role="note" className="mb-[var(--space-l)] rounded-[var(--radius-input)] border border-[var(--color-border-strong)] bg-[var(--color-surface)] p-[var(--space-s)] text-[length:var(--text-small)]">
+            Started at &ldquo;{titleOf(from)}&rdquo; with a fresh test state. Choices from earlier screens weren&rsquo;t
+            made, so anything that depends on them may behave differently.{" "}
+            <button type="button" onClick={() => restart()} className="min-h-[var(--target-min)] underline underline-offset-4">Start from the beginning instead</button>
+          </p>
+        )}
+
         {ordered.length === 0 ? (
           <p className="wla-measure text-[var(--color-text-muted)]">
             This version has no screens yet, so there is nothing to preview.
@@ -228,7 +248,7 @@ export function MissionPreview({
               completion screen and their Mission Trail.
             </p>
             <div className="mt-[var(--space-l)]">
-              <Button type="button" onClick={restart}>Start again</Button>
+              <Button type="button" onClick={() => restart()}>Start again</Button>
             </div>
           </div>
         ) : stuck ? (
@@ -240,7 +260,7 @@ export function MissionPreview({
               preview again.
             </p>
             <div className="mt-[var(--space-l)] flex gap-[var(--space-m)]">
-              <Button type="button" onClick={restart}>Start again</Button>
+              <Button type="button" onClick={() => restart()}>Start again</Button>
               <Link
                 href={backHref}
                 className="inline-flex min-h-[var(--target-min)] items-center text-[length:var(--text-label)] underline decoration-[var(--color-border-strong)] underline-offset-4"
@@ -267,8 +287,7 @@ export function MissionPreview({
                 "text-[length:var(--text-small)] text-[var(--color-text-muted)]",
               )}
             >
-              Screen {visited.length} of this path · <code>{screen.screenKey}</code> ·{" "}
-              {screen.type.replace(/_/g, " ")}
+              Screen {visited.length} of this path · {screen.type.replace(/_/g, " ")} · <code>{screen.screenKey}</code>
             </p>
           </>
         ) : null}
@@ -277,6 +296,24 @@ export function MissionPreview({
       {/* ------------------------------------- authoring tools (admin only) */}
       <aside aria-labelledby="preview-tools" className="wla-container py-[var(--space-l)]">
         <h2 id="preview-tools" className="text-[length:var(--text-h3)]">Preview tools</h2>
+        <div className="mt-[var(--space-s)]">
+          <h3 className="text-[length:var(--text-label)] font-medium">This test run&rsquo;s path</h3>
+          <ol className="mt-[var(--space-xs)] flex list-decimal flex-col gap-[2px] pl-[var(--space-l)] text-[length:var(--text-small)]">
+            {visited.map((k, i) => (
+              <li key={`${k}-${i}`}>
+                {titleOf(k)}
+                {state.choices[k] !== undefined ? <span className="text-[var(--color-text-muted)]"> — chose {state.choices[k]}</span> : null}
+              </li>
+            ))}
+          </ol>
+          <div className="mt-[var(--space-s)] flex flex-wrap gap-[var(--space-m)]">
+            <Button type="button" variant="text" onClick={() => restart()}>Start again from the beginning</Button>
+            {from && <Button type="button" variant="text" onClick={() => restart(from)}>Start again from &ldquo;{titleOf(from)}&rdquo;</Button>}
+          </div>
+          <p className="mt-[var(--space-xs)] text-[length:var(--text-small)] text-[var(--color-text-muted)]">
+            To test another branch, start again and choose differently.
+          </p>
+        </div>
         <details className="mt-[var(--space-s)]">
           <summary className="inline-flex min-h-[var(--target-min)] cursor-pointer items-center font-medium">State inspector</summary>
           <p className="text-[length:var(--text-small)] text-[var(--color-text-muted)]">

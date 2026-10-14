@@ -104,11 +104,23 @@ describe("every page has exactly one h1", () => {
      * browser — with the dialog open the page reads
      * H1 Six Names → H2 (screen) → H2 Mission Control → H3 (support item).
      */
+    /*
+     * `SectionHeader` renders a section's h2. The builder parts listed below
+     * are only ever rendered inside a builder section, beneath that h2; the
+     * RENDERED order is asserted by builder-workspace.test.tsx ("headings
+     * never skip a level"), because a source guard cannot see across files.
+     */
+    const underBuilderSection = new Set([
+      "src/components/admin/flow-map.tsx",
+      "src/components/admin/kit-editor.tsx",
+      "src/components/admin/print-checklist.tsx",
+      "src/components/admin/publish-panel.tsx",
+    ]);
     const offenders: string[] = [];
     for (const file of sourceFiles("src/components")) {
       const src = code(file);
-      const hasH2 = /<h2[\s>]/.test(src) || /<Dialog\.Title/.test(src);
-      if (/<h3[\s>]/.test(src) && !hasH2) offenders.push(file);
+      const hasH2 = /<h2[\s>]/.test(src) || /<Dialog\.Title/.test(src) || /<SectionHeader[\s>]/.test(src);
+      if (/<h3[\s>]/.test(src) && !hasH2 && !underBuilderSection.has(file)) offenders.push(file);
     }
     expect(offenders).toEqual([]);
   });
