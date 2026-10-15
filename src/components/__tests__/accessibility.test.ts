@@ -116,11 +116,22 @@ describe("every page has exactly one h1", () => {
       "src/components/admin/print-checklist.tsx",
       "src/components/admin/publish-panel.tsx",
     ]);
+    /*
+     * Journal studio panels render beneath the article page's h2 sections
+     * ("Content", "Workflow", "History"); the RENDERED order is asserted by
+     * journal-studio.test.tsx ("headings never skip a level").
+     */
+    const underStudioSection = new Set([
+      "src/components/journal/studio/history.tsx",
+      "src/components/journal/studio/revision-editor.tsx",
+      "src/components/journal/studio/side-panels.tsx",
+      "src/components/journal/studio/workflow-panel.tsx",
+    ]);
     const offenders: string[] = [];
     for (const file of sourceFiles("src/components")) {
       const src = code(file);
       const hasH2 = /<h2[\s>]/.test(src) || /<Dialog\.Title/.test(src) || /<SectionHeader[\s>]/.test(src);
-      if (/<h3[\s>]/.test(src) && !hasH2 && !underBuilderSection.has(file)) offenders.push(file);
+      if (/<h3[\s>]/.test(src) && !hasH2 && !underBuilderSection.has(file) && !underStudioSection.has(file)) offenders.push(file);
     }
     expect(offenders).toEqual([]);
   });

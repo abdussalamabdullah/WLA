@@ -219,9 +219,13 @@ describe("no child-scoped RPC accepts a child id from the browser (D-59)", () =>
 });
 
 describe("a child cannot reach the parent's world (§7)", () => {
-  it("middleware keeps /account, /admin and /purchase parent-only", () => {
+  it("middleware keeps /account, /admin, /editorial and /purchase parent-only", () => {
     const m = code("src/lib/supabase/middleware.ts");
-    expect(m).toMatch(/PARENT_ONLY_PREFIXES = \["\/account", "\/admin", "\/purchase"\]/);
+    // The Journal studio (D-124) joined the list; none may ever leave it.
+    const list = m.match(/PARENT_ONLY_PREFIXES = \[([^\]]*)\]/)?.[1] ?? "";
+    for (const prefix of ["/account", "/admin", "/editorial", "/purchase"]) {
+      expect(list).toContain(`"${prefix}"`);
+    }
   });
 
   it("a child session alone never satisfies the parent-only check", () => {

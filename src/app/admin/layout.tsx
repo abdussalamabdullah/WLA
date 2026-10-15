@@ -5,7 +5,7 @@ import { AppShell, type NavItem } from "@/components/app-shell/app-shell";
 import {
   IconOverview, IconMission, IconBuilder, IconParents, IconChildren,
   IconOrders, IconActivity, IconAnalytics, IconSettings, IconHelp, IconLogout,
-  IconBoard,
+  IconBoard, IconJournal,
 } from "@/components/app-shell/icons";
 
 export const metadata = { title: "Academy admin" };
@@ -59,6 +59,8 @@ export default async function AdminLayout({
     { href: "/admin/activity", label: "Activity", icon: <IconActivity /> },
     { href: "/admin/analytics", label: "Analytics", icon: <IconAnalytics /> },
     { href: "/admin/board", label: "Mission Board", icon: <IconBoard /> },
+    // The Journal studio has its own gate (D-124): staff who are not admins use it too.
+    { href: "/editorial", label: "Journal", icon: <IconJournal /> },
     { href: "/admin/settings", label: "Settings", icon: <IconSettings /> },
   ];
 

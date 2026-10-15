@@ -278,6 +278,221 @@ export type ChildSessionRow = {
   revoked_at: string | null;
 };
 
+// ---------------------------------------------------------------- journal --
+// Journal CMS (D-123 … D-129, migration 20261014120000_journal_cms.sql).
+// Staff read these through RLS; NOTHING is written directly — every change is
+// a journal_* function. Public pages never read these tables at all.
+
+export type JournalRole = "writer" | "reviewer" | "editor";
+export type JournalRevisionState =
+  | "draft"
+  | "in_review"
+  | "changes_requested"
+  | "approved"
+  | "live"
+  | "retired"
+  | "superseded";
+export type JournalDecision = "approve" | "request_changes";
+
+export type JournalCategoryRow = {
+  id: string;
+  slug: string;
+  name: string;
+  description: string | null;
+  sort_order: number;
+  created_at: string;
+};
+
+export type JournalArticleRow = {
+  id: string;
+  live_revision_id: string | null;
+  working_revision_id: string | null;
+  slug: string | null;
+  published_at: string | null;
+  first_published_at: string | null;
+  archived_at: string | null;
+  scheduled_revision_id: string | null;
+  scheduled_for: string | null;
+  scheduled_by: string | null;
+  scheduled_hash: string | null;
+  schedule_attempts: number;
+  previous_slugs: string[];
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type JournalRevisionRow = {
+  id: string;
+  article_id: string;
+  number: number;
+  state: JournalRevisionState;
+  based_on: string | null;
+  title: string;
+  slug: string;
+  excerpt: string | null;
+  body_html: string;
+  author_name: string | null;
+  author_profile_id: string | null;
+  category_id: string | null;
+  tags: string[];
+  featured_media_id: string | null;
+  featured_alt: string | null;
+  seo_title: string | null;
+  seo_description: string | null;
+  canonical_url: string | null;
+  original_published_at: string | null;
+  source_url: string | null;
+  content_hash: string;
+  lock_version: number;
+  created_by: string | null;
+  created_at: string;
+  updated_by: string | null;
+  updated_at: string;
+  submitted_by: string | null;
+  submitted_at: string | null;
+  decided_at: string | null;
+};
+
+export type JournalMediaRow = {
+  id: string;
+  article_id: string;
+  storage_path: string;
+  mime_type: string;
+  bytes: number;
+  alt_text: string | null;
+  source_url: string | null;
+  is_public: boolean;
+  uploaded_by: string | null;
+  created_at: string;
+};
+
+export type JournalMemberRow = {
+  article_id: string;
+  profile_id: string;
+  role: "author" | "collaborator";
+  added_by: string | null;
+  added_at: string;
+};
+
+export type JournalAssignmentRow = {
+  article_id: string;
+  reviewer_id: string;
+  assigned_by: string | null;
+  assigned_at: string;
+};
+
+export type JournalDecisionRow = {
+  id: string;
+  article_id: string;
+  revision_id: string;
+  reviewer_id: string | null;
+  decision: JournalDecision;
+  content_hash: string;
+  note: string | null;
+  decided_at: string;
+};
+
+export type JournalCommentRow = {
+  id: string;
+  article_id: string;
+  revision_id: string | null;
+  parent_id: string | null;
+  author_id: string | null;
+  body: string;
+  anchor: string | null;
+  resolved_at: string | null;
+  resolved_by: string | null;
+  created_at: string;
+};
+
+export type JournalChangeRow = {
+  id: number;
+  revision_id: string;
+  actor_id: string | null;
+  changed_fields: string[];
+  lock_version: number;
+  content_hash: string;
+  at: string;
+};
+
+export type JournalAuditRow = {
+  id: number;
+  article_id: string | null;
+  revision_id: string | null;
+  actor_id: string | null;
+  action: string;
+  detail: Json;
+  at: string;
+};
+
+export type JournalStaffRow = {
+  profile_id: string;
+  role: JournalRole;
+  granted_by: string | null;
+  created_at: string;
+};
+
+export type JournalImportRunRow = {
+  id: string;
+  source_kind: string;
+  source_name: string | null;
+  started_by: string | null;
+  started_at: string;
+  finished_at: string | null;
+  totals: Json;
+};
+
+export type JournalImportItemRow = {
+  id: number;
+  run_id: string;
+  source_id: string | null;
+  source_url: string | null;
+  title: string | null;
+  outcome: string;
+  article_id: string | null;
+  final_slug: string | null;
+  messages: Json;
+  created_at: string;
+};
+
+/** What the public functions return — live revision fields only (D-127). */
+export type JournalPublicListRow = {
+  slug: string;
+  title: string;
+  excerpt: string | null;
+  author_name: string | null;
+  category_slug: string | null;
+  category_name: string | null;
+  tags: string[];
+  featured_media_id: string | null;
+  featured_alt: string | null;
+  display_date: string | null;
+  updated_at: string | null;
+  word_count: number;
+};
+
+export type JournalPublicArticleRow = {
+  slug: string | null;
+  title: string | null;
+  excerpt: string | null;
+  body_html: string | null;
+  author_name: string | null;
+  category_slug: string | null;
+  category_name: string | null;
+  tags: string[] | null;
+  featured_media_id: string | null;
+  featured_alt: string | null;
+  seo_title: string | null;
+  seo_description: string | null;
+  canonical_url: string | null;
+  source_url: string | null;
+  display_date: string | null;
+  first_published_at: string | null;
+  updated_at: string | null;
+  redirect_to: string | null;
+};
+
 // -------------------------------------------------------------- database --
 
 /** Generated columns a caller never supplies. */
@@ -372,6 +587,79 @@ export type Database = {
         Update: never;
         Relationships: [];
       };
+      journal_categories: Table<JournalCategoryRow, "slug" | "name">;
+      journal_articles: {
+        Row: JournalArticleRow;
+        Insert: never;
+        Update: never;
+        Relationships: [];
+      };
+      journal_revisions: {
+        Row: JournalRevisionRow;
+        Insert: never;
+        Update: never;
+        Relationships: [];
+      };
+      journal_media: {
+        Row: JournalMediaRow;
+        Insert: never;
+        Update: never;
+        Relationships: [];
+      };
+      journal_article_members: {
+        Row: JournalMemberRow;
+        Insert: never;
+        Update: never;
+        Relationships: [];
+      };
+      journal_review_assignments: {
+        Row: JournalAssignmentRow;
+        Insert: never;
+        Update: never;
+        Relationships: [];
+      };
+      journal_review_decisions: {
+        Row: JournalDecisionRow;
+        Insert: never;
+        Update: never;
+        Relationships: [];
+      };
+      journal_comments: {
+        Row: JournalCommentRow;
+        Insert: never;
+        Update: never;
+        Relationships: [];
+      };
+      journal_revision_changes: {
+        Row: JournalChangeRow;
+        Insert: never;
+        Update: never;
+        Relationships: [];
+      };
+      journal_audit: {
+        Row: JournalAuditRow;
+        Insert: never;
+        Update: never;
+        Relationships: [];
+      };
+      journal_staff: {
+        Row: JournalStaffRow;
+        Insert: never;
+        Update: never;
+        Relationships: [];
+      };
+      journal_import_runs: {
+        Row: JournalImportRunRow;
+        Insert: never;
+        Update: never;
+        Relationships: [];
+      };
+      journal_import_items: {
+        Row: JournalImportItemRow;
+        Insert: never;
+        Update: never;
+        Relationships: [];
+      };
     };
     Views: { [_ in never]: never };
     /**
@@ -379,6 +667,72 @@ export type Database = {
      * transaction — see supabase/migrations/20260925220200_persistence.sql.
      */
     Functions: {
+      // ------------------------------------------------ journal (D-123…) --
+      journal_staff_directory: {
+        Args: Record<string, never>;
+        Returns: { profile_id: string; name: string | null; email: string; roles: JournalRole[]; is_admin: boolean }[];
+      };
+      journal_set_role: {
+        Args: { p_email: string; p_role: JournalRole; p_grant: boolean };
+        Returns: string;
+      };
+      journal_create_article: { Args: { p_title: string; p_slug: string }; Returns: string };
+      journal_save_revision: {
+        Args: { p_revision: string; p_expected_lock: number; p_fields: Json };
+        Returns: { outcome: "saved" | "unchanged" | "conflict"; lock_version: number; content_hash: string; updated_by: string | null; updated_at: string }[];
+      };
+      journal_start_revision: { Args: { p_article: string }; Returns: string };
+      journal_submit_for_review: { Args: { p_revision: string; p_expected_lock: number }; Returns: undefined };
+      journal_withdraw_submission: { Args: { p_revision: string }; Returns: undefined };
+      journal_assign_reviewer: { Args: { p_article: string; p_reviewer: string; p_assign: boolean }; Returns: undefined };
+      journal_decide: {
+        Args: { p_revision: string; p_decision: JournalDecision; p_expected_hash: string; p_note: string | null };
+        Returns: undefined;
+      };
+      journal_add_comment: {
+        Args: { p_article: string; p_revision: string | null; p_body: string; p_parent: string | null; p_anchor: string | null };
+        Returns: string;
+      };
+      journal_resolve_comment: { Args: { p_comment: string; p_resolved: boolean }; Returns: undefined };
+      journal_set_member: { Args: { p_article: string; p_profile: string; p_role: "author" | "collaborator" | null }; Returns: undefined };
+      journal_publish: { Args: { p_revision: string; p_expected_hash: string }; Returns: undefined };
+      journal_schedule: { Args: { p_revision: string; p_expected_hash: string; p_at: string }; Returns: undefined };
+      journal_cancel_schedule: { Args: { p_article: string }; Returns: undefined };
+      journal_scheduler_status: {
+        Args: Record<string, never>;
+        Returns: { configured: boolean; active: boolean; last_run_at: string | null; last_status: string | null; overdue: number }[];
+      };
+      journal_unpublish: { Args: { p_article: string }; Returns: undefined };
+      journal_archive: { Args: { p_article: string; p_archive: boolean }; Returns: undefined };
+      journal_delete_article: { Args: { p_article: string }; Returns: undefined };
+      journal_register_media: {
+        Args: { p_article: string; p_path: string; p_mime: string; p_bytes: number; p_alt: string | null; p_source_url: string | null };
+        Returns: string;
+      };
+      journal_public_list: {
+        Args: { p_category?: string | null; p_tag?: string | null; p_query?: string | null; p_limit?: number; p_offset?: number };
+        Returns: JournalPublicListRow[];
+      };
+      journal_public_article: { Args: { p_slug: string }; Returns: JournalPublicArticleRow[] };
+      journal_public_tags: { Args: Record<string, never>; Returns: { tag: string }[] };
+      journal_media_path: { Args: { p_id: string }; Returns: string | null };
+      journal_import_start: { Args: { p_kind: string; p_name: string }; Returns: string };
+      journal_import_log: {
+        Args: {
+          p_run: string; p_source_id: string; p_source_url: string | null; p_title: string;
+          p_outcome: string; p_article: string | null; p_slug: string | null; p_messages: Json;
+        };
+        Returns: undefined;
+      };
+      journal_import_finish: { Args: { p_run: string; p_totals: Json }; Returns: undefined };
+      journal_import_prepare: {
+        Args: { p_kind: string; p_source_id: string; p_source_hash: string; p_title: string };
+        Returns: { outcome: "new" | "unchanged" | "update" | "edited"; article_id: string; revision_id: string }[];
+      };
+      journal_import_apply: {
+        Args: { p_article: string; p_kind: string; p_source_id: string; p_source_hash: string; p_source_url: string | null; p_fields: Json };
+        Returns: { final_slug: string; slug_changed: boolean }[];
+      };
       start_mission: {
         Args: { p_child_id: string; p_mission_id: string };
         Returns: MissionProgressRow;

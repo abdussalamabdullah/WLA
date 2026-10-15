@@ -201,6 +201,83 @@
   }
 
   /*
+   * JOURNAL ARTICLE BODY (D-123). One stylesheet for the public article, the
+   * studio preview and the editor itself, so what a writer sees while editing
+   * is what a reader gets. Only the allowlisted elements need styling.
+   */
+  .wla-article-body {
+    font-size: var(--text-body-lg);
+    line-height: var(--leading-relaxed);
+    max-width: var(--measure);
+    overflow-wrap: anywhere;
+  }
+  .wla-article-body > * + * {
+    margin-top: var(--space-paragraph);
+  }
+  .wla-article-body h2,
+  .wla-article-body h3,
+  .wla-article-body h4 {
+    font-family: var(--font-serif);
+    font-weight: var(--weight-regular);
+    line-height: var(--leading-tight);
+    margin-top: var(--space-xl);
+  }
+  .wla-article-body h2 { font-size: var(--text-h2); }
+  .wla-article-body h3 { font-size: var(--text-h3); }
+  .wla-article-body h4 { font-size: var(--text-body-lg); font-weight: var(--weight-medium); }
+  .wla-article-body a {
+    color: var(--color-text-action);
+    text-decoration: underline;
+    text-underline-offset: 4px;
+  }
+  .wla-article-body a:focus-visible {
+    outline: 2px solid var(--color-focus);
+    outline-offset: 2px;
+  }
+  .wla-article-body ul,
+  .wla-article-body ol {
+    padding-left: var(--space-l);
+  }
+  .wla-article-body ul { list-style: disc; }
+  .wla-article-body ol { list-style: decimal; }
+  .wla-article-body li + li { margin-top: var(--space-xs); }
+  .wla-article-body blockquote {
+    border-left: 2px solid var(--color-border-strong);
+    padding-left: var(--space-m);
+    font-family: var(--font-serif);
+    font-style: italic;
+  }
+  .wla-article-body pre {
+    background: var(--color-surface-raised);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-input);
+    padding: var(--space-m);
+    overflow-x: auto;
+    font-size: var(--text-small);
+    white-space: pre-wrap;
+  }
+  .wla-article-body code {
+    font-size: 0.9em;
+  }
+  .wla-article-body hr {
+    border: 0;
+    border-top: 1px solid var(--color-border);
+    margin-block: var(--space-xl);
+  }
+  .wla-article-body figure img,
+  .wla-article-body img {
+    display: block;
+    max-width: 100%;
+    height: auto;
+    border-radius: var(--radius-surface);
+  }
+  .wla-article-body figcaption {
+    margin-top: var(--space-xs);
+    font-size: var(--text-small);
+    color: var(--color-text-muted);
+  }
+
+  /*
    * Display type. MEASURED at 60px on a 65px line — a ratio of 1.08, far
    * tighter than the 1.15 used for headings below it. At this size the
    * leading has to close up or the lines read as three separate statements.

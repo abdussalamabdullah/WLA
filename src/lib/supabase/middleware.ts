@@ -9,7 +9,7 @@ import { safeNext } from "@/lib/safe-next";
  * enough for any of these: family management, purchases and the admin surface
  * belong to the account holder.
  */
-const PARENT_ONLY_PREFIXES = ["/account", "/admin", "/purchase"];
+const PARENT_ONLY_PREFIXES = ["/account", "/admin", "/editorial", "/purchase"];
 
 /**
  * Routes requiring SOME learner session — a parent with a child selected, or a

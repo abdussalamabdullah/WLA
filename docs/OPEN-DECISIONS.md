@@ -212,6 +212,26 @@ in `docs/source/`. Consequences until they arrive (D-75):
 
 # ✅ Previously blocked — now unblocked
 
+## OPEN-21 — May an author approve their own Journal revision? · RESOLVED → D-130
+
+Approval is no longer a prerequisite for publication: an authorised author
+publishes their own article. Optional reviews remain, and a reviewer still
+cannot record a review of a revision they edited (it would mean nothing).
+
+## OPEN-22 — Where does the public Journal live? · RESOLVED → D-131
+
+On the Lovable public website at `/journal`, reading WLA's public Journal API.
+The Next.js public Journal pages were removed.
+
+## OPEN-23 — Confirm the Medium source · needs the export
+
+No Medium export was available. Supply Medium's "Download your information"
+archive (or confirm another source). Until then the importer is verified only
+against fixtures built to Medium's documented export markup (D-129). Tags are
+not in Medium's export and will need adding by hand.
+
+---
+
 ## OPEN-20 — Mandatory review before publishing · needs product decision
 
 Raised 2026-10-13 by the Mission Builder usability work (D-121). Nothing was
@@ -284,8 +304,11 @@ can be published. `published` stays `false` until then.
 | 13  | Six Names assets      | ⛔                                         |
 | 14  | Retention policy      | 🔴 policy pending; capability in scope     |
 | 20  | Review before publish | 🔴 needs you — see OPEN-20 below            |
+| 21  | Journal self-approval | ✅ D-130 — approval optional                |
+| 22  | Public Journal home   | ✅ D-131 — Lovable, via the WLA API         |
+| 23  | Medium source         | ⛔ needs the Medium export                  |
 
-**11 resolved · 1 deferred · 2 need you (OPEN-14, OPEN-20) · 0 blocked on source material.**
+**13 resolved · 1 deferred · 2 need you (OPEN-14, OPEN-20) · 1 blocked on source material (OPEN-23).**
 
 ---
 

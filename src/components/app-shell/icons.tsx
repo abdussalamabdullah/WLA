@@ -71,3 +71,12 @@ export const IconSettings = (p: IconProps) => (
 export const IconMission = (p: IconProps) => (
   <Svg {...p}><rect x="3.5" y="4.5" width="17" height="15" rx="1.6" /><path d="M3.5 9.5h17" /><path d="M8 14h8" /></Svg>
 );
+export const IconJournal = (p: IconProps) => (
+  <Svg {...p}><path d="M12 6.5c-1.8-1.4-4.4-2-7.5-2v13c3.1 0 5.7.6 7.5 2 1.8-1.4 4.4-2 7.5-2v-13c-3.1 0-5.7.6-7.5 2Z" /><path d="M12 6.5v13" /></Svg>
+);
+export const IconImport = (p: IconProps) => (
+  <Svg {...p}><path d="M12 3.5v11" /><path d="m7.5 10 4.5 4.5 4.5-4.5" /><path d="M4.5 16.5v2a1 1 0 0 0 1 1h13a1 1 0 0 0 1-1v-2" /></Svg>
+);
+export const IconTag = (p: IconProps) => (
+  <Svg {...p}><path d="M3.5 12.2V4.5a1 1 0 0 1 1-1h7.7l8.3 8.3a1 1 0 0 1 0 1.4l-6.9 6.9a1 1 0 0 1-1.4 0Z" /><circle cx="8" cy="8" r="1.4" /></Svg>
+);

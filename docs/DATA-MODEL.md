@@ -181,12 +181,47 @@ Added to satisfy **CMS-01**, which is a Must. Decision D-08 / conflict C3.
 | ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
 | **Purpose**       | Editable Journal content.                                                                                                                |
 | **Source**        | PRD §28; Tech Spec §39; CMS-01                                                                                                           |
-| **MVP**           | **Deferrable from the Academy build.** These are public-site scope (D-02). Schema exists so CMS-01 has a home; **no admin UI is built.** |
+| **MVP**           | **In scope since D-123** (Journal CMS). Extended, not replaced, by the Journal CMS migration — see the Journal section below.            |
 | **Relationships** | `journal_categories` 1:N → `journal_articles`                                                                                            |
 | **Notes**         | Safe to drop from the first deployment if the public site stays on its existing implementation. Nothing in the Academy reads them.       |
 
 `profiles.is_admin` was added in the same migration — a manual flag with no
 self-service route, gating the eventual admin.
+
+---
+
+## Journal CMS (migration `20261014120000_journal_cms.sql`, D-123 … D-129)
+
+Requirement: CMS-01 / PRD §28 "Journal articles; Journal categories", made a
+current requirement by the Journal CMS brief of 2026-10-14 (D-123), which
+names collaborative editing, internal comments, mandatory approval of an
+exact version, scheduling, revision history and Medium migration.
+**None of these tables holds child data** (Brief §46): the only people in them
+are staff accounts, by profile id.
+
+The existing `journal_articles` and `journal_categories` are **extended, not
+duplicated**. `journal_articles` also carries the schedule (`scheduled_for`,
+`scheduled_revision_id`, `scheduled_by`, `scheduled_hash`,
+`schedule_attempts`) used by the pg_cron job (D-132). `journal_articles` becomes identity + live pointer; its 0002
+content columns are relaxed (nullable), kept, and backfilled into revision 1.
+
+| Table | Requirement it serves | Why an existing table can't carry it |
+| --- | --- | --- |
+| `journal_staff` | Writer / reviewer / editor roles (D-124) | `profiles.is_admin` is one flag; three roles with different powers need rows. Admins keep all powers. |
+| `journal_revisions` | Versions, preview, publication of an exact version, live preserved while a new version is drafted | Publication and review bind to an immutable snapshot; one row per article cannot hold "live" and "being edited" at once. |
+| `journal_media` | Featured and inline images; public only while live | Mission media is per mission version and admin-only; the visibility rule here is different. |
+| `journal_article_members` | Who may edit an article (collaboration) | — |
+| `journal_review_assignments` | Reviewer assignment | — |
+| `journal_review_decisions` | Optional formal approve / request-changes, bound to a content hash (D-130: never a publishing gate) | A decision is a record of its own, not an audit line. |
+| `journal_comments` | Internal editorial comments (staff-only) | — |
+| `journal_revision_changes` | Change attribution (who saved which fields) | — |
+| `journal_audit` | Auditability of workflow events | No FK to the article, so the record survives a deleted draft. |
+| `journal_import_sources` | Duplicate detection / safe re-import (Medium post id → article) | — |
+| `journal_import_runs`, `journal_import_items` | Import reports | — |
+
+No client role may write any of these; every write is a `journal_*`
+security-definer function. Anon has no SELECT on any of them except the
+publicly readable `journal_categories`.
 
 ---
 

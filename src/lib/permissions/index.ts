@@ -50,6 +50,7 @@ export class AccessError extends Error {
       | "not_entitled"
       | "not_this_childs_record"
       | "not_admin"
+      | "not_journal_staff"
       | "not_found",
   ) {
     super(message);
