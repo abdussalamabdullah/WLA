@@ -54,17 +54,41 @@ All three are QA-only accounts on `@wla-staging.test`, a reserved
 non-routable TLD. No real personal address is involved. Email confirmation was
 pre-set, so none of them needs an inbox.
 
-| | Email | Password | Role |
-| --- | --- | --- | --- |
-| **A** | `wla-review-admin@wla-staging.test` | `***REMOVED***` | parent + `is_admin = true` |
-| **B** | `wla-review-parent@wla-staging.test` | `***REMOVED***` | ordinary parent, `is_admin = false` |
-| **C** | `wla-review-family@wla-staging.test` | `***REMOVED***` | ordinary parent, `is_admin = false` |
+| | Role |
+| --- | --- |
+| **A** | parent + `is_admin = true` |
+| **B** | ordinary parent, `is_admin = false` |
+| **C** | ordinary parent, `is_admin = false` |
+
+**Credentials are not kept in this repository.** The passwords that were
+published here on 2026-09-29 were rotated on 2026-10-14 23:43 UTC and every
+session of A, B and C was revoked; the old values no longer work.
+
+To get access for authorised local QA:
+
+1. Ask the project owner for the current credentials, shared privately (not by
+   commit, issue, pull request or chat log).
+2. Keep them only in the git-ignored file `.env.staging-qa` at the repository
+   root, readable only by you:
+
+   ```
+   WLA_QA_A_EMAIL=…
+   WLA_QA_A_PASSWORD=…
+   WLA_QA_B_EMAIL=…
+   WLA_QA_B_PASSWORD=…
+   WLA_QA_C_EMAIL=…
+   WLA_QA_C_PASSWORD=…
+   ```
+
+   then `chmod 600 .env.staging-qa`. The same names can instead be set as
+   environment variables.
+3. The staging scripts read them through `scripts/qa-accounts.mjs`, which
+   refuses a file other users can read and never prints a value.
 
 Sign in at **http://localhost:3000/login**.
 
-These are temporary review passwords for a staging backend and are the only
-credentials disclosed anywhere in this pack. No service-role key, database
-password, Stripe secret, webhook secret or session token appears here.
+No password, service-role key, database password, Stripe secret, webhook
+secret or session token appears in this pack. Never add one.
 
 ### Admin QA state cleanup
 
@@ -79,7 +103,7 @@ admin_mission_stats() as review-family          → HTTP 400  P0001 "not_admin"
 admin_mission_stats() as QA parent B (demoted)  → HTTP 400  P0001 "not_admin"
 
 select email from profiles where is_admin       → exactly one row:
-                                                   wla-review-admin@wla-staging.test
+                                                    account A
 ```
 
 And through the app: `/admin` returns 200 only for account A; accounts B and C
@@ -198,7 +222,7 @@ sends to `/login` — but it arrives in two hops rather than one.
 
 ## 3. Six Names review links
 
-Sign in as **B — `wla-review-parent@wla-staging.test`**, open
+Sign in as **B** (credentials: §1), open
 `/academy/my-missions`, choose a child, then:
 
 - Mission Home — http://localhost:3000/academy/missions/six-names
@@ -274,7 +298,7 @@ events; that is pre-existing QA noise, not a product fault.
 
 ## 5. Multi-child test
 
-**Account:** `wla-review-family@wla-staging.test` / `***REMOVED***`
+**Account:** C (credentials: §1)
 
 | | Child 1 | Child 2 |
 | --- | --- | --- |
@@ -301,7 +325,7 @@ both Layla's profile and her progress; and the gated screen RPC returned
 
 ## 6. Admin review links
 
-Sign in as **A — `wla-review-admin@wla-staging.test`**.
+Sign in as **A** (credentials: §1).
 
 - Mission catalogue — http://localhost:3000/admin
 - Six Names editor — http://localhost:3000/admin/missions/six-names

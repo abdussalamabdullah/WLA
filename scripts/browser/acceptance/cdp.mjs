@@ -2,6 +2,7 @@
 import { spawn } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { setTimeout as sleep } from "node:timers/promises";
+import { qaAccount } from "../../qa-accounts.mjs";
 
 export const BASE = process.env.BASE ?? "http://localhost:3100";
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
@@ -199,10 +200,12 @@ export async function parentCookies(email, password) {
   return JSON.parse(readFileSync(out, "utf8"));
 }
 
+// Staging QA review accounts: from the environment or the private, git-ignored
+// .env.staging-qa (scripts/qa-accounts.mjs) — never written in this file.
 export const ACCOUNTS = {
-  admin: ["wla-review-admin@wla-staging.test", "***REMOVED***"],
-  parent: ["wla-review-parent@wla-staging.test", "***REMOVED***"],
-  family: ["wla-review-family@wla-staging.test", "***REMOVED***"],
+  get admin() { return qaAccount("admin"); },
+  get parent() { return qaAccount("parent"); },
+  get family() { return qaAccount("family"); },
 };
 
 let pass = 0, fail = 0; const failures = [];

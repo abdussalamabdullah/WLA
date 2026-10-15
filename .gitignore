@@ -48,3 +48,6 @@ skills-lock.json
 
 # acceptance QA state (credentials for throwaway QA accounts)
 scripts/browser/acceptance/*.json
+# session cookies written by scripts/browser/acceptance/cdp.mjs (parentCookies)
+# into the directory it is run from — they hold live auth tokens
+ck-*.json

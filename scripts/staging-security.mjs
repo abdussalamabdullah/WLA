@@ -17,15 +17,18 @@
  * Usage: node scripts/staging-security.mjs
  */
 import { readFileSync } from "node:fs";
+import { qaAccount } from "./qa-accounts.mjs";
 
 const env = readFileSync(new URL("../.env.local", import.meta.url), "utf8");
 const SB_URL = /NEXT_PUBLIC_SUPABASE_URL=(.+)/.exec(env)[1].trim();
 const SB_ANON = /NEXT_PUBLIC_SUPABASE_ANON_KEY=(.+)/.exec(env)[1].trim();
 
+// Staging QA review accounts: from the environment or the private, git-ignored
+// .env.staging-qa (scripts/qa-accounts.mjs) — never written in this file.
 const ACCOUNTS = {
-  admin:  ["wla-review-admin@wla-staging.test",  "***REMOVED***"],
-  parent: ["wla-review-parent@wla-staging.test", "***REMOVED***"],
-  family: ["wla-review-family@wla-staging.test", "***REMOVED***"],
+  get admin() { return qaAccount("admin"); },
+  get parent() { return qaAccount("parent"); },
+  get family() { return qaAccount("family"); },
 };
 
 let pass = 0, fail = 0;
