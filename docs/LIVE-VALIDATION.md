@@ -514,13 +514,13 @@ cluster above has.
 
 ## Hosted staging deployment — 2026-10-11
 
-Commit `2905cd7` pushed to `origin/academy-mvp` (fast-forward from `ec1bcab`),
+Commit `2905cd7` (now `3d044fd`) pushed to `origin/academy-mvp` (fast-forward from `ec1bcab`, now `2ca9923`),
 then migration `20261010120000_seeded_mission_version_lifecycle` applied to
 hosted staging. Staging is now at **`20261010120000`** (38 migrations). No
 frontend was deployed: there is no staging frontend, and GitHub shows no
 Vercel status or deployment on the repo. Production untouched.
 
-**Re-run before pushing `2905cd7`:** the three runners above (64 / 64, 64 / 64,
+**Re-run before pushing `2905cd7` (now `3d044fd`):** the three runners above (64 / 64, 64 / 64,
 166 / 166), `npm test` (751 / 751, 39 files), `npm run typecheck` and
 `npm run lint` clean.
 

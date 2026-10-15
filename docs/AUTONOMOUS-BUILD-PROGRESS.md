@@ -4,7 +4,7 @@ Scope authority: `docs/source/WLA Academy Enhancement Plan.md` (approved
 2026-10-04) on top of the amended Academy Architecture. Technical design:
 `docs/FOUNDATION-ARCHITECTURE.md`. Decisions: `docs/DECISIONS.md` D-73 onward.
 
-Baseline: commit `5293356` (user). 476 tests, 26/26 migrations on staging.
+Baseline: commit `480eb42` (user). 476 tests, 26/26 migrations on staging.
 
 ---
 
@@ -80,7 +80,7 @@ in the page source: gone.
 
 ## Phase 2 — Mission Control v2 and analytics reporting · COMPLETE
 
-Committed as `2d52d3e` and `2b922ee`: levelled, state-aware support with recovery items and central
+Committed as `152144d` and `5ae3d5c`: levelled, state-aware support with recovery items and central
 reporting; `admin_mission_insights` (0029) answering the plan's §11 questions from aggregates only.
 
 ---
@@ -94,7 +94,7 @@ unlocks, events, variants, pools, checkpoints, workspaces, stages, completion; J
 device frames, state inspector and jump-to-state; rollback (new draft from any version); duplication
 (`admin_duplicate_mission`, 0030, copies in-database with Kit files copied by the action).
 
-**Migrations:** 0030. **Tests:** security regression 114/0 (duplication checks). Commit `293faf5`.
+**Migrations:** 0030. **Tests:** security regression 114/0 (duplication checks). Commit `ff0cd4e`.
 
 ---
 
@@ -275,14 +275,14 @@ checklist, exact-resource QR — built and tested (4 unit tests, browser QR anch
 
 Started from the verification of 2026-10-05 (MORE IMPLEMENTATION REQUIRED).
 
-**Implementation (commit `5f9a33d`, D-100–D-104):** code/cipher attempts emitted (the insights metric was always 0);
+**Implementation (commit `d590257`, D-100–D-104):** code/cipher attempts emitted (the insights metric was always 0);
 interruption-proof drafts for response, multi-choice, tracker and sort; Account: each child's missions with
 status, privacy and permissions, approved support copy; printables in WLA typefaces with fit, conditional fields,
 per-variant images and pages, and print-output QA per variant; authority-backed age (7–15) and language checks,
 reading-level rules explicitly not applied (OPEN-15); Mission Control return invariant tested and enforced;
 object recognition assessed as not required by any approved mission.
 
-**QA through the real UI (commit `28f7f48`, D-105, D-106):**
+**QA through the real UI (commit `443d51b`, D-105, D-106):**
 - `forms-lifecycle.mjs` 29/29 — a mission built only through the generated forms, condition builder and
   mission-logic editor; publish; rollback to a v2 draft edited through the forms; duplication with files.
 - `forms-learner.mjs` 26/26 — pool, event, Mission Control audio, video + captions + transcript, layers, a real
@@ -294,6 +294,6 @@ object recognition assessed as not required by any approved mission.
 **Defects found by these runs and fixed:** D-105 (mission QA could not open a stage after a real-world interval, so
 such missions could not be published); D-106 (header and stats grids overflowed at 200% text on phones).
 
-**Final regression on `28f7f48`:** Six Names six branches 216/216 (fresh children, one pass); mechanics 21/21;
+**Final regression on `443d51b`:** Six Names six branches 216/216 (fresh children, one pass); mechanics 21/21;
 account 6/6; a11y 52/52; staging security 67/0; staging lifecycle 54/0; local security 166/0; Six Names SQL 64/0;
 712 unit tests. Report: `docs/AUTONOMOUS-BUILD-COMPLETION-REPORT.md`.

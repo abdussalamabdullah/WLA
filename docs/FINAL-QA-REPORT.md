@@ -1,6 +1,6 @@
 # WLA Academy — Final QA Report
 
-Branch `academy-mvp`, code under test **`28f7f48`** (HEAD `0c404f9` is docs only). Executed 2026-10-05 against a
+Branch `academy-mvp`, code under test **`443d51b`** (HEAD `b916230` is docs only). Executed 2026-10-05 against a
 production build (`next build` + `next start`, port 3100) on **staging** Supabase (`zvquddwdcysgrcuvywqw`).
 No application code, migration, seed or Six Names content was changed during Final QA. The only additions are
 the QA scripts named below and this report.
@@ -20,7 +20,7 @@ them affects learner safety, sibling isolation, state authority or Six Names.
 
 | Item | Result |
 | --- | --- |
-| Commit / tree | `0c404f9` (code `28f7f48`). Clean except the untracked, deliberately uncommitted `docs/CURRENT-MANUAL-QA-ACCESS-PACK.md` and the new QA scripts |
+| Commit / tree | `b916230` (code `443d51b`). Clean except the untracked, deliberately uncommitted `docs/CURRENT-MANUAL-QA-ACCESS-PACK.md` and the new QA scripts |
 | Migrations | 37 local, 37 staging, latest `20261004200000`, in parity |
 | Typecheck | clean |
 | Lint | 0 errors, 2 warnings (LOW-4) |
