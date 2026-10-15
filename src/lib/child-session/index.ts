@@ -98,7 +98,9 @@ export async function getChildSession(): Promise<ChildSession | null> {
 /** The session service could not be reached — retryable, not "signed out". */
 export class ChildSessionUnavailableError extends Error {
   constructor(detail = "") {
-    super(`Child session check failed${detail ? `: ${detail.slice(0, 60)}` : ""}`);
+    super(
+      `Child session check failed${detail ? `: ${detail.slice(0, 60)}` : ""}`,
+    );
     this.name = "ChildSessionUnavailableError";
   }
 }

@@ -85,7 +85,6 @@ export async function acquireMission({
     .eq("slug", missionSlug)
     .eq("published", true)
     .maybeSingle();
-
   if (!mission) {
     throw new CheckoutError("That mission isn't available.", "not_purchasable");
   }

@@ -1,5 +1,10 @@
 import Link from "next/link";
-import { AdminPage, DataTable, Td, StatusTag } from "@/components/admin/admin-page";
+import {
+  AdminPage,
+  DataTable,
+  Td,
+  StatusTag,
+} from "@/components/admin/admin-page";
 import { NewMissionForm } from "@/components/admin/new-mission-form";
 import { requireAdmin } from "@/lib/permissions";
 
@@ -49,7 +54,10 @@ export default async function BuilderIndexPage() {
               Nothing is being built right now.
             </p>
           ) : (
-            <DataTable caption="Drafts in progress" columns={["Mission", "Version", "Status", "Last change", ""]}>
+            <DataTable
+              caption="Drafts in progress"
+              columns={["Mission", "Version", "Status", "Last change", ""]}
+            >
               {(drafts ?? []).map((d) => {
                 const m = byId.get(d.mission_id);
                 if (!m) return null;
@@ -57,9 +65,21 @@ export default async function BuilderIndexPage() {
                   <tr key={`${d.mission_id}-${d.version}`}>
                     <Td>{m.title}</Td>
                     <Td>v{d.version}</Td>
-                    <Td><StatusTag status={d.status} /></Td>
-                    <Td>{new Date(d.updated_at).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</Td>
                     <Td>
+                      <StatusTag status={d.status} />
+                    </Td>
+                    <Td>
+                      {new Date(d.updated_at).toLocaleDateString("en-GB", {
+                        day: "numeric",
+                        month: "short",
+                      })}
+                    </Td>
+                    <Td>
+                      <Link
+                        href={`/admin/builder/${m.slug}/${d.version}`}
+                        className="inline-flex min-h-[var(--target-min)] items-center underline decoration-[var(--color-border-strong)] underline-offset-4"
+                      >
+                        Open
                       <Link href={`/admin/builder/${m.slug}/${d.version}`} className="inline-flex min-h-[var(--target-min)] items-center underline decoration-[var(--color-border-strong)] underline-offset-4">
                         Open<span className="sr-only"> {m.title} version {d.version}</span>
                       </Link>
