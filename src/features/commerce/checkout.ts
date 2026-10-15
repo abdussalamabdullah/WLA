@@ -282,12 +282,26 @@ async function createCheckoutSession({
         parent_id: user.id,
       },
     });
-  } catch {
+  } catch (error) {
+    console.error("Stripe Checkout creation failed:", {
+      error,
+      missionId: mission.id,
+      currency: mission.currency,
+      priceMinor: mission.price_minor,
+    });
+
     throw new CheckoutError(
       "We couldn't start the payment. Please try again.",
       "provider",
     );
   }
+
+  // catch {
+  //   throw new CheckoutError(
+  //     "We couldn't start the payment. Please try again. maybe tomorrow",
+  //     "provider",
+  //   );
+  // }
 
   if (!session.url) {
     throw new CheckoutError("We couldn't start the payment.", "provider");

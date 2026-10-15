@@ -24,12 +24,17 @@ export async function getPublicMissionFacts(
   slug: string,
 ): Promise<PublicMissionFacts | null> {
   const supabase = await createClient();
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("missions")
     .select("duration, price_minor, currency, is_free")
     .eq("slug", slug)
     .eq("published", true)
     .maybeSingle();
+  if (error) {
+    console.error("Failed to fetch public mission facts:", error);
+    return null;
+  }
+  console.log(data);
   if (!data) return null;
 
   return {

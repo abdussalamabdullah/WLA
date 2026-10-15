@@ -17,9 +17,9 @@ export const metadata = { title: "Missions" };
  * at the lighter raised tone and drops to Warm Cream for its quieter bands.
  */
 export default async function MissionsPage() {
-  const facts = await Promise.all(
-    PUBLIC_MISSIONS.map((m) => getPublicMissionFacts(m.slug)),
-  );
+  const [facts] = await Promise.all([
+    Promise.all(PUBLIC_MISSIONS.map((m) => getPublicMissionFacts(m.slug))),
+  ]);
 
   return (
     <main className="wla-band-raised">
@@ -43,7 +43,7 @@ export default async function MissionsPage() {
       >
         <div className="wla-container wla-split lg:items-center">
           <div className="lg:col-span-5">
-            <p className="text-[length:var(--text-eyebrow)] uppercase tracking-[var(--tracking-eyebrow)] text-[var(--color-text-muted)]">
+            <p className="text-[length:var(--text-eyebrow)] tracking-[var(--tracking-eyebrow)] text-[var(--color-text-muted)] uppercase">
               Try WLA
             </p>
             <h2
@@ -100,8 +100,7 @@ export default async function MissionsPage() {
               Not sure which mission fits?
             </p>
             <p className="mt-[var(--space-s)] text-[length:var(--text-small)] text-[var(--color-text-muted)]">
-              Explore the five Labs to see the different ways children
-              practise.
+              Explore the five Labs to see the different ways children practise.
             </p>
             <ArrowLink href="/labs" className="mt-[var(--space-s)]">
               Explore the five Labs

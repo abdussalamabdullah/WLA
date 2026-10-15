@@ -160,7 +160,7 @@ function Fact({
 }) {
   return (
     <div className={className}>
-      <dt className="text-[length:var(--text-eyebrow)] font-medium uppercase tracking-[var(--tracking-eyebrow)] text-[var(--color-text-muted)]">
+      <dt className="text-[length:var(--text-eyebrow)] font-medium tracking-[var(--tracking-eyebrow)] text-[var(--color-text-muted)] uppercase">
         {term}
       </dt>
       <dd className="mt-[var(--space-m)] text-[length:var(--text-body)] leading-[var(--leading-relaxed)]">

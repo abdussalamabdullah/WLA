@@ -85,6 +85,29 @@ export type MissionRow = {
   updated_at: string;
 };
 
+export type JournalCategoryRow = {
+  id: string;
+  slug: string;
+  name: string;
+  description: string | null;
+  sort_order: number;
+  created_at: string;
+};
+
+export type JournalArticleRow = {
+  id: string;
+  slug: string;
+  title: string;
+  standfirst: string | null;
+  body: string;
+  category_id: string | null;
+  cover_image: string | null;
+  published: boolean;
+  published_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type MissionScreenRow = {
   id: string;
   mission_id: string;
@@ -521,6 +544,11 @@ export type Database = {
       missions: Table<
         MissionRow,
         "slug" | "title" | "lab" | "min_age" | "max_age"
+      >;
+      journal_categories: Table<JournalCategoryRow, "slug" | "name">;
+      journal_articles: Table<
+        JournalArticleRow,
+        "slug" | "title" | "body"
       >;
       mission_screens: Table<
         MissionScreenRow,

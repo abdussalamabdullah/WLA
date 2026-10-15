@@ -90,6 +90,8 @@ export async function createChildAction(
     .select("id, display_name")
     .single();
 
+  console.log("createChildAction: child", child, "error", error);
+
   if (error || !child) {
     return { error: "We couldn't add that profile. Please try again." };
   }
@@ -163,10 +165,19 @@ export async function updateChildAction(
 export async function deleteChildAction(childId: string) {
   const { child, supabase } = await requireOwnedChild(childId);
 
-  await supabase.from("child_profiles").delete().eq("id", child.id);
+  const { error } = await supabase
+    .from("child_profiles")
+    .delete()
+    .eq("id", child.id);
 
   // If the removed child was selected, clear it so no screen resolves to a
   // profile that no longer exists.
+
+  console.log("[deleteChildAction] Delete result:", {
+    childId: child.id,
+    error,
+  });
+
   if ((await getActiveChildId()) === child.id) {
     await clearActiveChild();
   }

@@ -43,7 +43,9 @@ export async function acquireMissionAction(
       missionSlug,
       origin: await requestOrigin(),
     });
+    console.log("[acquireMissionAction] Result:", result);
   } catch (error) {
+    console.error("[acquireMissionAction] Error:", error);
     if (error instanceof AccessError) {
       // Same message whichever way it failed — do not confirm whether some
       // other family's child id exists.
@@ -52,7 +54,8 @@ export async function acquireMissionAction(
     if (error instanceof CheckoutError) {
       return { error: error.message };
     }
-    return { error: "We couldn't add that mission. Please try again." };
+    console.error("acquireMissionAction failed:", error);
+    return { error: "We couldn't add that mission. Please try again.--tmr" };
   }
 
   /*

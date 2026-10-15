@@ -23,7 +23,12 @@ export default async function AccountPage() {
   let email: string | undefined;
   let children: { id: string; display_name: string }[] = [];
   let board: Awaited<ReturnType<typeof familyContributions>> = [];
-  let perChild: { id: string; name: string; missions: { title: string; slug: string; status: MissionStatus }[]; codeActive: boolean }[] = [];
+  let perChild: {
+    id: string;
+    name: string;
+    missions: { title: string; slug: string; status: MissionStatus }[];
+    codeActive: boolean;
+  }[] = [];
 
   try {
     const { user } = await requireParent();
@@ -31,12 +36,22 @@ export default async function AccountPage() {
     // Each child's missions and access code, for the whole family in three
     // reads (LOW-1) — scoped to this parent inside the queries.
     let family: Awaited<ReturnType<typeof getFamilyMissionCollections>>;
-    [children, board, family] = await Promise.all([listChildren(), familyContributions(), getFamilyMissionCollections()]);
+    [children, board, family] = await Promise.all([
+      listChildren(),
+      familyContributions(),
+      getFamilyMissionCollections(),
+    ]);
     perChild = family.map((c) => ({
       ...c,
-      missions: c.missions.map((m) => ({ title: m.mission.title, slug: m.mission.slug, status: m.status })),
+      missions: c.missions.map((m) => ({
+        title: m.mission.title,
+        slug: m.mission.slug,
+        status: m.status,
+      })),
     }));
-  } catch {
+  } catch (error) {
+    console.error("AccountPage failed to load:", error);
+
     return (
       <main className="wla-container py-[var(--space-2xl)]">
         <ErrorState title="We couldn't load your account." />
@@ -99,18 +114,27 @@ export default async function AccountPage() {
         Academy to that child (D-74). No purchase history or prices here.
       */}
       {perChild.length > 0 && (
-        <section aria-labelledby="account-children" className="mt-[var(--space-2xl)]">
-          <h2 id="account-children" className="text-[length:var(--text-h3)]">Missions</h2>
+        <section
+          aria-labelledby="account-children"
+          className="mt-[var(--space-2xl)]"
+        >
+          <h2 id="account-children" className="text-[length:var(--text-h3)]">
+            Missions
+          </h2>
           <ul className="mt-[var(--space-s)] flex flex-col gap-[var(--space-l)]">
             {perChild.map((c) => (
               <li key={c.id}>
                 <h3 className="font-medium">{c.name}</h3>
                 {c.missions.length === 0 ? (
-                  <p className="text-[length:var(--text-small)] text-[var(--color-text-muted)]">No missions yet.</p>
+                  <p className="text-[length:var(--text-small)] text-[var(--color-text-muted)]">
+                    No missions yet.
+                  </p>
                 ) : (
                   <ul className="mt-[var(--space-xs)] flex flex-col gap-[2px] text-[length:var(--text-small)]">
                     {c.missions.map((m) => (
-                      <li key={m.slug}>{m.title} — {STATUS_LABEL[m.status]}</li>
+                      <li key={m.slug}>
+                        {m.title} — {STATUS_LABEL[m.status]}
+                      </li>
                     ))}
                   </ul>
                 )}
@@ -126,44 +150,86 @@ export default async function AccountPage() {
         States only what the Academy already does (Architecture §3, §15, §16;
         D-58, D-73); the retention policy itself is OPEN-14 and is not invented.
       */}
-      <section aria-labelledby="privacy-permissions" className="mt-[var(--space-2xl)] border-t border-[var(--color-border)] pt-[var(--space-l)]">
-        <h2 id="privacy-permissions" className="text-[length:var(--text-h3)]">Privacy and permissions</h2>
-        <ul className="mt-[var(--space-s)] flex flex-col gap-[var(--space-s)] wla-measure">
-          <li>Each child&rsquo;s Mission Trail is private to them. Nothing in it is shared unless you give permission for the Mission Board.</li>
+      <section
+        aria-labelledby="privacy-permissions"
+        className="mt-[var(--space-2xl)] border-t border-[var(--color-border)] pt-[var(--space-l)]"
+      >
+        <h2 id="privacy-permissions" className="text-[length:var(--text-h3)]">
+          Privacy and permissions
+        </h2>
+        <ul className="wla-measure mt-[var(--space-s)] flex flex-col gap-[var(--space-s)]">
           <li>
-            Child access codes let a child open only their own missions — never purchases, settings or another child.
+            Each child&rsquo;s Mission Trail is private to them. Nothing in it
+            is shared unless you give permission for the Mission Board.
+          </li>
+          <li>
+            Child access codes let a child open only their own missions — never
+            purchases, settings or another child.
             {perChild.length > 0 && (
               <ul className="mt-[var(--space-xs)] flex flex-col gap-[2px] text-[length:var(--text-small)]">
                 {perChild.map((c) => (
                   <li key={c.id}>
                     {c.name}: {c.codeActive ? "a code is active" : "no code"} ·{" "}
-                    <Link href={`/account/children/${c.id}`} className="inline-flex min-h-[var(--target-min)] items-center underline decoration-[var(--color-border-strong)] underline-offset-4">
-                      Manage<span className="sr-only"> {c.name}&rsquo;s profile and code</span>
+                    <Link
+                      href={`/account/children/${c.id}`}
+                      className="inline-flex min-h-[var(--target-min)] items-center underline decoration-[var(--color-border-strong)] underline-offset-4"
+                    >
+                      Manage
+                      <span className="sr-only">
+                        {" "}
+                        {c.name}&rsquo;s profile and code
+                      </span>
                     </Link>
                   </li>
                 ))}
               </ul>
             )}
           </li>
-          <li>Deleting a child profile deletes their missions, progress and Mission Trail.</li>
+          <li>
+            Deleting a child profile deletes their missions, progress and
+            Mission Trail.
+          </li>
         </ul>
         {board.length > 0 ? (
           <BoardPermissions rows={board} nested />
         ) : (
-          <p className="mt-[var(--space-m)] wla-measure text-[length:var(--text-small)] text-[var(--color-text-muted)]">
-            Mission Board: nothing has been offered. If a child offers something, you&rsquo;ll decide here.
+          <p className="wla-measure mt-[var(--space-m)] text-[length:var(--text-small)] text-[var(--color-text-muted)]">
+            Mission Board: nothing has been offered. If a child offers
+            something, you&rsquo;ll decide here.
           </p>
         )}
       </section>
 
       {/* Help and support — the approved support copy (Website Master §10). */}
-      <section aria-labelledby="account-support" className="mt-[var(--space-2xl)] border-t border-[var(--color-border)] pt-[var(--space-l)]">
-        <h2 id="account-support" className="text-[length:var(--text-h3)]">Need help?</h2>
-        <p className="mt-[var(--space-xs)] wla-measure">Already have a mission? Find it in My Missions.</p>
+      <section
+        aria-labelledby="account-support"
+        className="mt-[var(--space-2xl)] border-t border-[var(--color-border)] pt-[var(--space-l)]"
+      >
+        <h2 id="account-support" className="text-[length:var(--text-h3)]">
+          Need help?
+        </h2>
+        <p className="wla-measure mt-[var(--space-xs)]">
+          Already have a mission? Find it in My Missions.
+        </p>
         <div className="mt-[var(--space-s)] flex flex-wrap gap-[var(--space-l)]">
-          <Link href="/academy/my-missions" className="inline-flex min-h-[var(--target-min)] items-center text-[length:var(--text-label)] underline decoration-[var(--color-border-strong)] underline-offset-4">Go to My Missions →</Link>
-          <Link href="/academy/help" className="inline-flex min-h-[var(--target-min)] items-center text-[length:var(--text-label)] underline decoration-[var(--color-border-strong)] underline-offset-4">Academy help →</Link>
-          <Link href="/missions" className="inline-flex min-h-[var(--target-min)] items-center text-[length:var(--text-label)] underline decoration-[var(--color-border-strong)] underline-offset-4">Explore Missions →</Link>
+          <Link
+            href="/academy/my-missions"
+            className="inline-flex min-h-[var(--target-min)] items-center text-[length:var(--text-label)] underline decoration-[var(--color-border-strong)] underline-offset-4"
+          >
+            Go to My Missions →
+          </Link>
+          <Link
+            href="/academy/help"
+            className="inline-flex min-h-[var(--target-min)] items-center text-[length:var(--text-label)] underline decoration-[var(--color-border-strong)] underline-offset-4"
+          >
+            Academy help →
+          </Link>
+          <Link
+            href="/missions"
+            className="inline-flex min-h-[var(--target-min)] items-center text-[length:var(--text-label)] underline decoration-[var(--color-border-strong)] underline-offset-4"
+          >
+            Explore Missions →
+          </Link>
         </div>
       </section>
 
@@ -173,9 +239,14 @@ export default async function AccountPage() {
         not in the repository yet (OPEN-15), so this states what the guide is
         and does not invent its content (D-75).
       */}
-      <section aria-labelledby="family-guide" className="mt-[var(--space-2xl)] border-t border-[var(--color-border)] pt-[var(--space-l)]">
-        <h2 id="family-guide" className="text-[length:var(--text-h3)]">Family Mission Guide</h2>
-        <p className="mt-[var(--space-xs)] wla-measure text-[var(--color-text-muted)]">
+      <section
+        aria-labelledby="family-guide"
+        className="mt-[var(--space-2xl)] border-t border-[var(--color-border)] pt-[var(--space-l)]"
+      >
+        <h2 id="family-guide" className="text-[length:var(--text-h3)]">
+          Family Mission Guide
+        </h2>
+        <p className="wla-measure mt-[var(--space-xs)] text-[var(--color-text-muted)]">
           How WLA missions work at home: choosing a child, My Missions, the
           Mission Kit and Mission Trail. The guide will be available here soon.
         </p>

@@ -1,6 +1,10 @@
 import "server-only";
 
-import { requireEntitledMission, requireOwnedChild, requireParent } from "@/lib/permissions";
+import {
+  requireEntitledMission,
+  requireOwnedChild,
+  requireParent,
+} from "@/lib/permissions";
 import { listChildren } from "@/features/children/queries";
 import type {
   MissionProgressRow,
@@ -46,13 +50,18 @@ export async function getMissionCollection(
 }
 
 type EntitlementRow = { mission_id: string; missions: unknown };
-type ProgressSummary = { mission_id: string; status: string; last_activity_at: string | null };
+type ProgressSummary = {
+  mission_id: string;
+  status: string;
+  last_activity_at: string | null;
+};
 
 /** One child's collection from their entitlement and progress rows, in My Missions order. */
-function buildCollection(entitlements: EntitlementRow[], progressRows: ProgressSummary[]): MissionCollectionItem[] {
-  const progressByMission = new Map(
-    progressRows.map((p) => [p.mission_id, p]),
-  );
+function buildCollection(
+  entitlements: EntitlementRow[],
+  progressRows: ProgressSummary[],
+): MissionCollectionItem[] {
+  const progressByMission = new Map(progressRows.map((p) => [p.mission_id, p]));
 
   const collection = entitlements
     .map((e) => {
@@ -99,7 +108,12 @@ function buildCollection(entitlements: EntitlementRow[], progressRows: ProgressS
  * and RLS applies to every read here as well.
  */
 export async function getFamilyMissionCollections(): Promise<
-  { id: string; name: string; missions: MissionCollectionItem[]; codeActive: boolean }[]
+  {
+    id: string;
+    name: string;
+    missions: MissionCollectionItem[];
+    codeActive: boolean;
+  }[]
 > {
   const { supabase } = await requireParent();
   const children = await listChildren();
@@ -107,11 +121,31 @@ export async function getFamilyMissionCollections(): Promise<
   const ids = children.map((c) => c.id);
 
   const [ent, prog, cred] = await Promise.all([
-    supabase.from("mission_entitlements").select("child_id, mission_id, missions(*)").in("child_id", ids).eq("status", "active"),
-    supabase.from("mission_progress").select("child_id, mission_id, status, last_activity_at").in("child_id", ids),
-    supabase.from("child_access_credentials").select("child_id").in("child_id", ids).is("revoked_at", null),
+    supabase
+      .from("mission_entitlements")
+      .select("child_id, mission_id, missions(*)")
+      .in("child_id", ids)
+      .eq("status", "active"),
+    supabase
+      .from("mission_progress")
+      .select("child_id, mission_id, status, last_activity_at")
+      .in("child_id", ids),
+    supabase
+      .from("child_access_credentials")
+      .select("child_id")
+      .in("child_id", ids)
+      .is("revoked_at", null),
   ]);
-  if (ent.error || prog.error || cred.error) throw new Error("family_collections_unavailable");
+  // if (ent.error || prog.error || cred.error) throw new Error("family_collections_unavailable");
+  if (ent.error || prog.error || cred.error) {
+    console.error("Family mission collections query failed:", {
+      entitlements: ent.error,
+      progress: prog.error,
+      credentials: cred.error,
+    });
+
+    throw new Error("family_collections_unavailable");
+  }
 
   const withCode = new Set((cred.data ?? []).map((c) => c.child_id));
   return children.map((c) => ({
