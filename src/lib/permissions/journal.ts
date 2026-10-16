@@ -46,8 +46,13 @@ export const requireJournalStaff = cache(async () => {
     supabase.from("journal_staff").select("role").eq("profile_id", user.id),
   ]);
   if (profileResult.error || rolesResult.error) {
-    throw new ServiceUnavailableError("requireJournalStaff");
-  }
+  console.error("Journal permission check failed:", {
+    profileError: profileResult.error,
+    rolesError: rolesResult.error,
+  });
+
+  throw new ServiceUnavailableError("requireJournalStaff");
+}
   const profile = profileResult.data;
   const roles = (rolesResult.data ?? []).map((r) => r.role);
   const caps = capabilitiesFor(Boolean(profile?.is_admin), roles);

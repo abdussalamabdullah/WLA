@@ -71,6 +71,9 @@ export async function createArticleAction(_prev: JournalState, fd: FormData): Pr
   if (title.length > 200) return { fieldErrors: { title: "Keep the title under 200 characters." } };
   const { data, error } = await s.supabase.rpc("journal_create_article", { p_title: title, p_slug: slugify(title) });
   if (error) {
+    if (error) {
+  console.error("Create article failed:", error);
+}
     // A title whose slug is taken still creates the article — without a slug.
     if (journalErrorCode(error) === "slug_taken") {
       const retry = await s.supabase.rpc("journal_create_article", { p_title: title, p_slug: "" });
