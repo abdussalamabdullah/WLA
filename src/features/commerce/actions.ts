@@ -7,6 +7,7 @@ import { acquireMission, CheckoutError } from "./checkout";
 import { AccessError } from "@/lib/permissions";
 import { setActiveChild } from "@/features/children/active-child";
 import type { FormState } from "@/features/auth/schemas";
+import { logError } from "@/lib/observability/logger";
 
 /**
  * Acquire a mission for a child.
@@ -43,9 +44,7 @@ export async function acquireMissionAction(
       missionSlug,
       origin: await requestOrigin(),
     });
-    console.log("[acquireMissionAction] Result:", result);
   } catch (error) {
-    console.error("[acquireMissionAction] Error:", error);
     if (error instanceof AccessError) {
       // Same message whichever way it failed — do not confirm whether some
       // other family's child id exists.
@@ -54,8 +53,8 @@ export async function acquireMissionAction(
     if (error instanceof CheckoutError) {
       return { error: error.message };
     }
-    console.error("acquireMissionAction failed:", error);
-    return { error: "We couldn't add that mission. Please try again.--tmr" };
+    logError("acquire_mission_failed", error, { missionSlug });
+    return { error: "We couldn't add that mission. Please try again." };
   }
 
   /*

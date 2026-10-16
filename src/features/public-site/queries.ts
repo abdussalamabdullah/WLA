@@ -2,6 +2,7 @@ import "server-only";
 
 import { createClient } from "@/lib/supabase/server";
 import { formatPrice } from "@/lib/utils";
+import { logError } from "@/lib/observability/logger";
 
 export type PublicMissionFacts = {
   duration: string | null;
@@ -31,10 +32,9 @@ export async function getPublicMissionFacts(
     .eq("published", true)
     .maybeSingle();
   if (error) {
-    console.error("Failed to fetch public mission facts:", error);
+    logError("public_mission_facts_failed", error, { slug });
     return null;
   }
-  console.log(data);
   if (!data) return null;
 
   return {

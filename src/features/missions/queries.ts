@@ -12,6 +12,7 @@ import type {
   MissionRow,
   MissionStatus,
 } from "@/types/database";
+import { logError } from "@/lib/observability/logger";
 
 /** A mission as My Missions needs it: identity + this child's status. */
 export type MissionCollectionItem = {
@@ -136,12 +137,11 @@ export async function getFamilyMissionCollections(): Promise<
       .in("child_id", ids)
       .is("revoked_at", null),
   ]);
-  // if (ent.error || prog.error || cred.error) throw new Error("family_collections_unavailable");
   if (ent.error || prog.error || cred.error) {
-    console.error("Family mission collections query failed:", {
-      entitlements: ent.error,
-      progress: prog.error,
-      credentials: cred.error,
+    logError("family_collections_failed", ent.error ?? prog.error ?? cred.error, {
+      entitlements: ent.error?.message ?? null,
+      progress: prog.error?.message ?? null,
+      credentials: cred.error?.message ?? null,
     });
 
     throw new Error("family_collections_unavailable");

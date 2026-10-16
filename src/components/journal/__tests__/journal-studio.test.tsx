@@ -280,6 +280,24 @@ describe("headings, words and focus", () => {
     await waitFor(() => expect(heading.closest("aside")).toHaveAttribute("hidden"));
   });
 
+  it("closing a panel returns focus to the button that opened it (Escape and Close)", async () => {
+    studio();
+    const toggle = screen.getByRole("button", { name: /Settings/ });
+    const heading = () => screen.getByRole("heading", { name: "Article settings" });
+    // A keyboard user activates the toggle while it has focus.
+    toggle.focus();
+    fireEvent.click(toggle);
+    await waitFor(() => expect(heading()).toHaveFocus());
+    fireEvent.keyDown(heading(), { key: "Escape" });
+    await waitFor(() => expect(toggle).toHaveFocus());
+
+    toggle.focus();
+    fireEvent.click(toggle);
+    await waitFor(() => expect(heading()).toHaveFocus());
+    fireEvent.click(within(heading().closest("aside")!).getByRole("button", { name: /Close/ }));
+    await waitFor(() => expect(toggle).toHaveFocus());
+  });
+
   it("archive and delete stay out of the writing flow, inside Settings, for editors only", () => {
     studio({ isEditor: false });
     expect(screen.queryByRole("button", { name: "Archive" })).toBeNull();

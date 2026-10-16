@@ -8,6 +8,7 @@ import { ErrorState } from "@/components/system/states";
 import { listChildren } from "@/features/children/queries";
 import { requireParent } from "@/lib/permissions";
 import { OpenChildMissions } from "@/components/account/open-child-missions";
+import { logError } from "@/lib/observability/logger";
 
 export const metadata = { title: "Account" };
 
@@ -50,7 +51,7 @@ export default async function AccountPage() {
       })),
     }));
   } catch (error) {
-    console.error("AccountPage failed to load:", error);
+    logError("account_page_failed", error);
 
     return (
       <main className="wla-container py-[var(--space-2xl)]">

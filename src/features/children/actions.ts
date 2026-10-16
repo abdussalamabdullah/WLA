@@ -12,6 +12,7 @@ import {
 import { fieldErrorsFrom, type FormState } from "@/features/auth/schemas";
 import { issueChildAccessCode } from "@/features/child-auth/issue-code";
 import { safeNextOrNull } from "@/lib/safe-next";
+import { logError } from "@/lib/observability/logger";
 
 /**
  * Switch the active child.
@@ -168,14 +169,10 @@ export async function deleteChildAction(childId: string) {
     .delete()
     .eq("id", child.id);
 
+  if (error) logError("delete_child_failed", error, { childId: child.id });
+
   // If the removed child was selected, clear it so no screen resolves to a
   // profile that no longer exists.
-
-  console.log("[deleteChildAction] Delete result:", {
-    childId: child.id,
-    error,
-  });
-
   if ((await getActiveChildId()) === child.id) {
     await clearActiveChild();
   }
