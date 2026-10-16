@@ -90,8 +90,6 @@ export async function createChildAction(
     .select("id, display_name")
     .single();
 
-  console.log("createChildAction: child", child, "error", error);
-
   if (error || !child) {
     return { error: "We couldn't add that profile. Please try again." };
   }
