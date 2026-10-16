@@ -16,6 +16,8 @@ import { boundedFetch } from "./fetch";
  *   - granting a FREE mission, which has no session to act on either
  *   - gift redemption linking a gift record to a child profile
  *   - signing a Mission Kit file a child session was authorised for (D-64)
+ *   - signing a Journal image a private preview link was authorised for
+ *     (D-134, journal_preview_media_path decides; the route only signs)
  *   - the mission engine store (features/mission-engine/store.ts, D-80):
  *     loading and saving a run AFTER the parent permission chain or the
  *     token-derived child lookup has authorised it. State writes are

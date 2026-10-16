@@ -1,6 +1,6 @@
 # Connecting the Lovable `/journal` to the WLA Journal API
 
-**Status (2026-10-15):** ready to paste into Lovable. **Not yet in the Lovable
+**Status (2026-10-16):** ready to paste into Lovable. The listing was redesigned on 2026-10-16 (section 5). **Not yet in the Lovable
 project.** The Lovable project wasn't reachable from the WLA workspace (no local
 export or repository, no open editor session), so nothing in Lovable has been
 changed. The code below was built and verified in an isolated copy of Lovable's
@@ -59,7 +59,9 @@ Journal.
 > site or change any other page. Keep the current /journal hero/intro and closing
 > text, header, footer, fonts and colours exactly as they are. Replace only the
 > hard-coded featured, "Explore the Journal" and "Latest from the Journal" content
-> with the `<JournalFeed />` component from `src/components/journal/JournalFeed.tsx`.
+> with the `<JournalFeed />` component from `src/components/journal/JournalFeed.tsx`
+> (it brings its own section tabs, lead story, article rows, search, topics and
+> "Load more"; keep its layout — do not wrap the rows in cards).
 > Add a route `/journal/:slug` that renders `src/pages/JournalArticle.tsx`.
 > Import `src/journal-prose.css` in `src/main.tsx`. Add the dependency
 > `dompurify@3.2.6`. Read the API origin from `import.meta.env.VITE_WLA_API_BASE`
@@ -416,16 +418,28 @@ export const focusRing =
   "rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring";
 export const control = `inline-flex min-h-11 items-center ${focusRing}`;
 
-export function JournalLoading({ label = "Loading the Journal…" }: { label?: string }) {
+/** Placeholders shaped like the listing (a lead story, then rows), so nothing jumps. */
+export function JournalLoading({ label = "Loading the Journal…", lead = false }: { label?: string; lead?: boolean }) {
   return (
-    <div role="status" aria-live="polite" className="py-12 text-muted-foreground">
-      <span>{label}</span>
-      <div aria-hidden="true" className="mt-6 space-y-6">
-        {[0, 1, 2].map((i) => (
-          <div key={i} className="space-y-3">
-            <div className="h-3 w-24 rounded bg-muted" />
-            <div className="h-6 w-3/4 rounded bg-muted" />
+    <div role="status" aria-live="polite" className="text-muted-foreground">
+      <span className="sr-only">{label}</span>
+      <div aria-hidden="true" className="animate-pulse motion-reduce:animate-none">
+        {lead && (
+          <div className="space-y-3 border-b border-border pb-10">
+            <div className="aspect-video w-full rounded-sm bg-muted" />
+            <div className="h-3 w-32 rounded bg-muted" />
+            <div className="h-8 w-3/4 rounded bg-muted" />
             <div className="h-4 w-full rounded bg-muted" />
+          </div>
+        )}
+        {[0, 1, 2].map((i) => (
+          <div key={i} className="flex gap-6 border-b border-border py-8">
+            <div className="flex-1 space-y-3">
+              <div className="h-3 w-28 rounded bg-muted" />
+              <div className="h-6 w-3/4 rounded bg-muted" />
+              <div className="h-4 w-full rounded bg-muted" />
+            </div>
+            <div className="aspect-[3/2] w-24 rounded-sm bg-muted sm:w-40" />
           </div>
         ))}
       </div>
@@ -476,64 +490,89 @@ export function BackToJournal() {
 ### `src/components/journal/ArticleListItem.tsx`
 
 ```tsx
+import { useState, type Ref } from "react";
 import { Link } from "react-router-dom";
 
 import { isJournalMediaUrl } from "@/lib/journal/api";
 import { formatDate, readingTime } from "@/lib/journal/format";
 import type { JournalArticleSummary } from "@/lib/journal/types";
-import { control, focusRing } from "./JournalStates";
+import { focusRing } from "./JournalStates";
 
 /**
- * One entry: Category label · Title · Short excerpt · Reading time ·
- * Publication date (Public Website Master §5). The lead entry runs larger.
+ * One article in the Journal listing (Public Website Master §5: category,
+ * title, excerpt, reading time, date).
+ *
+ *  - `lead`: the newest article, Substack's "Latest post" — a large 16:9
+ *    image above a large title.
+ *  - row: Medium's feed row — "Section · Author" above a serif title, a one-
+ *    or two-line excerpt, date · reading time, and a small 3:2 picture on the
+ *    right. Rows are separated by hairlines, never boxed as cards.
+ *
+ * The whole title is the link (one tab stop per article); the picture repeats
+ * it for pointer users only. A picture that fails to load is simply dropped.
  */
-export function ArticleListItem({ article, lead = false }: { article: JournalArticleSummary; lead?: boolean }) {
+export function ArticleListItem({ article, lead = false, linkRef }: {
+  article: JournalArticleSummary; lead?: boolean; linkRef?: Ref<HTMLAnchorElement>;
+}) {
+  const [broken, setBroken] = useState(false);
   const date = formatDate(article.publishedAt);
-  const image = isJournalMediaUrl(article.featuredImage?.url) ? article.featuredImage : null;
+  const image = !broken && isJournalMediaUrl(article.featuredImage?.url) ? article.featuredImage : null;
   const href = `/journal/${article.slug}`;
+
+  const meta = (article.category || article.author) && (
+    <p className="text-sm text-muted-foreground">
+      {article.category && (<><span className="sr-only">Section: </span><span className="font-medium text-foreground">{article.category.name}</span></>)}
+      {article.category && article.author && <span aria-hidden="true"> · </span>}
+      {article.author && <span>{article.category ? "by " : "By "}{article.author.name}</span>}
+    </p>
+  );
+  const when = (
+    <p className="text-sm text-muted-foreground">
+      {date && <time dateTime={article.publishedAt ?? undefined}>{date}</time>}
+      {date && <span aria-hidden="true"> · </span>}
+      <span>{readingTime(article.readingMinutes)}</span>
+    </p>
+  );
+  const picture = (className: string, eager: boolean) => image && (
+    <Link to={href} tabIndex={-1} aria-hidden="true" className="block shrink-0">
+      <img
+        src={image.url}
+        alt=""
+        loading={eager ? "eager" : "lazy"}
+        decoding="async"
+        onError={() => setBroken(true)}
+        className={`${className} rounded-sm bg-muted object-cover`}
+      />
+    </Link>
+  );
+
+  if (lead) {
+    return (
+      <article>
+        {picture("aspect-video w-full", true)}
+        <div className={image ? "mt-6" : ""}>
+          {meta}
+          <h3 className="mt-2 font-serif text-3xl font-semibold leading-tight md:text-4xl">
+            <Link ref={linkRef} to={href} className={`${focusRing} hover:underline underline-offset-4`}>{article.title}</Link>
+          </h3>
+          {article.excerpt && <p className="mt-3 max-w-prose text-lg text-muted-foreground">{article.excerpt}</p>}
+          <div className="mt-3">{when}</div>
+        </div>
+      </article>
+    );
+  }
+
   return (
-    <article className={lead ? "grid gap-6 md:grid-cols-2 md:items-center" : "grid gap-4 sm:grid-cols-[1fr_auto]"}>
-      <div className={lead ? "" : "min-w-0"}>
-        {article.category && (
-          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-            <span className="sr-only">Section: </span>
-            {article.category.name}
-          </p>
-        )}
-        <h3 className={`mt-2 font-serif ${lead ? "text-3xl md:text-4xl" : "text-xl md:text-2xl"} leading-tight`}>
-          <Link to={href} className={`${focusRing} hover:underline underline-offset-4`}>{article.title}</Link>
+    <article className="flex items-start gap-4 sm:gap-8">
+      <div className="min-w-0 flex-1">
+        {meta}
+        <h3 className="mt-1.5 font-serif text-lg font-semibold leading-snug sm:text-xl md:text-2xl">
+          <Link ref={linkRef} to={href} className={`${focusRing} hover:underline underline-offset-4`}>{article.title}</Link>
         </h3>
-        {article.excerpt && <p className={`mt-3 max-w-prose text-muted-foreground ${lead ? "text-lg" : ""}`}>{article.excerpt}</p>}
-        <p className="mt-3 text-sm text-muted-foreground">
-          {article.author && <span>{article.author.name}</span>}
-          {article.author && (date || article.readingMinutes) ? <span aria-hidden="true"> · </span> : null}
-          {date && <time dateTime={article.publishedAt ?? undefined}>{date}</time>}
-          {date && <span aria-hidden="true"> · </span>}
-          <span>{readingTime(article.readingMinutes)}</span>
-        </p>
-        {article.tags.length > 0 && (
-          <ul className="mt-2 flex flex-wrap gap-x-4 text-sm" aria-label="Topics">
-            {article.tags.map((t) => (
-              <li key={t.slug}>
-                <Link to={`/journal?tag=${t.slug}`} className={`${control} text-muted-foreground underline underline-offset-4`}>
-                  #{t.label}
-                </Link>
-              </li>
-            ))}
-          </ul>
-        )}
+        {article.excerpt && <p className="mt-1.5 line-clamp-2 text-muted-foreground">{article.excerpt}</p>}
+        <div className="mt-3">{when}</div>
       </div>
-      {image && (
-        <Link to={href} tabIndex={-1} aria-hidden="true" className={lead ? "order-first md:order-none" : "hidden sm:block"}>
-          <img
-            src={image.url}
-            alt=""
-            loading={lead ? "eager" : "lazy"}
-            decoding="async"
-            className={lead ? "aspect-[4/3] w-full rounded-sm object-cover" : "h-28 w-40 rounded-sm object-cover"}
-          />
-        </Link>
-      )}
+      {picture("aspect-[3/2] w-24 sm:w-40", false)}
     </article>
   );
 }
@@ -542,7 +581,7 @@ export function ArticleListItem({ article, lead = false }: { article: JournalArt
 ### `src/components/journal/JournalFeed.tsx`
 
 ```tsx
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
@@ -552,10 +591,19 @@ import { ArticleListItem } from "./ArticleListItem";
 import { control, focusRing, JournalLoading, JournalMessage, JournalUnavailableMessage } from "./JournalStates";
 
 /**
- * The live part of /journal: sections, search, the article list and paging.
- * Everything comes from the WLA Journal API; nothing here is hard-coded
- * content. Filters live in the URL (?category=, ?tag=, ?q=, ?page=), so every
- * view can be linked to and the back button works.
+ * The live part of /journal, modelled on a Substack publication page and
+ * Medium's feed:
+ *   - sections as a tab strip ("All" + each category; scrolls sideways on a
+ *     phone), the current one marked in words and with aria-current, its
+ *     description beneath;
+ *   - the newest article as a large "Latest" story (unfiltered first page);
+ *   - every other article as a hairline-separated row with a small picture;
+ *   - beside the list on wide screens: search and Topics (tags);
+ *   - "Load more writing" appends the next page and moves focus to the first
+ *     new article.
+ * Everything comes from the WLA Journal API. Filters live in the URL
+ * (?category=, ?tag=, ?q=; ?page= is still honoured as a starting page), so
+ * every view can be linked to and the back button works.
  */
 const toSearch = (q: Partial<ListQuery>) => {
   const p = new URLSearchParams();
@@ -574,10 +622,11 @@ export function JournalFeed() {
 
   const categories = useQuery({ queryKey: ["journal", "categories"], queryFn: ({ signal }) => fetchCategories(signal), staleTime: 5 * 60_000, retry: retryOnce });
   const tags = useQuery({ queryKey: ["journal", "tags"], queryFn: ({ signal }) => fetchTags(signal), staleTime: 5 * 60_000, retry: retryOnce });
-  const articles = useQuery({
-    queryKey: ["journal", "articles", query],
-    queryFn: ({ signal }) => fetchArticles(query, signal),
-    placeholderData: keepPreviousData,
+  const articles = useInfiniteQuery({
+    queryKey: ["journal", "articles", { ...query }],
+    queryFn: ({ pageParam, signal }) => fetchArticles({ ...query, page: pageParam }, signal),
+    initialPageParam: query.page,
+    getNextPageParam: (last) => (last.pagination.hasMore ? last.pagination.page + 1 : undefined),
     staleTime: 30_000,
     retry: retryOnce,
   });
@@ -585,8 +634,11 @@ export function JournalFeed() {
   const [draft, setDraft] = useState(query.q ?? "");
   useEffect(() => setDraft(query.q ?? ""), [query.q]);
 
-  // After paging or filtering, move focus to the results heading.
+  // After filtering, focus moves to the results heading; after "Load more",
+  // to the first newly loaded article.
   const heading = useRef<HTMLHeadingElement>(null);
+  const firstNew = useRef<HTMLAnchorElement>(null);
+  const [focusFrom, setFocusFrom] = useState<number | null>(null);
   const firstRender = useRef(true);
   const key = toSearch(query);
   useEffect(() => {
@@ -594,142 +646,178 @@ export function JournalFeed() {
     heading.current?.focus();
   }, [key]);
 
+  const list = articles.data?.pages.flatMap((p) => p.data) ?? [];
+  useEffect(() => {
+    if (focusFrom !== null && list.length > focusFrom) { firstNew.current?.focus(); setFocusFrom(null); }
+  }, [focusFrom, list.length]);
+
   const onSearch = (e: FormEvent) => {
     e.preventDefault();
     const q = draft.trim().slice(0, 200);
     setParams(new URLSearchParams(toSearch({ ...query, q: q || null, page: 1 }).slice(1)));
   };
+  const loadMore = () => { setFocusFrom(list.length); void articles.fetchNextPage(); };
 
   const activeCategory = categories.data?.find((c) => c.slug === query.category) ?? null;
   const activeTag = tags.data?.find((t) => t.slug === query.tag) ?? null;
   const resultsTitle = query.q
     ? `Results for “${query.q}”`
-    : activeCategory?.name ?? (query.tag ? `Tagged “${activeTag?.label ?? query.tag.replace(/-/g, " ")}”` : query.category ? "This section" : "Latest from the Journal");
+    : query.tag ? `Tagged “${activeTag?.label ?? query.tag.replace(/-/g, " ")}”`
+    : activeCategory?.name ?? (query.category ? "This section" : "Latest from the Journal");
 
-  const list = articles.data?.data ?? [];
   const lead = !filtered && query.page === 1 ? list[0] : undefined;
   const rest = lead ? list.slice(1) : list;
+  const showTabs = !!categories.data && categories.data.length > 0;
+
+  const tab = (label: string, to: string, current: boolean) => (
+    <li key={to} className="shrink-0">
+      <Link
+        to={to}
+        aria-current={current ? "page" : undefined}
+        className={`${control} -mb-px border-b-2 px-1 text-sm ${current ? "border-foreground font-semibold text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+      >
+        {label}{current && <span className="sr-only"> (showing)</span>}
+      </Link>
+    </li>
+  );
 
   return (
-    <div className="space-y-14">
-      <form role="search" onSubmit={onSearch} className="flex max-w-xl flex-col gap-2 sm:flex-row sm:items-end">
-        <div className="flex-1">
-          <label htmlFor="journal-search" className="block text-sm font-medium">Search the Journal</label>
-          <input
-            id="journal-search"
-            type="search"
-            name="q"
-            maxLength={200}
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            className={`mt-1 min-h-11 w-full border border-border bg-background px-3 ${focusRing}`}
-          />
-        </div>
-        <button type="submit" className={`${control} justify-center bg-primary px-5 text-sm font-medium text-primary-foreground`}>
-          Search
-        </button>
-      </form>
-
-      {categories.data && categories.data.length > 0 && (
-        <section aria-labelledby="journal-explore">
-          <h2 id="journal-explore" className="font-serif text-2xl">Explore the Journal</h2>
-          <nav aria-label="Journal sections" className="mt-4">
-            <ul className="grid gap-x-10 gap-y-2 md:grid-cols-3">
-              {categories.data.map((c) => {
-                const current = c.slug === query.category;
-                return (
-                  <li key={c.slug}>
-                    <Link
-                      to={`/journal${toSearch({ category: c.slug })}`}
-                      aria-current={current ? "page" : undefined}
-                      className={`${control} font-serif text-lg ${current ? "font-semibold underline underline-offset-4" : "hover:underline underline-offset-4"}`}
-                    >
-                      {c.name}
-                      {current && <span className="ml-2 text-xs font-sans font-medium uppercase tracking-wider">(showing)</span>}
-                    </Link>
-                    {c.description && <p className="text-sm text-muted-foreground">{c.description}</p>}
-                  </li>
-                );
-              })}
-            </ul>
-          </nav>
-        </section>
-      )}
-
-      <section aria-labelledby="journal-results">
-        <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2">
-          <h2 id="journal-results" ref={heading} tabIndex={-1} className={`font-serif text-2xl ${focusRing}`}>{resultsTitle}</h2>
-          {filtered && (
-            <Link to="/journal" className={`${control} text-sm underline underline-offset-4`}>Show all writing</Link>
-          )}
-        </div>
-        {activeCategory?.description && <p className="mt-2 max-w-prose text-muted-foreground">{activeCategory.description}</p>}
-
-        {articles.isPending ? (
-          <JournalLoading />
-        ) : articles.isError ? (
-          <JournalUnavailableMessage onRetry={() => articles.refetch()} />
-        ) : list.length === 0 ? (
-          query.page > 1 ? (
-            <JournalMessage title="There’s nothing on this page">
-              <p><Link to={`/journal${toSearch({ ...query, page: 1 })}`} className={`${control} underline underline-offset-4`}>Go to the first page</Link></p>
-            </JournalMessage>
-          ) : filtered ? (
-            <JournalMessage title="Nothing matches yet">
-              <p>Try another word or section, or <Link to="/journal" className="underline underline-offset-4">read everything in the Journal</Link>.</p>
-            </JournalMessage>
-          ) : (
-            <JournalMessage title="New writing is on its way">
-              <p>Nothing has been published in the Journal yet. Please check back soon.</p>
-            </JournalMessage>
-          )
-        ) : (
-          <div aria-busy={articles.isFetching} className={articles.isPlaceholderData ? "opacity-60" : undefined}>
-            {lead && <div className="mt-8 border-b border-border pb-12"><ArticleListItem article={lead} lead /></div>}
-            <ol className="mt-8 space-y-10" aria-label="Articles">
-              {rest.map((a) => (
-                <li key={a.slug} className="border-b border-border pb-10 last:border-0"><ArticleListItem article={a} /></li>
-              ))}
-            </ol>
-          </div>
-        )}
-
-        {articles.data && (query.page > 1 || articles.data.pagination.hasMore) && (
-          <nav aria-label="Journal pages" className="mt-10 flex flex-wrap items-center justify-between gap-4 border-t border-border pt-6 text-sm">
-            {query.page > 1 ? (
-              <Link to={`/journal${toSearch({ ...query, page: query.page - 1 })}`} rel="prev" className={`${control} font-medium underline underline-offset-4`}>
-                ← Newer writing
-              </Link>
-            ) : <span />}
-            <span className="text-muted-foreground">Page {query.page}</span>
-            {articles.data.pagination.hasMore ? (
-              <Link to={`/journal${toSearch({ ...query, page: query.page + 1 })}`} rel="next" className={`${control} font-medium underline underline-offset-4`}>
-                Earlier writing →
-              </Link>
-            ) : <span />}
-          </nav>
-        )}
-      </section>
-
-      {tags.data && tags.data.length > 0 && (
-        <section aria-labelledby="journal-topics">
-          <h2 id="journal-topics" className="font-serif text-xl">Topics</h2>
-          <ul className="mt-3 flex flex-wrap gap-x-5 text-sm">
-            {tags.data.map((t) => (
-              <li key={t.slug}>
-                <Link
-                  to={`/journal${toSearch({ tag: t.slug })}`}
-                  aria-current={t.slug === query.tag ? "page" : undefined}
-                  className={`${control} underline underline-offset-4 ${t.slug === query.tag ? "font-semibold" : "text-muted-foreground"}`}
-                >
-                  #{t.label}{t.slug === query.tag && <span className="sr-only"> (showing)</span>}
-                </Link>
-              </li>
-            ))}
+    <div>
+      {showTabs && (
+        <nav aria-label="Journal sections" className="border-b border-border">
+          <ul className="-mx-4 flex gap-6 overflow-x-auto px-4 md:mx-0 md:px-0 [scrollbar-width:none]">
+            {tab("All", "/journal", !query.category && !query.tag && !query.q)}
+            {categories.data!.map((c) => tab(c.name, `/journal${toSearch({ category: c.slug })}`, c.slug === query.category))}
           </ul>
-        </section>
+        </nav>
       )}
+
+      <div className="mt-10 grid gap-x-16 gap-y-10 lg:grid-cols-[minmax(0,1fr)_16rem]">
+        {/* Search sits above the list on a phone, beside it on a wide screen. */}
+        <aside aria-label="Search and topics" className="space-y-10 lg:col-start-2 lg:row-start-1">
+          <form role="search" onSubmit={onSearch}>
+            <label htmlFor="journal-search" className="block text-sm font-medium">Search the Journal</label>
+            <div className="mt-1 flex gap-2">
+              <input
+                id="journal-search"
+                type="search"
+                name="q"
+                maxLength={200}
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                className={`min-h-11 w-full min-w-0 flex-1 border border-border bg-background px-4 ${focusRing}`}
+              />
+              <button type="submit" className={`${control} shrink-0 justify-center bg-primary px-5 text-sm font-medium text-primary-foreground`}>
+                Search
+              </button>
+            </div>
+          </form>
+
+          {tags.data && tags.data.length > 0 && (
+            <section aria-labelledby="journal-topics" className="hidden lg:block">
+              <TopicList id="journal-topics" tags={tags.data} current={query.tag} />
+            </section>
+          )}
+        </aside>
+
+        <section aria-labelledby="journal-results" className="min-w-0 lg:col-start-1 lg:row-start-1">
+          <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2">
+            <h2 id="journal-results" ref={heading} tabIndex={-1} className={`font-serif text-2xl ${lead ? "sr-only" : ""} ${focusRing}`}>{resultsTitle}</h2>
+            {filtered && (
+              <Link to="/journal" className={`${control} text-sm underline underline-offset-4`}>Show all writing</Link>
+            )}
+          </div>
+          {activeCategory?.description && !query.q && !query.tag && <p className="mt-2 max-w-prose text-muted-foreground">{activeCategory.description}</p>}
+
+          {articles.isPending ? (
+            <JournalLoading lead={!filtered && query.page === 1} />
+          ) : articles.isError && list.length === 0 ? (
+            <JournalUnavailableMessage onRetry={() => articles.refetch()} />
+          ) : list.length === 0 ? (
+            query.page > 1 ? (
+              <JournalMessage title="There’s nothing on this page">
+                <p><Link to={`/journal${toSearch({ ...query, page: 1 })}`} className={`${control} underline underline-offset-4`}>Go to the first page</Link></p>
+              </JournalMessage>
+            ) : filtered ? (
+              <JournalMessage title="Nothing matches yet">
+                <p>Try another word or section, or <Link to="/journal" className="underline underline-offset-4">read everything in the Journal</Link>.</p>
+              </JournalMessage>
+            ) : (
+              <JournalMessage title="New writing is on its way">
+                <p>Nothing has been published in the Journal yet. Please check back soon.</p>
+              </JournalMessage>
+            )
+          ) : (
+            <div aria-busy={articles.isFetching}>
+              {lead && (
+                <div className="border-b border-border pb-10">
+                  <p className="mb-4 text-xs font-semibold uppercase tracking-widest text-muted-foreground">Latest</p>
+                  <ArticleListItem article={lead} lead />
+                </div>
+              )}
+              {rest.length > 0 && (
+                <ol className={`divide-y divide-border ${lead ? "" : "mt-4"}`} aria-label="Articles">
+                  {rest.map((a, i) => (
+                    <li key={a.slug} className="py-8">
+                      <ArticleListItem article={a} linkRef={focusFrom !== null && i + (lead ? 1 : 0) === focusFrom ? firstNew : undefined} />
+                    </li>
+                  ))}
+                </ol>
+              )}
+            </div>
+          )}
+
+          {articles.hasNextPage && list.length > 0 && (
+            <div className="mt-6 border-t border-border pt-8 text-center">
+              <button
+                type="button"
+                onClick={loadMore}
+                disabled={articles.isFetchingNextPage}
+                className={`${control} justify-center border border-foreground px-6 text-sm font-medium disabled:opacity-60`}
+              >
+                {articles.isFetchingNextPage ? "Loading…" : "Load more writing"}
+              </button>
+              {articles.isFetchNextPageError && (
+                <p role="alert" className="mt-3 text-sm">That didn’t load. Please try again.</p>
+              )}
+            </div>
+          )}
+          <p className="sr-only" role="status" aria-live="polite">
+            {list.length > 0 && !articles.isPending ? `Showing ${list.length} ${list.length === 1 ? "article" : "articles"}.` : ""}
+          </p>
+        </section>
+
+        {tags.data && tags.data.length > 0 && (
+          <section aria-labelledby="journal-topics-narrow" className="lg:hidden">
+            <TopicList id="journal-topics-narrow" tags={tags.data} current={query.tag} />
+          </section>
+        )}
+      </div>
     </div>
+  );
+}
+
+function TopicList({ id, tags, current }: { id: string; tags: { slug: string; label: string }[]; current: string | null }) {
+  return (
+    <>
+      <h2 id={id} className="font-serif text-lg">Topics</h2>
+      <ul className="mt-3 flex flex-wrap gap-2 text-sm">
+        {tags.map((t) => {
+          const on = t.slug === current;
+          return (
+            <li key={t.slug}>
+              <Link
+                to={`/journal${toSearch({ tag: t.slug })}`}
+                aria-current={on ? "page" : undefined}
+                className={`${control} border px-4 ${on ? "border-foreground bg-foreground font-semibold text-background" : "border-border bg-muted hover:border-foreground"}`}
+              >
+                {t.label}{on && <span className="sr-only"> (showing)</span>}
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
+    </>
   );
 }
 ```
@@ -936,12 +1024,14 @@ function ArticleView({ article: a }: { article: Article }) {
 
 ## 5. Behaviour
 
-- **List** (`/journal`):
-  - URL-driven filters `?category=`, `?tag=`, `?q=` and `?page=`, so every view can be linked and the back button works. Values are validated before they reach the API.
-  - Newest first; on the unfiltered first page the newest article runs larger as the lead. The API has no "featured" flag, so none is invented.
-  - Each entry shows: category · title · excerpt · author · UK date · reading time · tags, plus the featured image where present.
-  - "Explore the Journal" lists the API's categories with their descriptions; "Topics" lists its tags. The current one is marked in words ("(showing)") and with `aria-current`, not by colour.
-  - Paging is "← Newer writing" / "Earlier writing →" (the API gives `hasMore`, no total). After paging or filtering, focus moves to the results heading.
+- **List** (`/journal`) — modelled on a Substack publication page (lead story) and Medium's feed (rows):
+  - **Sections** are a tab strip under the intro: **All** + each API category. It scrolls sideways inside itself on a phone (the page never does). The current tab is marked by an underline, bold weight, `aria-current="page"` and the words "(showing)" for screen readers — never colour alone. The current section's description appears above its list.
+  - **Latest**: on the unfiltered first page the newest article is a large lead — 16:9 image, "Section · by Author", a large serif title, the excerpt, date · reading time. The API has no "featured" flag, so none is invented.
+  - **Rows**: every other article is a row — "Section · by Author", serif title (the only link/tab stop; the picture repeats it for pointer users), a two-line-clamped excerpt, UK date · reading time, and a 3:2 picture on the right when it has one (96px wide on a phone, 160px above). Rows are separated by hairlines, never boxed as cards. A picture that fails to load is dropped and the row closes up.
+  - **Beside the list** (≥1024px): search and **Topics** (tags as pills, current one marked like the tabs). Below 1024px search sits above the list and Topics after it.
+  - **Load more writing** appends the next page (TanStack `useInfiniteQuery`; the API gives `hasMore`, no total) and moves focus to the first newly loaded article; a screen-reader status says how many are shown. A failed next page says so in place and keeps what is shown. `?page=` links still open on that page.
+  - Filters are in the URL (`?category=`, `?tag=`, `?q=`), validated before they reach the API; after filtering, focus moves to the results heading.
+  - **Loading**: placeholders shaped like the lead and rows (pulse disabled under reduced motion).
 - **Article** (`/journal/:slug`):
   - Shows: section, title (h1), standfirst, byline, date, reading time, "Updated" (only on a later UK day), "First published on Medium", featured image with its alt text, the body, and topics.
   - An old slug navigates (replace) to `movedTo`.
@@ -951,7 +1041,7 @@ function ArticleView({ article: a }: { article: Article }) {
   - External links get `rel="noopener noreferrer"`.
   - Requests use `credentials: "omit"` and time out after 8 s.
 - **States:**
-  - **Loading:** a skeleton.
+  - **Loading:** placeholders shaped like the listing.
   - **Empty:** "nothing published yet", "nothing matches", or "nothing on this page".
   - **Unavailable:** for 503, network error, timeout or missing configuration — a calm message with **Try again**. One automatic retry, none when not configured.
   - **Not found:** for any 404 (unknown, draft, scheduled, unpublished or archived slugs look the same), marked `noindex`.
@@ -966,35 +1056,27 @@ function ArticleView({ article: a }: { article: Article }) {
 
 ## 6. Verification
 
-**Verified (isolated copy of Lovable's usual stack, 2026-10-15):**
-- `tsc --noEmit`: exit 0.
-- Unit and page tests: **41/41**. They cover:
-  - configuration rules;
-  - parameter normalisation;
-  - requests with no credentials;
+**Verified (isolated copy of Lovable's usual stack, 2026-10-16, after the listing redesign):**
+- `tsc --noEmit`: exit 0. Production build: OK.
+- Unit and page tests: **44/44**. They cover:
+  - configuration rules; parameter normalisation; requests with no credentials;
   - 503, network failure, malformed JSON, wrong shape and timeout all map to "unavailable";
   - 404 and `movedTo`;
   - the sanitiser (every allowed element kept; scripts, handlers, styles, frames, `javascript:`/`data:`/`tel:` links and foreign images removed);
-  - UK dates;
-  - every page state;
-  - filters, search and paging;
-  - metadata.
-- **Mutation checks:** accepting any image URL, sending cookies, or allowing localhost in a published build each made tests fail.
-- **Real browser (headless Chrome), 53/53, run twice:**
-  - At 1440px and 390px:
-    - list and article render every contract field;
-    - every supported format renders;
-    - images load through the media redirect;
-    - no horizontal overflow;
-    - every control is at least 44px tall;
-    - keyboard focus is visible.
-  - Paging, section/tag filters and search work, and focus moves to the results heading.
-  - A hostile body never ran.
-  - The renamed-slug redirect works, and guessed slugs show not-found with `noindex`.
-  - **Against the real local WLA API** (cross-origin from another port): every endpoint returned 200 with no CORS error and no credentials. It showed the empty state (nothing is published locally), and a guessed slug was not-found.
-  - 503 and an unreachable API each showed the unavailable message with Try again.
-  - A **production build configured with `http://localhost:3000` refused it and sent no request**.
-- **Draft privacy at the API itself:** verified against the real local database on 2026-10-14 with real test articles, since removed. Drafts, scheduled-not-yet-due and unpublished articles returned 404 by slug and never appeared in list or search.
+  - UK dates; every page state; metadata;
+  - the listing: lead + rows, the section tab strip (All current, aria-current, "(showing)", description), tag and search filters, **Load more** (appends, focus to the first new article, disappears at the end, URL unchanged), a `?page=` start, a broken picture dropped.
+- **Mutation checks** (accepting any image URL, sending cookies, allowing localhost in a published build each made tests fail) were run on 2026-10-15 against the unchanged `lib/journal/*` files; they were not re-run after the listing redesign, which did not touch those files.
+- **Real browser (headless Chrome), 76/76:**
+  - At 1440px, 820px and 390px:
+    - list and article render every contract field; every supported format renders; images load through the media redirect;
+    - lead image is 16:9; row pictures are 3:2 and to the right of the title; rows are hairline-separated, not boxed; excerpts clamp to two lines;
+    - desktop: search and Topics sit beside the list; tablet/phone: tabs scroll inside their strip and search sits above the list;
+    - no horizontal overflow; every visible control is at least 44px tall.
+  - Desktop: keyboard focus is visible; **Load more** loaded the remaining 2 of 14 and moved focus to the first; the current section is shown by underline + weight + aria-current + words; section, tag and search filters work; search is `noindex`.
+  - A hostile body never ran. The renamed-slug redirect works; guessed slugs show not-found with `noindex`.
+  - **Against the real local WLA API** (cross-origin from another port): every endpoint returned 200 with no CORS error and no credentials. It listed the one published local article as the lead; tabs and Topics were absent because the API has no categories or tags. A guessed slug was not-found.
+  - 503 and an unreachable API each showed the unavailable message with Try again. A **production build configured with `http://localhost:3000` refused it and sent no request**.
+- **Draft privacy at the API itself (real local database, 2026-10-16):** both local drafts returned 404 by slug and did not appear in the list or search; the published article returned 200.
 
 **Still to check in Lovable, once it has a reachable API:**
 1. It builds in Lovable with the project's real dependencies and router.

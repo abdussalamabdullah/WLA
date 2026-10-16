@@ -91,6 +91,10 @@ create table if not exists storage.objects (
   created_at timestamptz default now(),
   metadata jsonb
 );
+-- Columns real Supabase storage has and Journal policies read (D-135).
+alter table storage.objects add column if not exists owner_id text;
+alter table storage.buckets add column if not exists file_size_limit bigint;
+alter table storage.buckets add column if not exists allowed_mime_types text[];
 alter table storage.objects enable row level security;
 grant select, insert, update, delete on storage.objects to anon, authenticated, service_role;
 grant select on storage.buckets to anon, authenticated, service_role;

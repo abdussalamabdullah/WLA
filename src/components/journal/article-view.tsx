@@ -32,8 +32,16 @@ export function formatJournalDate(iso: string | null): string | null {
   return Number.isNaN(d.getTime()) ? null : dateFormat.format(d);
 }
 
-export function ArticleView({ article }: { article: ArticleViewData }) {
-  const body = sanitizeArticleHtml(article.bodyHtml);
+/**
+ * `mediaSrc` serves the images from somewhere other than the staff media
+ * route — a private preview link uses its own, token-checked route (D-134).
+ * It is applied AFTER sanitising, to image URLs the allowlist already kept.
+ */
+export function ArticleView({ article, mediaSrc }: { article: ArticleViewData; mediaSrc?: (mediaId: string) => string }) {
+  const clean = sanitizeArticleHtml(article.bodyHtml);
+  const body = mediaSrc
+    ? clean.replace(/(<img[^>]*\ssrc=")\/api\/journal\/media\/([0-9a-f-]{36})"/g, (_m, pre: string, id: string) => `${pre}${mediaSrc(id)}"`)
+    : clean;
   const minutes = readingMinutes(wordCount(htmlToText(body)));
   const published = formatJournalDate(article.displayDate);
   const updated = formatJournalDate(article.updatedAt);
@@ -67,7 +75,7 @@ export function ArticleView({ article }: { article: ArticleViewData }) {
               which next/image would try to optimise and cache. */}
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src={mediaUrl(article.featuredMediaId)}
+            src={mediaSrc ? mediaSrc(article.featuredMediaId) : mediaUrl(article.featuredMediaId)}
             alt={article.featuredAlt ?? ""}
             className="block h-auto w-full rounded-[var(--radius-surface)]"
           />

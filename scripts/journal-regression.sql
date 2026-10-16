@@ -125,8 +125,10 @@ select chk('B1 anon has no SELECT on articles',
   try($$select count(*) from journal_articles$$) like '%permission denied%');
 select chk('B2 anon has no SELECT on revisions',
   try($$select count(*) from journal_revisions$$) like '%permission denied%');
-select chk('B3 the public list is empty while everything is draft',
-  (select count(*) from journal_public_list()) = 0);
+-- (Checked by this run's own slug, so it also holds on a real database that
+-- has published articles of its own.)
+select chk('B3 the public list gains nothing while everything here is draft',
+  (select count(*) from journal_public_list(null, null, null, 100, 0) where slug = 'first-light') = 0);
 select chk('B4 a draft slug is not served publicly',
   (select count(*) from journal_public_article('first-light')) = 0);
 select chk('B5b anon cannot reach the private schema at all',
@@ -667,6 +669,177 @@ reset role;
 select chk('K3 a never-published draft can be deleted, and the audit survives',
   not exists (select 1 from journal_articles where id = :'a2')
   and exists (select 1 from journal_audit where article_id = :'a2' and action = 'deleted'));
+
+-- ===========================================================================
+\echo ======================== P. Private preview links (D-134) ================
+-- ===========================================================================
+select act(:W);
+select journal_create_article('Preview piece', 'preview-piece') as ap \gset
+select working_revision_id as rp from journal_articles where id = :'ap' \gset
+reset role;
+insert into storage.objects (bucket_id, name) values
+  ('journal-media', :'ap' || '/in-body.png'), ('journal-media', :'ap' || '/not-used.png');
+select act(:W);
+select journal_register_media(:'ap', :'ap' || '/in-body.png', 'image/png', 10, 'In body', null) as pm1 \gset
+select journal_register_media(:'ap', :'ap' || '/not-used.png', 'image/png', 10, null, null) as pm2 \gset
+select journal_save_revision(:'rp', 1, format('{"body_html":"<p>First draft.</p><figure><img src=\"/api/journal/media/%s\" alt=\"In body\"></figure>"}', :'pm1')::jsonb);
+select act(:PARENT);
+select chk('P1 a parent cannot make a preview link',
+  try(format($$select * from journal_create_preview_link(%L)$$, :'ap')) like '%not_allowed%');
+select act(:W2);
+select chk('P2 a writer who is not on the article cannot make one',
+  try(format($$select * from journal_create_preview_link(%L)$$, :'ap')) like '%not_allowed%');
+select act(null);
+select chk('P2b nor can anyone signed out',
+  try(format($$select * from journal_create_preview_link(%L)$$, :'ap')) like '%permission denied%');
+select act(:W);
+select token as ptok, link_id as plink from journal_create_preview_link(:'ap') \gset
+reset role;
+select chk('P3 the author gets a 43-character token; only its SHA-256 is stored',
+  length(:'ptok') = 43
+  and (select token_hash from journal_preview_links where id = :'plink') = encode(extensions.digest(convert_to(:'ptok', 'UTF8'), 'sha256'), 'hex')
+  and not exists (select 1 from journal_preview_links where token_hash = :'ptok')
+  and not exists (select 1 from journal_audit where detail::text like '%' || :'ptok' || '%'));
+select act(null);
+select chk('P4 signed out, the link shows the latest saved draft',
+  (select title from journal_preview_article(:'ptok')) = 'Preview piece'
+  and (select body_html from journal_preview_article(:'ptok')) like '%First draft.%'
+  and (select is_live from journal_preview_article(:'ptok')) is not true);
+select chk('P5 the public API still does not know the draft',
+  (select count(*) from journal_public_article('preview-piece')) = 0
+  and (select count(*) from journal_public_list(null, null, 'Preview', 50, 0)) = 0);
+select chk('P6 signed out, the links table itself is closed',
+  try($$select count(*) from journal_preview_links$$) like '%permission denied%');
+select chk('P7 a wrong, short or empty token shows nothing',
+  (select count(*) from journal_preview_article(repeat('x', 43))) = 0
+  and (select count(*) from journal_preview_article('short')) = 0
+  and (select count(*) from journal_preview_article(null)) = 0);
+select chk('P8 the image the draft uses is reachable through the link; an unused one is not',
+  journal_preview_media_path(:'ptok', :'pm1') = :'ap' || '/in-body.png'
+  and journal_preview_media_path(:'ptok', :'pm2') is null
+  and journal_preview_media_path(repeat('x', 43), :'pm1') is null);
+select chk('P9 an image of another article is never reachable through this link',
+  journal_preview_media_path(:'ptok', :'m1') is null);
+select chk('P10 holding a link grants no editing at all',
+  try(format($$select * from journal_save_revision(%L, 2, '{"title":"Hijacked"}')$$, :'rp')) like '%permission denied%'
+  and try(format($$select journal_publish(%L, 'x')$$, :'rp')) like '%permission denied%');
+select act(:W);
+select journal_save_revision(:'rp', 2, '{"body_html":"<p>Second draft.</p>"}');
+select act(null);
+select chk('P11 the link follows the latest SAVED version',
+  (select body_html from journal_preview_article(:'ptok')) like '%Second draft.%'
+  and journal_preview_media_path(:'ptok', :'pm1') is null);
+select act(:W2);
+select chk('P12 someone who cannot edit the article cannot revoke its link',
+  try(format($$select journal_revoke_preview_link(%L)$$, :'plink')) like '%not_allowed%');
+select act(:W);
+select chk('P13 staff on the article can list its links (no token column exists)',
+  (select count(*) from journal_preview_links where article_id = :'ap') = 1
+  and not exists (select 1 from information_schema.columns where table_name = 'journal_preview_links' and column_name = 'token'));
+select journal_revoke_preview_link(:'plink');
+select act(null);
+select chk('P14 a revoked link shows nothing',
+  (select count(*) from journal_preview_article(:'ptok')) = 0);
+select act(:W);
+select token as ptok2, link_id as plink2 from journal_create_preview_link(:'ap') \gset
+reset role;
+update journal_preview_links set expires_at = now() - interval '1 second' where id = :'plink2';
+select act(null);
+select chk('P15 an expired link shows nothing',
+  (select count(*) from journal_preview_article(:'ptok2')) = 0);
+select act(:W);
+select token as ptok3 from journal_create_preview_link(:'ap') \gset
+select act(:E);
+select journal_archive(:'ap', true);
+select act(null);
+select chk('P16 an archived article''s link shows nothing',
+  (select count(*) from journal_preview_article(:'ptok3')) = 0);
+select act(:E);
+select journal_archive(:'ap', false);
+reset role;
+select chk('P17 making and revoking links is audited',
+  (select count(*) from journal_audit where article_id = :'ap' and action = 'preview_link_created') = 3
+  and (select count(*) from journal_audit where article_id = :'ap' and action = 'preview_link_revoked') = 1);
+
+-- ===========================================================================
+\echo ======================== U. Unused uploads are removed safely (D-135) ====
+-- ===========================================================================
+select act(:W);
+select journal_create_article('Cleanup piece', 'cleanup-piece') as au \gset
+select working_revision_id as ru from journal_articles where id = :'au' \gset
+reset role;
+insert into storage.objects (bucket_id, name, owner_id, created_at) values
+  ('journal-media', :'au' || '/kept.png', :W, now()),
+  ('journal-media', :'au' || '/dropped.png', :W, now()),
+  ('journal-media', :'au' || '/orphan-old.png', :E, now() - interval '2 hours'),
+  ('journal-media', :'au' || '/orphan-mine.png', :W, now()),
+  ('journal-media', :'au' || '/orphan-theirs.png', :E, now());
+select act(:W);
+select journal_register_media(:'au', :'au' || '/kept.png', 'image/png', 10, 'Kept', null) as um1 \gset
+select journal_register_media(:'au', :'au' || '/dropped.png', 'image/png', 10, 'Dropped', null) as um2 \gset
+select journal_save_revision(:'ru', 1, format('{"body_html":"<p>x</p><figure><img src=\"/api/journal/media/%s\" alt=\"Kept\"></figure>"}', :'um1')::jsonb);
+select chk('U1 an image uploaded in the last 24 hours is never forgotten (an editor may still be using it)',
+  try(format($$select journal_forget_media(%L)$$, :'um2')) like '%media_recent%');
+reset role;
+update journal_media set created_at = now() - interval '2 days' where id in (:'um1', :'um2');
+select act(:W);
+select chk('U2 listing unused uploads: the unreferenced image and the old unregistered file only',
+  (select array_agg(storage_path order by storage_path) from journal_unused_media(:'au'))
+    = array[:'au' || '/dropped.png', :'au' || '/orphan-old.png']);
+select chk('U3 an image a version uses can never be forgotten',
+  try(format($$select journal_forget_media(%L)$$, :'um1')) like '%media_in_use%');
+select chk('U4 the storage delete rule refuses a registered image (forget it first)',
+  not journal_media_removable(:'au' || '/kept.png') and not journal_media_removable(:'au' || '/dropped.png'));
+-- Two statements: a check in the same statement would read the snapshot from before the delete.
+select journal_forget_media(:'um2') as forgot \gset
+select chk('U5 forgetting the unused image returns its path and removes its row',
+  :'forgot' = :'au' || '/dropped.png'
+  and not exists (select 1 from journal_media where id = :'um2'));
+select chk('U6 then its file may be removed, as may old unregistered files and the caller''s own',
+  journal_media_removable(:'au' || '/dropped.png')
+  and journal_media_removable(:'au' || '/orphan-old.png')
+  and journal_media_removable(:'au' || '/orphan-mine.png'));
+select chk('U7 but not someone else''s upload from the last hour',
+  not journal_media_removable(:'au' || '/orphan-theirs.png'));
+select act(:W2);
+select chk('U8 someone who cannot edit the article can remove nothing of it',
+  not journal_media_removable(:'au' || '/orphan-old.png')
+  and try(format($$select * from journal_unused_media(%L)$$, :'au')) like '%not_allowed%'
+  and try(format($$select journal_forget_media(%L)$$, :'um1')) like '%not_allowed%');
+select act(null);
+select chk('U9 signed out: none of these can be called',
+  try(format($$select * from journal_unused_media(%L)$$, :'au')) like '%permission denied%'
+  and try(format($$select journal_forget_media(%L)$$, :'um1')) like '%permission denied%'
+  and try(format($$select journal_media_removable(%L)$$, :'au' || '/orphan-old.png')) like '%permission denied%');
+select act(:E);
+select journal_publish(:'ru', (select content_hash from journal_revisions where id = :'ru'));
+reset role;
+update journal_media set is_public = true where id = :'um1';
+select act(:W);
+select chk('U10 a public image is never forgotten',
+  try(format($$select journal_forget_media(%L)$$, :'um1')) like '%media_in_use%');
+reset role;
+select chk('U11 removing an image is audited',
+  exists (select 1 from journal_audit where article_id = :'au' and action = 'media_removed' and detail->>'media_id' = :'um2'));
+select chk('U12 the bucket itself enforces 10 MB and the raster allowlist',
+  (select file_size_limit = 10485760 and allowed_mime_types = array['image/png','image/jpeg','image/webp','image/gif']
+   from storage.buckets where id = 'journal-media'));
+
+-- ===========================================================================
+\echo ======================== T. An article can start untitled (D-136) =======
+-- ===========================================================================
+select act(:W);
+select journal_create_article('', '') as at1 \gset
+select working_revision_id as rt1 from journal_articles where id = :'at1' \gset
+select chk('T1 a writer can start an untitled article',
+  (select title from journal_revisions where id = :'rt1') = '');
+select chk('T2 which cannot be published without a title',
+  try(format($$select journal_publish(%L, %L)$$, :'rt1', (select content_hash from journal_revisions where id = :'rt1'))) like '%title_required%');
+select chk('T3 an over-long title is still refused at the start',
+  try(format($$select journal_create_article(%L, '')$$, repeat('x', 201))) like '%title_too_long%');
+select act(:PARENT);
+select chk('T4 a parent still cannot start one',
+  try($$select journal_create_article('', '')$$) like '%not_allowed%');
 
 -- ===========================================================================
 \echo ======================== L. Existing Academy data untouched =============

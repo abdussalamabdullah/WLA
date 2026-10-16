@@ -14,7 +14,7 @@ export default async function ImportPage() {
   const runs = await listImportRuns();
 
   return (
-    <AdminPage title="Import from Medium" intro="Bring existing Medium posts into the Journal as drafts. Nothing is published: every imported article goes through review like any other.">
+    <AdminPage title="Import from Medium" intro="Bring existing Medium posts into the Journal as drafts. Nothing is published: every imported post becomes a draft you publish when you're ready.">
       <section aria-labelledby="how" className="wla-measure">
         <h2 id="how" className="text-[length:var(--text-h2)]">How it works</h2>
         <ol className="mt-[var(--space-s)] list-decimal pl-[var(--space-l)] wla-prose">

@@ -1,16 +1,18 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 
 import { AccessError } from "@/lib/permissions";
-import { requireJournalEditor, requireJournalStaff } from "@/lib/permissions/journal";
+import { requireJournalStaff } from "@/lib/permissions/journal";
 import { logAccessDenied, logWarn } from "@/lib/observability/logger";
 import type { Json } from "@/types/database";
 import { mediaUrl, normaliseTags, sanitizeArticleHtml, slugify, slugProblem } from "./content";
 import { journalErrorCode, journalErrorMessage } from "./errors";
-import { imageProblem, mediaPath, sniffImage } from "./media";
+import { removeUnusedMedia } from "./media-cleanup";
+import { imageProblem, isArticleMediaPath, sniffImage } from "./media";
 import { formatLondon, londonWallTimeToUtc } from "./time";
 
 /**
@@ -31,8 +33,14 @@ export type JournalState = {
   /** A stale save (D-128): who saved last, and when. Their text stays in the form. */
   conflict?: { by: string | null; at: string; lockVersion: number };
   lockVersion?: number;
+  /** The revision a save landed in — new when an edit to a published article started a new draft. */
+  revisionId?: string;
+  contentHash?: string;
+  startedNewVersion?: boolean;
   mediaId?: string;
   mediaUrl?: string;
+  /** A new preview link: shown ONCE (only its hash is stored, D-134). */
+  previewUrl?: string;
 };
 
 const str = (fd: FormData, k: string) => String(fd.get(k) ?? "");
@@ -63,24 +71,15 @@ function refused(error: { message: string }, op: string): JournalState {
 const NOT_STAFF: JournalState = { error: "You don't have access to the Journal studio." };
 
 // ------------------------------------------------------------- articles --
-export async function createArticleAction(_prev: JournalState, fd: FormData): Promise<JournalState> {
+/** "New article": an untitled draft, opened straight in the editor (D-136). */
+export async function newArticleAction(): Promise<JournalState> {
   const s = await staff();
   if (!s) return NOT_STAFF;
-  const title = str(fd, "title").trim();
-  if (!title) return { fieldErrors: { title: "Give the article a working title." } };
-  if (title.length > 200) return { fieldErrors: { title: "Keep the title under 200 characters." } };
-  const { data, error } = await s.supabase.rpc("journal_create_article", { p_title: title, p_slug: slugify(title) });
+  if (!s.caps.canWrite) return { error: "You can't start articles." };
+  const { data, error } = await s.supabase.rpc("journal_create_article", { p_title: "", p_slug: "" });
   if (error) {
-    if (error) {
-  console.error("Create article failed:", error);
-}
-    // A title whose slug is taken still creates the article — without a slug.
-    if (journalErrorCode(error) === "slug_taken") {
-      const retry = await s.supabase.rpc("journal_create_article", { p_title: title, p_slug: "" });
-      if (retry.error) return refused(retry.error, "create");
-      refresh();
-      redirect(`/editorial/articles/${retry.data}?notice=slug`);
-    }
+    // Every failed create is recorded, including expected refusals (bb70c43).
+    logWarn("journal_create_article_failed", { code: journalErrorCode(error) ?? null, reason: error.message });
     return refused(error, "create");
   }
   refresh();
@@ -88,7 +87,7 @@ export async function createArticleAction(_prev: JournalState, fd: FormData): Pr
 }
 
 const revisionSchema = z.object({
-  title: z.string().trim().min(1, "Add a title.").max(200, "Keep the title under 200 characters."),
+  title: z.string().trim().max(200, "Keep the title under 200 characters."),
   slug: z.string().trim(),
   excerpt: z.string().trim().max(600, "Keep the excerpt under 600 characters."),
   body_html: z.string().max(400000, "The article is too long to save in one piece."),
@@ -140,9 +139,15 @@ export async function saveRevisionAction(_prev: JournalState, fd: FormData): Pro
     canonical_url: d.canonical_url,
     original_published_at: d.original_published_at ? `${d.original_published_at}T12:00:00Z` : "",
   };
+  // Editing a published article (D-137): the live version is never changed in
+  // place. The first save starts a new draft from it; readers keep the live
+  // version until that draft is published. A version left in a review
+  // (no longer offered, D-130) simply returns to draft.
+  const target = await editableTarget(s.supabase, articleId, revisionId, lock);
+  if ("error" in target) return target.error;
   const { data, error } = await s.supabase.rpc("journal_save_revision", {
-    p_revision: revisionId,
-    p_expected_lock: lock,
+    p_revision: target.id,
+    p_expected_lock: target.lock,
     p_fields: fields as unknown as Json,
   });
   if (error) {
@@ -161,7 +166,49 @@ export async function saveRevisionAction(_prev: JournalState, fd: FormData): Pro
     };
   }
   refresh(articleId);
-  return { ok: true, lockVersion: row.lock_version, notice: row.outcome === "unchanged" ? "Nothing had changed." : "Saved." };
+  // Best effort, never blocks the save: forget uploads nobody uses (D-135).
+  await removeUnusedMedia(s.supabase, articleId);
+  return {
+    ok: true,
+    lockVersion: row.lock_version,
+    revisionId: target.id,
+    contentHash: row.content_hash,
+    startedNewVersion: target.started,
+    notice: target.started
+      ? "Saved as a new draft. Readers still see the published version until you publish this one."
+      : row.outcome === "unchanged" ? "Nothing had changed." : "Saved.",
+  };
+}
+
+type Supa = NonNullable<Awaited<ReturnType<typeof staff>>>["supabase"];
+
+async function editableTarget(
+  supabase: Supa,
+  articleId: string,
+  revisionId: string,
+  lock: number,
+): Promise<{ id: string; lock: number; started: boolean } | { error: JournalState }> {
+  const { data: rev } = await supabase.from("journal_revisions").select("id, article_id, state").eq("id", revisionId).maybeSingle();
+  if (!rev || rev.article_id !== articleId) return { error: { error: "This version no longer exists. Reload the page." } };
+  if (rev.state === "draft" || rev.state === "changes_requested") return { id: rev.id, lock, started: false };
+  if (rev.state === "in_review") {
+    const { error } = await supabase.rpc("journal_withdraw_submission", { p_revision: rev.id });
+    if (error) return { error: refused(error, "withdraw") };
+    return { id: rev.id, lock, started: false };
+  }
+  if (rev.state === "live" || rev.state === "approved") {
+    // Someone else already started a newer version: that is an edit conflict,
+    // not something to save over silently.
+    const { data: art } = await supabase.from("journal_articles").select("working_revision_id").eq("id", articleId).maybeSingle();
+    if (!art || art.working_revision_id !== rev.id) {
+      return { error: { error: "Someone started a new version of this article while you were editing. Your text is still here — copy anything you need, then reload." } };
+    }
+    const { data: id, error } = await supabase.rpc("journal_start_revision", { p_article: articleId });
+    if (error || !id) return { error: refused(error ?? { message: "" }, "start") };
+    const { data: fresh } = await supabase.from("journal_revisions").select("lock_version").eq("id", id).maybeSingle();
+    return { id, lock: fresh?.lock_version ?? 1, started: id !== rev.id };
+  }
+  return { error: { error: "This version can't be edited." } };
 }
 
 /** A single workflow step that needs only ids. */
@@ -174,25 +221,6 @@ async function step(fd: FormData, op: string, call: (s: NonNullable<Awaited<Retu
   return { ok: true, notice };
 }
 
-export async function startRevisionAction(_prev: JournalState, fd: FormData): Promise<JournalState> {
-  return step(fd, "start", (s) => s.supabase.rpc("journal_start_revision", { p_article: str(fd, "articleId") }), "A new version is ready to edit. The published version stays live until this one is approved and published.");
-}
-
-export async function submitAction(_prev: JournalState, fd: FormData): Promise<JournalState> {
-  return step(fd, "submit", (s) => s.supabase.rpc("journal_submit_for_review", { p_revision: str(fd, "revisionId"), p_expected_lock: Number(str(fd, "lockVersion")) }), "Submitted for an optional review. It is locked until a reviewer responds or you withdraw it; you can still publish it.");
-}
-
-export async function withdrawAction(_prev: JournalState, fd: FormData): Promise<JournalState> {
-  return step(fd, "withdraw", (s) => s.supabase.rpc("journal_withdraw_submission", { p_revision: str(fd, "revisionId") }), "Withdrawn from review. You can edit it again.");
-}
-
-export async function assignReviewerAction(_prev: JournalState, fd: FormData): Promise<JournalState> {
-  const reviewer = str(fd, "reviewerId");
-  if (!reviewer) return { fieldErrors: { reviewerId: "Choose a reviewer." } };
-  const assign = str(fd, "assign") !== "0";
-  return step(fd, "assign", (s) => s.supabase.rpc("journal_assign_reviewer", { p_article: str(fd, "articleId"), p_reviewer: reviewer, p_assign: assign }), assign ? "Reviewer assigned." : "Reviewer removed.");
-}
-
 export async function setMemberAction(_prev: JournalState, fd: FormData): Promise<JournalState> {
   const profile = str(fd, "profileId");
   if (!profile) return { fieldErrors: { profileId: "Choose a person." } };
@@ -202,19 +230,6 @@ export async function setMemberAction(_prev: JournalState, fd: FormData): Promis
     p_profile: profile,
     p_role: role === "author" || role === "collaborator" ? role : null,
   }), role ? "Access updated." : "Removed from this article.");
-}
-
-export async function decideAction(_prev: JournalState, fd: FormData): Promise<JournalState> {
-  const decision = str(fd, "decision") === "approve" ? "approve" : "request_changes";
-  const note = str(fd, "note").trim();
-  if (decision === "request_changes" && !note) return { fieldErrors: { note: "Say what needs to change." } };
-  if (note.length > 5000) return { fieldErrors: { note: "Keep the note under 5,000 characters." } };
-  return step(fd, "decide", (s) => s.supabase.rpc("journal_decide", {
-    p_revision: str(fd, "revisionId"),
-    p_decision: decision,
-    p_expected_hash: str(fd, "contentHash"),
-    p_note: note || null,
-  }), decision === "approve" ? "Approved. Your approval is recorded against exactly this content." : "Changes requested. The writer can edit it again.");
 }
 
 export async function addCommentAction(_prev: JournalState, fd: FormData): Promise<JournalState> {
@@ -283,33 +298,64 @@ export async function deleteArticleAction(_prev: JournalState, fd: FormData): Pr
 }
 
 // ---------------------------------------------------------------- media --
-export async function uploadImageAction(_prev: JournalState, fd: FormData): Promise<JournalState> {
+/**
+ * Register an image the browser has just stored in the article's folder
+ * (D-135). The bytes are read back here and checked — real type by content,
+ * size, and that the name matches the type — before the database accepts it;
+ * a file that fails is removed again with the author's own session.
+ */
+export async function registerUploadAction(_prev: JournalState, fd: FormData): Promise<JournalState> {
   const s = await staff();
   if (!s) return NOT_STAFF;
   const articleId = str(fd, "articleId");
-  const alt = str(fd, "alt").trim();
-  const file = fd.get("file");
-  if (!(file instanceof File) || file.size === 0) return { fieldErrors: { file: "Choose an image." } };
-  if (!alt) return { fieldErrors: { alt: "Describe the image for people who can't see it." } };
-  if (alt.length > 500) return { fieldErrors: { alt: "Keep the description under 500 characters." } };
+  const path = str(fd, "path");
+  const alt = str(fd, "alt").trim().slice(0, 500);
+  if (!/^[0-9a-f-]{36}$/.test(articleId) || !isArticleMediaPath(articleId, path)) {
+    return { error: "That upload isn't in this article's folder." };
+  }
+  const bucket = s.supabase.storage.from("journal-media");
+  const { data: file, error: readError } = await bucket.download(path);
+  if (readError || !file) return { error: "The upload couldn't be found. Try again." };
   const bytes = new Uint8Array(await file.arrayBuffer());
   const problem = imageProblem(bytes);
-  if (problem) return { fieldErrors: { file: problem } };
-  const type = sniffImage(bytes)!;
-  const stem = `${Date.now().toString(36)}-${crypto.randomUUID().slice(0, 8)}-${file.name.replace(/\.[^.]+$/, "")}`;
-  const path = mediaPath(articleId, stem, type.ext);
-  // The admin's own session uploads; storage RLS requires journal_can_edit.
-  const up = await s.supabase.storage.from("journal-media").upload(path, bytes, { contentType: type.mime, upsert: false });
-  if (up.error) {
-    logWarn("journal_media_upload_failed", { reason: up.error.message });
-    return { error: "The image couldn't be uploaded. Check you can edit this article and try again." };
+  const type = sniffImage(bytes);
+  if (problem || !type || !path.endsWith(`.${type.ext}`)) {
+    await bucket.remove([path]);
+    return { error: problem ?? "Use a PNG, JPEG, WebP or GIF image." };
   }
   const { data, error } = await s.supabase.rpc("journal_register_media", {
-    p_article: articleId, p_path: path, p_mime: type.mime, p_bytes: bytes.byteLength, p_alt: alt, p_source_url: null,
+    p_article: articleId, p_path: path, p_mime: type.mime, p_bytes: bytes.byteLength, p_alt: alt || null, p_source_url: null,
   });
-  if (error || !data) return refused(error ?? { message: "" }, "media");
+  if (error || !data) {
+    await bucket.remove([path]);
+    return refused(error ?? { message: "" }, "media");
+  }
+  return { ok: true, mediaId: data, mediaUrl: mediaUrl(data) };
+}
+
+// -------------------------------------------------------- preview links --
+/** The origin of THIS app, where preview pages live. */
+async function appOrigin(): Promise<string> {
+  const configured = process.env.NEXT_PUBLIC_SITE_URL?.trim().replace(/\/+$/, "");
+  if (configured) return configured;
+  const h = await headers();
+  return `${h.get("x-forwarded-proto") ?? "http"}://${h.get("x-forwarded-host") ?? h.get("host")}`;
+}
+
+/** A view-only link to the latest saved version (D-134). Shown once. */
+export async function createPreviewLinkAction(_prev: JournalState, fd: FormData): Promise<JournalState> {
+  const s = await staff();
+  if (!s) return NOT_STAFF;
+  const articleId = str(fd, "articleId");
+  const { data, error } = await s.supabase.rpc("journal_create_preview_link", { p_article: articleId, p_days: 30 });
+  const row = data?.[0];
+  if (error || !row) return refused(error ?? { message: "" }, "preview_link");
   refresh(articleId);
-  return { ok: true, notice: "Image added.", mediaId: data, mediaUrl: mediaUrl(data) };
+  return { ok: true, previewUrl: `${await appOrigin()}/journal-preview/${row.token}`, notice: `Preview link created. It works until ${formatLondon(new Date(row.expires_at))} unless you turn it off.` };
+}
+
+export async function revokePreviewLinkAction(_prev: JournalState, fd: FormData): Promise<JournalState> {
+  return step(fd, "preview_revoke", (s) => s.supabase.rpc("journal_revoke_preview_link", { p_link: str(fd, "linkId") }), "Link turned off. Anyone using it now sees “not found”.");
 }
 
 // ----------------------------------------------------- people, taxonomy --
@@ -375,44 +421,4 @@ export async function deleteCategoryAction(_prev: JournalState, fd: FormData): P
   }
   revalidatePath("/editorial/categories");
   return { ok: true, notice: "Category removed." };
-}
-
-// --------------------------------------------------------------- import --
-export async function importMediumAction(_prev: JournalState, fd: FormData): Promise<JournalState> {
-  let s;
-  try {
-    s = await requireJournalEditor();
-  } catch (e) {
-    if (e instanceof AccessError) return { error: "Only an editor can import." };
-    throw e;
-  }
-  const uploads = fd.getAll("files").filter((f): f is File => f instanceof File && f.size > 0);
-  if (uploads.length === 0) return { fieldErrors: { files: "Choose Medium's export zip, or one or more post .html files." } };
-  const { MAX_ARCHIVE_BYTES, readExport } = await import("./medium");
-  const total = uploads.reduce((n, f) => n + f.size, 0);
-  if (total > MAX_ARCHIVE_BYTES) return { fieldErrors: { files: "The upload is larger than 50 MB. Import it in parts." } };
-  const { files, problems } = readExport(await Promise.all(uploads.map(async (f) => ({ name: f.name, bytes: new Uint8Array(await f.arrayBuffer()) }))));
-  if (files.length === 0) return { error: problems.join(" ") || "No posts were found to import." };
-
-  const { runMediumImport } = await import("./importer");
-  const supabase = s.supabase;
-  const report = await runMediumImport(files, problems, {
-    rpc: async (fn, args) => {
-      const { data, error } = await (supabase.rpc as unknown as (f: string, a: Record<string, unknown>) => PromiseLike<{ data: unknown; error: { message: string } | null }>)(fn, args);
-      return { data: data as never, error };
-    },
-    upload: async (path, bytes, type) => {
-      const { error } = await supabase.storage.from("journal-media").upload(path, bytes, { contentType: type.mime, upsert: false });
-      if (!error) return "ok";
-      return /exists|duplicate/i.test(error.message) ? "exists" : { error: "storage refused the file" };
-    },
-    findMedia: async (path) => {
-      const { data } = await supabase.from("journal_media").select("id").eq("storage_path", path).maybeSingle();
-      return data?.id ?? null;
-    },
-  }, { includeDrafts: str(fd, "includeDrafts") === "1", sourceName: uploads.map((f) => f.name).join(", ").slice(0, 200) });
-
-  if (!report.runId) return { error: report.problems.join(" ") };
-  refresh();
-  redirect(`/editorial/import/${report.runId}`);
 }

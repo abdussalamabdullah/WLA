@@ -85,29 +85,6 @@ export type MissionRow = {
   updated_at: string;
 };
 
-export type JournalCategoryRow = {
-  id: string;
-  slug: string;
-  name: string;
-  description: string | null;
-  sort_order: number;
-  created_at: string;
-};
-
-export type JournalArticleRow = {
-  id: string;
-  slug: string;
-  title: string;
-  standfirst: string | null;
-  body: string;
-  category_id: string | null;
-  cover_image: string | null;
-  published: boolean;
-  published_at: string | null;
-  created_at: string;
-  updated_at: string;
-};
-
 export type MissionScreenRow = {
   id: string;
   mission_id: string;
@@ -390,6 +367,35 @@ export type JournalMediaRow = {
   created_at: string;
 };
 
+/** D-134: a view-only preview link. The token is never stored, only its SHA-256. */
+export type JournalPreviewLinkRow = {
+  id: string;
+  article_id: string;
+  token_hash: string;
+  created_by: string | null;
+  created_at: string;
+  expires_at: string;
+  revoked_at: string | null;
+  revoked_by: string | null;
+};
+
+/** What a preview link shows (journal_preview_article): the latest saved version only. */
+export type JournalPreviewArticleRow = {
+  title: string;
+  excerpt: string | null;
+  body_html: string;
+  author_name: string | null;
+  category_name: string | null;
+  tags: string[];
+  featured_media_id: string | null;
+  featured_alt: string | null;
+  original_published_at: string | null;
+  first_published_at: string | null;
+  source_url: string | null;
+  saved_at: string;
+  is_live: boolean;
+};
+
 export type JournalMemberRow = {
   article_id: string;
   profile_id: string;
@@ -545,11 +551,6 @@ export type Database = {
         MissionRow,
         "slug" | "title" | "lab" | "min_age" | "max_age"
       >;
-      journal_categories: Table<JournalCategoryRow, "slug" | "name">;
-      journal_articles: Table<
-        JournalArticleRow,
-        "slug" | "title" | "body"
-      >;
       mission_screens: Table<
         MissionScreenRow,
         "mission_id" | "screen_key" | "type" | "sequence"
@@ -670,6 +671,12 @@ export type Database = {
         Update: never;
         Relationships: [];
       };
+      journal_preview_links: {
+        Row: JournalPreviewLinkRow;
+        Insert: never;
+        Update: never;
+        Relationships: [];
+      };
       journal_staff: {
         Row: JournalStaffRow;
         Insert: never;
@@ -744,6 +751,13 @@ export type Database = {
       journal_public_article: { Args: { p_slug: string }; Returns: JournalPublicArticleRow[] };
       journal_public_tags: { Args: Record<string, never>; Returns: { tag: string }[] };
       journal_media_path: { Args: { p_id: string }; Returns: string | null };
+      journal_create_preview_link: { Args: { p_article: string; p_days?: number }; Returns: { link_id: string; token: string; expires_at: string }[] };
+      journal_revoke_preview_link: { Args: { p_link: string }; Returns: undefined };
+      journal_preview_article: { Args: { p_token: string }; Returns: JournalPreviewArticleRow[] };
+      journal_preview_media_path: { Args: { p_token: string; p_media: string }; Returns: string | null };
+      journal_unused_media: { Args: { p_article: string }; Returns: { media_id: string | null; storage_path: string }[] };
+      journal_forget_media: { Args: { p_media: string }; Returns: string };
+      journal_media_removable: { Args: { p_name: string }; Returns: boolean };
       journal_import_start: { Args: { p_kind: string; p_name: string }; Returns: string };
       journal_import_log: {
         Args: {

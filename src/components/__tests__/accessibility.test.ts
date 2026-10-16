@@ -117,15 +117,13 @@ describe("every page has exactly one h1", () => {
       "src/components/admin/publish-panel.tsx",
     ]);
     /*
-     * Journal studio panels render beneath the article page's h2 sections
-     * ("Content", "Workflow", "History"); the RENDERED order is asserted by
-     * journal-studio.test.tsx ("headings never skip a level").
+     * Journal studio pieces render beneath the studio's h2 panel and dialog
+     * headings ("History", "Comments", "Share a preview"); the RENDERED order
+     * is asserted by journal-studio.test.tsx ("headings never skip a level").
      */
     const underStudioSection = new Set([
       "src/components/journal/studio/history.tsx",
-      "src/components/journal/studio/revision-editor.tsx",
       "src/components/journal/studio/side-panels.tsx",
-      "src/components/journal/studio/workflow-panel.tsx",
     ]);
     const offenders: string[] = [];
     for (const file of sourceFiles("src/components")) {

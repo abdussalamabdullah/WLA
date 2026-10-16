@@ -16,7 +16,7 @@ export default async function PeoplePage() {
   if (!caps.isAdmin) redirect("/editorial");
   const staff = await getStaffDirectory();
   return (
-    <AdminPage title="People and roles" intro="Who can write, review and publish in the Journal. Administrators can do everything. Roles never give access to the Academy's families, children or orders.">
+    <AdminPage title="People and roles" intro="Who can write and publish in the Journal. Administrators can do everything. Roles never give access to the Academy's families, children or orders.">
       <section aria-labelledby="change">
         <h2 id="change" className="text-[length:var(--text-h2)]">Grant or remove a role</h2>
         <div className="mt-[var(--space-m)]"><RoleForm /></div>

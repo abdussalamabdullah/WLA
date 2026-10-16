@@ -201,6 +201,32 @@
   }
 
   /*
+   * Journal writing surfaces — article text, title, subtitle, byline (D-139).
+   * Browsers treat an editable area as :focus-visible even after a mouse click,
+   * so the global two-line ring drew a double border round the whole page of
+   * text every time an author clicked to type. A click shows the caret only;
+   * focus that arrives from the keyboard gets ONE clear outline.
+   */
+  .journal-writing:focus-visible {
+    box-shadow: none;
+    outline: none;
+  }
+  [data-focus-source="keyboard"] .journal-writing:focus {
+    outline: 2px solid var(--color-focus);
+    outline-offset: 6px;
+    box-shadow: none;
+  }
+
+  /* The Journal editor's empty-state hint (TipTap Placeholder). Text, not colour alone. */
+  .wla-article-body p.is-editor-empty:first-child::before {
+    content: attr(data-placeholder);
+    color: var(--color-text-muted);
+    float: left;
+    height: 0;
+    pointer-events: none;
+  }
+
+  /*
    * JOURNAL ARTICLE BODY (D-123). One stylesheet for the public article, the
    * studio preview and the editor itself, so what a writer sees while editing
    * is what a reader gets. Only the allowlisted elements need styling.

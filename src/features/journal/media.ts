@@ -6,6 +6,17 @@
  */
 export const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 
+/**
+ * The largest file an author may PICK (D-135). Photos above the stored limit
+ * are resized in the browser before upload (upload-client.ts); whatever is
+ * uploaded must still be within MAX_IMAGE_BYTES, which the bucket, the
+ * database and the server each enforce again.
+ */
+export const MAX_SOURCE_IMAGE_BYTES = 30 * 1024 * 1024;
+
+/** The raster allowlist, as MIME types (bucket allowed_mime_types matches). */
+export const IMAGE_MIME_TYPES = ["image/png", "image/jpeg", "image/webp", "image/gif"] as const;
+
 export type ImageType = { mime: "image/png" | "image/jpeg" | "image/webp" | "image/gif"; ext: string };
 
 export function sniffImage(bytes: Uint8Array): ImageType | null {
@@ -34,6 +45,11 @@ export function imageProblem(bytes: Uint8Array): string | null {
  * Where an article's file goes. Always inside the article's own folder — the
  * storage policy and journal_register_media both refuse anything else.
  */
+/** Is this storage path one this article's uploads may use (`<article>/<safe-name>.<ext>`)? */
+export function isArticleMediaPath(articleId: string, path: string): boolean {
+  return new RegExp(`^${articleId.replace(/[^0-9a-f-]/gi, "")}/[a-z0-9-]{1,60}\\.(png|jpg|webp|gif)$`).test(path);
+}
+
 export function mediaPath(articleId: string, stem: string, ext: string): string {
   const safe = stem.toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "").slice(0, 60) || "image";
   return `${articleId}/${safe}.${ext}`;

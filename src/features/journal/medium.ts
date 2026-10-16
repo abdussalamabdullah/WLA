@@ -386,6 +386,7 @@ export function placeImages(
 }
 
 export const MAX_ARCHIVE_BYTES = 50 * 1024 * 1024;
+export { IMPORT_BODY_LIMIT } from "./import-limits";
 const MAX_POST_BYTES = 5 * 1024 * 1024;
 const MAX_POSTS = 1000;
 

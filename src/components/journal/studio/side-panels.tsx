@@ -4,8 +4,7 @@ import { useActionState, useEffect, useId, useRef } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Field, FormError, FormNotice, Input } from "@/components/ui/field";
-import { addCommentAction, resolveCommentAction, setMemberAction, uploadImageAction, type JournalState } from "@/features/journal/actions";
-import { mediaUrl } from "@/features/journal/content";
+import { addCommentAction, resolveCommentAction, setMemberAction, type JournalState } from "@/features/journal/actions";
 import { ActionButton } from "./action-button";
 
 const h3 = "text-[length:var(--text-h3)]";
@@ -123,50 +122,6 @@ function CommentForm({ articleId, revisionId, parentId, label, withQuote = false
       <FormError message={state.error} />
       <FormNotice message={state.notice} />
     </form>
-  );
-}
-
-// ---------------------------------------------------------------- media --
-export function ImagesPanel({ articleId, media, canEdit }: { articleId: string; media: { id: string; alt: string | null; isPublic: boolean }[]; canEdit: boolean }) {
-  const uid = useId();
-  const [state, dispatch, pending] = useActionState(uploadImageAction, {} as JournalState);
-  const ref = useRef<HTMLFormElement>(null);
-  useEffect(() => {
-    if (state.ok) ref.current?.reset();
-  }, [state]);
-  return (
-    <section aria-labelledby={`${uid}-h`}>
-      <h3 id={`${uid}-h`} className={h3}>Images</h3>
-      <p className={`mt-[var(--space-xs)] ${muted}`}>PNG, JPEG, WebP or GIF, up to 10 MB. An image is private until a published version uses it.</p>
-      {canEdit && (
-        <form ref={ref} action={dispatch} className="mt-[var(--space-m)] flex flex-col gap-[var(--space-s)]">
-          <input type="hidden" name="articleId" value={articleId} />
-          <Field label="Image file" htmlFor={`${uid}-f`} error={state.fieldErrors?.file}>
-            <input id={`${uid}-f`} name="file" type="file" accept="image/png,image/jpeg,image/webp,image/gif" className="min-h-[var(--target-min)]" />
-          </Field>
-          <Field label="Description (alt text)" htmlFor={`${uid}-alt`} hint="What the image shows, for people who can't see it." error={state.fieldErrors?.alt}>
-            <Input id={`${uid}-alt`} name="alt" maxLength={500} />
-          </Field>
-          <div>
-            <Button type="submit" variant="secondary" isLoading={pending} loadingLabel="Uploading…">Upload image</Button>
-          </div>
-          <FormError message={state.error} />
-          <FormNotice message={state.notice} />
-        </form>
-      )}
-      {media.length > 0 && (
-        <ul className="mt-[var(--space-m)] grid grid-cols-2 gap-[var(--space-s)]">
-          {media.map((m) => (
-            <li key={m.id} className="text-[length:var(--text-small)]">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={mediaUrl(m.id)} alt="" className="aspect-[4/3] w-full rounded-[var(--radius-control)] border border-[var(--color-border)] object-cover" />
-              <p className="mt-[var(--space-xs)]">{m.alt || "No description"}</p>
-              <p className={muted}>{m.isPublic ? "Public (used by the live version)" : "Private"}</p>
-            </li>
-          ))}
-        </ul>
-      )}
-    </section>
   );
 }
 

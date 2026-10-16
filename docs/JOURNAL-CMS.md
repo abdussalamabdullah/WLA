@@ -1,7 +1,9 @@
 # Journal CMS
 
-Decisions: D-123 … D-133 in `DECISIONS.md` (D-130 optional approval, D-131
-Lovable + public API, D-132 pg_cron scheduling, D-133 time policy). Open:
+Decisions: D-123 … D-139 in `DECISIONS.md` (D-130 optional approval, D-131
+Lovable + public API, D-132 pg_cron scheduling, D-133 time policy, D-134
+preview links, D-135 inline uploads, D-136 untitled start, D-137 the
+simplified studio, D-138 pasting documents, D-139 focus on writing surfaces). Open:
 OPEN-23 (the real Medium export). Tables: `DATA-MODEL.md` → "Journal CMS".
 Public API for Lovable: `JOURNAL-PUBLIC-API.md`.
 
@@ -33,18 +35,21 @@ version: draft / in review".
 
 ## 3. Publishing and permissions (enforced in the database)
 
-| | Writer (author of the article) | Writer (collaborator) | Reviewer | Editor | Admin |
-| --- | --- | --- | --- | --- | --- |
-| Create article | ✓ | ✓ | | ✓ | ✓ |
-| Edit | ✓ | ✓ | | any | any |
-| Publish now / schedule / cancel schedule / unpublish | ✓ | | | any | any |
-| Ask for a review (optional) | ✓ | ✓ | | any | any |
-| Approve / request changes | | | when assigned, not on a version they edited | same | same |
-| Comment | ✓ | ✓ | when assigned | any | any |
-| Assign reviewers, archive, delete never-published drafts, categories, import | | | | ✓ | ✓ |
-| Grant roles | | | | | ✓ |
+| | Writer (author of the article) | Writer (collaborator) | Editor | Admin |
+| --- | --- | --- | --- | --- |
+| Create article | ✓ | ✓ | ✓ | ✓ |
+| Edit (including a published article — saved as a new draft) | ✓ | ✓ | any | any |
+| Share a view-only preview link | ✓ | ✓ | any | any |
+| Publish now / schedule / cancel schedule / unpublish | ✓ | | any | any |
+| Add or remove people who can edit | ✓ | | any | any |
+| Comment (staff-only notes) | ✓ | ✓ | any | any |
+| Archive, delete never-published drafts, categories, Medium import | | | ✓ | ✓ |
+| Grant roles | | | | ✓ |
 
-- **No approval is needed to publish** (D-130). Review is optional collaboration.
+- **No approval is needed to publish** (D-130), and the studio no longer
+  offers review at all (D-137). The review tables, functions, role and any
+  past decisions are kept; a version left in review returns to draft when next
+  saved.
 - Only the **working** revision can be published, named by the content hash
   the publisher last saw saved; a stale page is refused. The studio hides
   Publish/Schedule while the editor has unsaved changes.
@@ -53,6 +58,49 @@ version: draft / in review".
   in `journal_audit`, with the content hash.
 - Visitors and parents cannot read any Journal table except categories; no
   client role can write any Journal table.
+
+## 3a. The studio (D-137)
+
+- **One writing surface**, modelled on Substack's editor: a top bar with the
+  status in words and every publishing action together — **Save draft ·
+  Share · Publish…** (the only primary button); then the toolbar, title,
+  subtitle, author and the article. History, Comments and **Settings** (web
+  address, category, tags, featured image, search details, dates) open in
+  side panels; Settings' fields belong to the same form, so one save keeps
+  everything.
+- **New article** opens an untitled draft straight away (D-136). Its web
+  address follows the title until someone sets it by hand.
+- **Publish…** opens one dialog: *Now* or *At a later time* (UK time, echoed
+  in words; see §4). It saves unsaved changes first and publishes exactly that
+  saved version. It says what is missing (title, text, web address, images
+  still uploading) instead of offering a button that would fail.
+- **Editing a published article**: just edit. The first save creates a new
+  draft from the live version (`journal_start_revision`); readers keep the
+  published version, the status reads "Published · unpublished changes", and
+  **Publish update** replaces it. If someone else already started a newer
+  version, the save is refused as a conflict rather than saved over.
+- **Share** makes a **view-only preview link** (D-134): it shows the latest
+  saved version to anyone holding it, for 30 days or until turned off; the
+  full link is shown once. Editing is separate — add the person (they need a
+  Journal account) under "Who can edit".
+- **Images** (D-135): toolbar *Image*, the **+** beside an empty line, paste
+  or drag-and-drop. The image appears at once with its own progress; a failure
+  stays in place with *Try again* / *Remove*; a selected image offers its
+  description (alt text), *Replace* and *Remove*. Photos up to 30 MB are
+  resized in the browser (longest edge 2400 px); what is stored is at most
+  10 MB, PNG/JPEG/WebP/GIF only, checked by the bucket, the database and the
+  server's byte sniffing. Unused uploads are removed safely after saves.
+- **Pasting** (D-138): text from Google Docs, Word or a web page keeps
+  bold, italic, underline, strikethrough, links, lists and headings (stepped
+  down one level), without the doubled blank lines; images in it are copied
+  into the article, or wait in place with *Try again* / *Remove* if the source
+  won't give them up.
+- **Focus** (D-139): clicking into the text shows the caret only; reaching it
+  with Tab shows one outline.
+- **The live link** goes to the public website — set
+  `NEXT_PUBLIC_JOURNAL_SITE_URL` to its origin. Unset, the studio offers its
+  own read-only view of the published version instead (this app has no public
+  `/journal/<slug>`, which is why the old link gave a 404).
 
 ## 4. Scheduled publishing (D-132, D-133)
 
@@ -113,13 +161,21 @@ slugs), `status.ts`, `errors.ts`, `time.ts` (London time), `media.ts`,
 `medium.ts`, `importer.ts`; `src/lib/permissions/journal.ts`.
 
 **Routes:** `src/app/api/journal/{articles,articles/[slug],categories,tags,media/[id]}`,
-`src/app/editorial/**`.
+`src/app/editorial/**` (incl. `import/upload` for Medium imports),
+`src/app/(functional)/journal-preview/[token]` and `…/media/[id]` (private
+previews, D-134).
+
+**Studio code:** `components/journal/studio/article-studio.tsx` (the page),
+`rich-text-editor.tsx` (TipTap, inline uploads, "+"), `features/journal/`
+`upload-client.ts`, `import-client.ts`, `paste.ts`, `preview.ts`, `media-cleanup.ts`,
+`public-url.ts`.
 
 **UI:** `src/components/journal/**`; Journal link in the admin nav;
 `/editorial` in the middleware's signed-in prefixes; `.wla-article-body`
 typography.
 
-**Tests:** `scripts/journal-regression.sql` + `scripts/run-journal-regression.sh`
+**Tests:** `scripts/journal-regression.sql` (incl. sections P preview links,
+U unused uploads, T untitled start) + `scripts/run-journal-regression.sh`
 (isolated cluster, `cron=absent`, incl. concurrent sessions);
 `scripts/run-journal-regression-local.sh` (the real local stack, `cron=present`,
 one transaction rolled back, every table fingerprinted before and after — the
@@ -130,17 +186,16 @@ migrations applied as `postgres` — the non-superuser role `supabase migration
 up` uses — including a re-registration check for duplicate jobs);
 `src/features/journal/__tests__/*`, `src/components/journal/__tests__/*`.
 
-## 6. Applying the migration (needs approval)
+## 6. Migrations and where they are applied
 
-The local WLA database has **three** unapplied migrations, not one:
+| Migration | What it does | Local | Hosted staging |
+| --- | --- | --- | --- |
+| `20261011120000_kit_rows_follow_release` (D-114) | Family read rules for Kit rows / notes | applied 2026-10-15 | **not applied** |
+| `20261014120000_journal_cms` | The Journal CMS; enables pg_cron and registers the job | applied 2026-10-15 | **not applied** |
+| `20261015120000_journal_studio_simplify` (D-134 … D-136) | Preview links; safe removal of unused uploads; bucket enforces 10 MB + raster allowlist; untitled start | applied 2026-10-15 | **not applied** |
 
-| Migration | What it does to the local database |
-| --- | --- |
-| `20261010120000_seeded_mission_version_lifecycle` (D-111) | Adds a backfill function and runs it; it only initialises missions with **no** version rows. Six Names already has v1 (archived) and v2 (published), so it initialises nothing. |
-| `20261011120000_kit_rows_follow_release` (D-114) | Tightens two family read policies (draft Kit rows / notes hidden) and one child-session function. No data change. |
-| `20261014120000_journal_cms` | The Journal CMS. Additive; enables pg_cron and registers the job. |
-
-`supabase migration up` applies all three in order and never resets. Then
+All additive. Applying to a hosted database needs explicit approval
+(`supabase db push --db-url <pooler> --skip-vault`, dry run first). Then
 verify as in §4 and §8.
 
 ## 7. Migrating from Medium

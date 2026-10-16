@@ -17,6 +17,7 @@ import type {
   JournalImportRunRow,
   JournalMediaRow,
   JournalMemberRow,
+  JournalPreviewLinkRow,
   JournalRevisionRow,
   JournalRole,
 } from "@/types/database";
@@ -85,6 +86,8 @@ export type StudioArticle = {
   changes: JournalChangeRow[];
   audit: JournalAuditRow[];
   media: JournalMediaRow[];
+  /** Working (unrevoked, unexpired) preview links — never their tokens (D-134). */
+  previewLinks: JournalPreviewLinkRow[];
   status: ReturnType<typeof articleStatus>;
 };
 
@@ -93,7 +96,7 @@ export async function getStudioArticle(id: string): Promise<StudioArticle | null
   const { data: article } = await supabase.from("journal_articles").select("*").eq("id", id).maybeSingle();
   if (!article) return null; // not found OR not visible to this person — same answer
   const a = article as JournalArticleRow;
-  const [revisions, members, assignments, decisions, comments, audit, media] = await Promise.all([
+  const [revisions, members, assignments, decisions, comments, audit, media, links] = await Promise.all([
     supabase.from("journal_revisions").select("*").eq("article_id", id).order("number", { ascending: false }),
     supabase.from("journal_article_members").select("*").eq("article_id", id),
     supabase.from("journal_review_assignments").select("*").eq("article_id", id),
@@ -101,6 +104,13 @@ export async function getStudioArticle(id: string): Promise<StudioArticle | null
     supabase.from("journal_comments").select("*").eq("article_id", id).order("created_at"),
     supabase.from("journal_audit").select("*").eq("article_id", id).order("at", { ascending: false }).limit(100),
     supabase.from("journal_media").select("*").eq("article_id", id).order("created_at", { ascending: false }),
+    supabase
+      .from("journal_preview_links")
+      .select("id, article_id, created_by, created_at, expires_at, revoked_at, revoked_by")
+      .eq("article_id", id)
+      .is("revoked_at", null)
+      .gt("expires_at", new Date().toISOString())
+      .order("created_at", { ascending: false }),
   ]);
   const revs = (revisions.data ?? []) as JournalRevisionRow[];
   const revIds = revs.map((r) => r.id);
@@ -121,6 +131,7 @@ export async function getStudioArticle(id: string): Promise<StudioArticle | null
     changes: (changes ?? []) as JournalChangeRow[],
     audit: (audit.data ?? []) as JournalAuditRow[],
     media: (media.data ?? []) as JournalMediaRow[],
+    previewLinks: (links.data ?? []) as JournalPreviewLinkRow[],
     status: articleStatus(a, working),
   };
 }

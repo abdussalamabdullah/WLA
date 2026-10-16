@@ -12,7 +12,7 @@ export const metadata = { title: "Journal studio", robots: { index: false, follo
 /**
  * THE JOURNAL STUDIO (D-123, D-124).
  *
- * Its own route, outside /admin, because writers and reviewers are staff
+ * Its own route, outside /admin, because writers are staff
  * without being administrators. Gated here for what is SHOWN; every write and
  * every read of a draft is gated again in the database by role and article
  * membership, so this layout is never the only control.

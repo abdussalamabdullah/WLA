@@ -119,7 +119,21 @@ export const AUDIT_LABEL: Record<string, string> = {
   imported: "imported from Medium",
   deleted: "deleted the article",
   legacy_backfill: "moved into the editorial workflow",
+  preview_link_created: "made a preview link",
+  preview_link_revoked: "turned off a preview link",
+  media_removed: "removed an unused image",
 };
+
+/**
+ * Where an article stands, in the words the studio shows (D-137). Reviews are
+ * no longer offered (D-130), so an old review state reads as a draft.
+ */
+export function studioStatusWords(s: { status: DisplayStatus; pending: DisplayStatus | null }): string {
+  if (s.status === "archived") return "Archived";
+  if (s.status === "scheduled") return "Scheduled";
+  if (s.status === "published") return s.pending ? "Published · unpublished changes" : "Published";
+  return "Draft";
+}
 
 /** Why a scheduled publication was refused (journal_publish_due, D-132). */
 export const SCHEDULE_FAILURE: Record<string, string> = {

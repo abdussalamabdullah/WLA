@@ -145,6 +145,8 @@ export function snapshotForm(form: HTMLFormElement): string {
   const out: [string, string][] = [];
   for (const el of Array.from(form.elements) as (HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement)[]) {
     if (!el.name || (el as HTMLInputElement).disabled) continue;
+    // Bookkeeping the page updates after a save (lock version, revision id) is not the author's change.
+    if (el.hasAttribute("data-dirty-ignore")) continue;
     if (el instanceof HTMLInputElement) {
       if (el.type === "checkbox" || el.type === "radio") out.push([el.name, `${el.value}:${el.checked}`]);
       else if (el.type === "file") out.push([el.name, Array.from(el.files ?? []).map((f) => f.name).join("|")]);

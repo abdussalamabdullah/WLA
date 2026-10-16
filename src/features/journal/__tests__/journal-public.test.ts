@@ -56,7 +56,10 @@ describe("the public API (what Lovable reads) exposes only live content", () => 
 
   it("article bodies are sanitised on the way out, as well as on save", () => {
     expect(code("src/features/journal/public-api.ts")).toMatch(/return sanitizeArticleHtml\(html\)/);
-    expect(code("src/components/journal/article-view.tsx")).toMatch(/const body = sanitizeArticleHtml\(article\.bodyHtml\)/);
+    // Sanitised first; a preview only rewrites image URLs the allowlist kept, afterwards.
+    const view = code("src/components/journal/article-view.tsx");
+    expect(view).toMatch(/const clean = sanitizeArticleHtml\(article\.bodyHtml\);\s*const body = mediaSrc\s*\?\s*clean\.replace\(/);
+    expect(view).toMatch(/:\s*clean;/);
   });
 
   it("the media route signs with the visitor's own session", () => {
@@ -101,5 +104,64 @@ describe("the studio is behind a signed-in session and its own gate", () => {
   });
   it("the studio layout calls requireJournalStaff", () => {
     expect(code("src/app/editorial/layout.tsx")).toMatch(/await requireJournalStaff\(\)/);
+  });
+});
+
+/*
+ * PRIVATE PREVIEW LINKS (D-134). The token is the only key; reads are
+ * anonymous and cookie-less; the one use of the server credential signs a
+ * path the database has already authorised (the D-64 shape) and nothing else.
+ */
+describe("private preview links", () => {
+  const PREVIEW = filesUnder("src/app/(functional)/journal-preview");
+  const route = "src/app/(functional)/journal-preview/[token]/media/[id]/route.ts";
+
+  it("previews read through an anonymous, cookie-less client and only the two preview functions", () => {
+    const src = code("src/features/journal/preview.ts");
+    expect(src).toMatch(/persistSession: false/);
+    expect(src).not.toMatch(/next\/headers|cookies\(|lib\/supabase\/server|supabase\/admin/);
+    const rpcs = [...src.matchAll(/rpc\(\s*["'](\w+)/g)].map((m) => m[1]).sort();
+    expect([...new Set(rpcs)]).toEqual(["journal_preview_article", "journal_preview_media_path"]);
+  });
+
+  it("only the preview image route uses the server credential, and only after the database said yes", () => {
+    const users = [...PREVIEW, ...ALL].filter((f) => /supabase\/admin|createAdminClient/.test(code(f)));
+    expect(users).toEqual([route]);
+    const src = code(route);
+    expect(src.indexOf("getPreviewMediaPath(")).toBeGreaterThan(-1);
+    expect(src.indexOf("getPreviewMediaPath(")).toBeLessThan(src.indexOf("createAdminClient()"));
+    expect(src).toMatch(/if \(!path\) return new NextResponse\(null, \{ status: 404/);
+    expect(src).toMatch(/createSignedUrl\(path, 300\)/);
+    // It never takes a path, a bucket or an article from the request.
+    expect(src).not.toMatch(/searchParams|request\.(json|formData|text)\(/);
+  });
+
+  it("a preview is never indexed, cached or leaked as a referrer", () => {
+    const page = code("src/app/(functional)/journal-preview/[token]/page.tsx");
+    expect(page).toMatch(/robots: \{ index: false, follow: false, nocache: true \}/);
+    expect(page).toMatch(/referrer: "no-referrer"/);
+    expect(code(route)).toMatch(/"Cache-Control": "private, no-store", "Referrer-Policy": "no-referrer"/);
+  });
+
+  it("the public API knows nothing of previews", () => {
+    expect(PUBLIC.filter((f) => /preview/i.test(code(f)))).toEqual([]);
+  });
+});
+
+describe("uploads go to private storage with the author's own session (D-135)", () => {
+  it("the browser upload targets the private journal-media bucket and never upserts", () => {
+    const src = code("src/features/journal/upload-client.ts");
+    expect(src).toMatch(/\/storage\/v1\/object\/journal-media\//);
+    expect(src).toMatch(/"x-upsert", "false"/);
+    expect(src).not.toMatch(/SERVICE_ROLE|supabase\/admin|service_role/);
+  });
+
+  it("the server reads the stored bytes back and checks them before registering", () => {
+    const src = code("src/features/journal/actions.ts");
+    const body = src.slice(src.indexOf("export async function registerUploadAction"), src.indexOf("// -------------------------------------------------------- preview links"));
+    expect(body).toMatch(/isArticleMediaPath\(articleId, path\)/);
+    expect(body).toMatch(/\.download\(path\)/);
+    expect(body.indexOf("imageProblem(bytes)")).toBeLessThan(body.indexOf('rpc("journal_register_media"'));
+    expect(body).toMatch(/await bucket\.remove\(\[path\]\)/);
   });
 });

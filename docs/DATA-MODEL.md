@@ -218,10 +218,18 @@ content columns are relaxed (nullable), kept, and backfilled into revision 1.
 | `journal_audit` | Auditability of workflow events | No FK to the article, so the record survives a deleted draft. |
 | `journal_import_sources` | Duplicate detection / safe re-import (Medium post id → article) | — |
 | `journal_import_runs`, `journal_import_items` | Import reports | — |
+| `journal_preview_links` (migration `20261015120000`, D-134) | Share a private, view-only preview of a draft with someone without an account; revocable | No existing table holds a bearer credential. It stores only the SHA-256 of each token, its article, who made it, when it expires and whether it was turned off — no content and no child data. |
 
 No client role may write any of these; every write is a `journal_*`
 security-definer function. Anon has no SELECT on any of them except the
-publicly readable `journal_categories`.
+publicly readable `journal_categories`. Holders of a preview link reach the
+latest saved version of one article only through `journal_preview_article`
+and `journal_preview_media_path`.
+
+Migration `20261015120000` also: lets the `journal-media` bucket enforce
+10 MB and the raster allowlist itself; adds a storage DELETE policy that only
+ever allows removing an UNREGISTERED file (D-135); and lets an article start
+untitled (D-136). Review tables are kept — review is simply no longer offered.
 
 ---
 
