@@ -28,6 +28,8 @@ const db: {
   intentError: DbError | null;
   entitlementError: DbError | null;
   releases: string[];
+  gifts: Row[];
+  giftError: DbError | null;
 } = {
   ledger: new Set(),
   intents: new Map(),
@@ -37,6 +39,8 @@ const db: {
   intentError: null,
   entitlementError: null,
   releases: [],
+  gifts: [],
+  giftError: null,
 };
 
 vi.mock("@/lib/env", () => ({
@@ -54,6 +58,7 @@ vi.mock("@/features/commerce/checkout", () => ({
 }));
 vi.mock("@/lib/email/send", () => ({
   sendMissionAccessEmail: vi.fn(async () => ({ sent: false, reason: "not_configured" })),
+  sendGiftEmail: vi.fn(async () => ({ sent: true })),
 }));
 vi.mock("@/lib/observability/logger", () => ({
   logError: vi.fn(() => "ref"),
@@ -84,6 +89,12 @@ vi.mock("@/lib/supabase/admin", () => ({
         return { error: null };
       };
       q.select = () => q;
+      let patch: Row | null = null;
+      q.update = (p: Row) => {
+        patch = p;
+        return q;
+      };
+      q.is = () => q;
       q.delete = () => {
         deleting = true;
         return q;
@@ -94,6 +105,11 @@ vi.mock("@/lib/supabase/admin", () => ({
       };
       // `await admin.from("stripe_events").delete().eq(...)` — the release.
       q.then = (resolve: (v: unknown) => void) => {
+        if (patch && table === "mission_gifts") {
+          const rows = db.gifts.filter((g) => Object.entries(filters).every(([k, v]) => g[k] === v));
+          rows.forEach((g) => Object.assign(g, patch));
+          return resolve({ data: rows, error: null });
+        }
         if (!deleting) return resolve({ data: null, error: null });
         db.releases.push(filters.id as string);
         if (db.releaseError) return resolve({ error: db.releaseError });
@@ -104,6 +120,10 @@ vi.mock("@/lib/supabase/admin", () => ({
         if (table === "checkout_intents") {
           if (db.intentError) return { data: null, error: db.intentError };
           return { data: db.intents.get(filters.stripe_session_id as string) ?? null, error: null };
+        }
+        if (table === "mission_gifts") {
+          if (db.giftError) return { data: null, error: db.giftError };
+          return { data: db.gifts.find((g) => g.stripe_session_id === filters.stripe_session_id) ?? null, error: null };
         }
         if (table === "mission_entitlements") {
           const row = db.entitlements.find(
@@ -173,6 +193,8 @@ beforeEach(() => {
   db.ledger = new Set();
   db.intents = new Map([["cs_1", INTENT]]);
   db.entitlements = [];
+  db.gifts = [];
+  db.giftError = null;
   db.claimError = null;
   db.releaseError = null;
   db.intentError = null;
@@ -395,5 +417,81 @@ describe("only a verified, paid, matching payment grants access", () => {
     const res = await deliver({ session: { currency: "usd" } });
     expect(await res.json()).toMatchObject({ mismatch: true });
     expect(db.entitlements).toEqual([]);
+  });
+});
+
+describe("a gift (D-140)", () => {
+  const GIFT = {
+    id: "gift-1", mission_id: "mission-1", recipient_email: "r@example.test", stripe_session_id: "cs_1",
+    amount_minor: 1200, currency: "GBP", status: "pending", link_sent_at: null,
+  };
+  beforeEach(() => {
+    vi.stubEnv("NEXT_PUBLIC_SITE_URL", "https://academy.test");
+    db.intents.clear();
+    db.gifts = [{ ...GIFT }];
+  });
+
+  it("payment activates the gift, grants nobody anything, and sends one email", async () => {
+    const { sendGiftEmail } = await import("@/lib/email/send");
+    vi.mocked(sendGiftEmail).mockClear();
+    const res = await deliver({ session: { amount_total: 1200, currency: "gbp" } });
+    expect(res.status).toBe(200);
+    expect(db.gifts[0].status).toBe("paid");
+    expect(db.entitlements).toEqual([]);
+    expect(sendGiftEmail).toHaveBeenCalledTimes(1);
+  });
+
+  it("a repeated event creates no second gift and no second email", async () => {
+    const { sendGiftEmail } = await import("@/lib/email/send");
+    vi.mocked(sendGiftEmail).mockClear();
+    const session = { amount_total: 1200, currency: "gbp" };
+    await deliver({ session });
+    const hash = db.gifts[0].redeem_token_hash;
+    const res = await deliver({ session });
+    expect(await res.json()).toMatchObject({ duplicate: true });
+    expect(db.gifts).toHaveLength(1);
+    expect(db.gifts[0].redeem_token_hash).toBe(hash);
+    expect(sendGiftEmail).toHaveBeenCalledTimes(1);
+  });
+
+  it("an unpaid session activates nothing", async () => {
+    const res = await deliver({ session: { payment_status: "unpaid", amount_total: 1200, currency: "gbp" } });
+    expect(await res.json()).toMatchObject({ unpaid: true });
+    expect(db.gifts[0].status).toBe("pending");
+    expect(db.gifts[0].redeem_token_hash).toBeUndefined();
+  });
+
+  it("an amount that doesn't match what was recorded activates nothing", async () => {
+    const res = await deliver({ session: { amount_total: 1, currency: "gbp" } });
+    expect(await res.json()).toMatchObject({ mismatch: true });
+    expect(db.gifts[0].status).toBe("pending");
+  });
+
+  it("an email that might work next time is retried: the recipient has no other way to hear", async () => {
+    const { sendGiftEmail } = await import("@/lib/email/send");
+    vi.mocked(sendGiftEmail).mockClear();
+    vi.mocked(sendGiftEmail).mockResolvedValueOnce({ sent: false, reason: "http_503" });
+    const res = await deliver({ session: { amount_total: 1200, currency: "gbp" } });
+    expect(res.status).toBe(500);
+    expect(db.releases.length).toBe(1);
+    expect(db.gifts[0].status).toBe("paid");
+    const again = await deliver({ session: { amount_total: 1200, currency: "gbp" } });
+    expect(again.status).toBe(200);
+    expect(sendGiftEmail).toHaveBeenCalledTimes(2);
+  });
+
+  it("email not being configured doesn't make Stripe retry for days", async () => {
+    const { sendGiftEmail } = await import("@/lib/email/send");
+    vi.mocked(sendGiftEmail).mockResolvedValueOnce({ sent: false, reason: "not_configured" });
+    const res = await deliver({ session: { amount_total: 1200, currency: "gbp" } });
+    expect(res.status).toBe(200);
+    expect(db.gifts[0].status).toBe("paid");
+  });
+
+  it("a failed gift lookup is retried rather than dropped", async () => {
+    db.giftError = { message: "timeout" };
+    const res = await deliver({ session: { amount_total: 1200, currency: "gbp" } });
+    expect(res.status).toBe(500);
+    expect(db.releases.length).toBe(1);
   });
 });

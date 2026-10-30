@@ -96,7 +96,8 @@ export async function updateSession(request: NextRequest) {
     // Send a child to their own Academy rather than to a form they cannot use.
     url.pathname = hasChildCookie ? "/academy/my-missions" : "/login";
     url.search = "";
-    if (!hasChildCookie) url.searchParams.set("next", pathname);
+    // The query string too: `/purchase/x?gift=1` must come back as a gift.
+    if (!hasChildCookie) url.searchParams.set("next", pathname + request.nextUrl.search);
     return NextResponse.redirect(url);
   }
 

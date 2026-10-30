@@ -45,6 +45,12 @@ export async function adminOrders() {
   return data ?? [];
 }
 
+export async function adminGifts() {
+  const { supabase } = await requireAdmin();
+  const { data } = await supabase.rpc("admin_gifts", {});
+  return data ?? [];
+}
+
 export async function adminAnalytics() {
   const { supabase } = await requireAdmin();
   const { data } = await supabase.rpc("admin_analytics");

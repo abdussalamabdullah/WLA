@@ -1,7 +1,7 @@
 import { describe, expect, it, vi, afterEach } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { sendMissionAccessEmail } from "../send";
+import { sendGiftEmail, sendMissionAccessEmail } from "../send";
 
 const repo = join(__dirname, "../../../..");
 const webhook = readFileSync(
@@ -118,7 +118,49 @@ describe("email is wired after the entitlement, never before", () => {
     for (const forbidden of ["notification", "digest", "reminder", "campaign"]) {
       expect(code).not.toContain(forbidden);
     }
-    // Exactly one exported send function — no message catalogue.
-    expect(send.match(/^export (async )?function/gm)).toHaveLength(1);
+    // Exactly the two transactional messages, by name: the access confirmation
+    // (D-27) and the gift link (D-140). No message catalogue.
+    const exported = [...send.matchAll(/^export async function (\w+)/gm)].map((m) => m[1]);
+    expect(exported.sort()).toEqual(["sendGiftEmail", "sendMissionAccessEmail"]);
+    expect(send.match(/^export (async )?function/gm)).toHaveLength(2);
+  });
+});
+
+describe("the gift email (D-140)", () => {
+  const GIFT = {
+    to: "recipient@example.com",
+    missionTitle: "Six Names",
+    redeemUrl: "https://academy.test/redeem?token=SECRET_TOKEN",
+  };
+
+  it("carries the mission, the call to action and the link", async () => {
+    vi.stubEnv("RESEND_API_KEY", "re_test");
+    vi.stubEnv("EMAIL_FROM", "test@example.com");
+    const fetcher = vi.fn().mockResolvedValue({ ok: true, status: 200 });
+    vi.stubGlobal("fetch", fetcher);
+    await expect(sendGiftEmail(GIFT)).resolves.toEqual({ sent: true });
+    const body = JSON.parse(fetcher.mock.calls[0][1].body);
+    expect(body.to).toBe(GIFT.to);
+    expect(body.subject).toContain("Six Names");
+    expect(body.text).toContain("Redeem your gift");
+    expect(body.text).toContain(GIFT.redeemUrl);
+  });
+
+  it("never logs the link or the address, whatever happens", async () => {
+    const logged: string[] = [];
+    for (const level of ["info", "error", "warn", "log"] as const) {
+      vi.spyOn(console, level).mockImplementation((...a) => { logged.push(JSON.stringify(a)); });
+    }
+    vi.stubEnv("RESEND_API_KEY", "");
+    vi.stubEnv("EMAIL_FROM", "");
+    await sendGiftEmail(GIFT);
+    vi.stubEnv("RESEND_API_KEY", "re_test");
+    vi.stubEnv("EMAIL_FROM", "test@example.com");
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 500 }));
+    await sendGiftEmail(GIFT);
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("SECRET_TOKEN in message")));
+    await expect(sendGiftEmail(GIFT)).resolves.toEqual({ sent: false, reason: "exception" });
+    expect(logged.join()).not.toContain("SECRET_TOKEN");
+    expect(logged.join()).not.toContain("recipient@example.com");
   });
 });

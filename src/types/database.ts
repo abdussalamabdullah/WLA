@@ -85,6 +85,30 @@ export type MissionRow = {
   updated_at: string;
 };
 
+export type GiftStatus = "pending" | "paid" | "redeemed";
+
+/** D-140. Service role only: no client role can read this table. */
+export type MissionGiftRow = {
+  id: string;
+  mission_id: string;
+  purchaser_id: string | null;
+  recipient_email: string;
+  stripe_session_id: string;
+  stripe_payment_intent_id: string | null;
+  amount_minor: number;
+  currency: string;
+  status: GiftStatus;
+  redeem_token_hash: string | null;
+  claim_hash: string | null;
+  confirm_failures: number;
+  link_sent_at: string | null;
+  paid_at: string | null;
+  redeemed_at: string | null;
+  redeemed_by: string | null;
+  redeemed_child_id: string | null;
+  created_at: string;
+};
+
 export type MissionScreenRow = {
   id: string;
   mission_id: string;
@@ -587,6 +611,10 @@ export type Database = {
         Update: Partial<StripeEventRow>;
         Relationships: [];
       };
+      mission_gifts: Table<
+        MissionGiftRow,
+        "mission_id" | "recipient_email" | "stripe_session_id" | "amount_minor" | "currency"
+      >;
       checkout_intents: Table<
         CheckoutIntentRow,
         | "stripe_session_id"
@@ -988,6 +1016,24 @@ export type Database = {
           parent_email: string; missions: number; in_progress: number;
           complete: number; last_activity_at: string | null;
           access_code_status: string; code_last_used_at: string | null;
+        }[];
+      };
+      confirm_gift_email: {
+        Args: { p_token_hash: string; p_email: string; p_claim_hash: string };
+        Returns: string;
+      };
+      redeem_mission_gift: {
+        Args: { p_claim_hash: string; p_child_id: string; p_parent_id: string };
+        Returns: string;
+      };
+      admin_gifts: {
+        Args: { p_limit?: number };
+        Returns: {
+          id: string; created_at: string; mission_title: string;
+          purchaser_email: string | null; recipient_email: string;
+          amount_minor: number; currency: string; status: GiftStatus;
+          paid_at: string | null; redeemed_at: string | null;
+          redeemed_by_email: string | null; redeemed_child_name: string | null;
         }[];
       };
       admin_orders: {

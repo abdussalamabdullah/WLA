@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { PurchaseForm } from "@/components/commerce/purchase-form";
+import { PurchasePanel } from "@/components/commerce/purchase-panel";
 import { FormNotice } from "@/components/ui/field";
 import { listChildren } from "@/features/children/queries";
 import {
@@ -27,10 +27,10 @@ export default async function PurchasePage({
   searchParams,
 }: {
   params: Promise<{ slug: string }>;
-  searchParams: Promise<{ cancelled?: string }>;
+  searchParams: Promise<{ cancelled?: string; gift?: string }>;
 }) {
   const { slug } = await params;
-  const { cancelled } = await searchParams;
+  const { cancelled, gift } = await searchParams;
 
   const mission = await getPurchasableMission(slug);
   if (!mission) notFound();
@@ -69,7 +69,9 @@ export default async function PurchasePage({
         )}
 
         <div className="mt-[var(--space-xl)]">
-          <PurchaseForm
+          <PurchasePanel
+            /* Off unless the visitor came from Buy a Gift. */
+            startAsGift={gift === "1"}
             missionSlug={mission.slug}
             missionTitle={mission.title}
             priceLabel={

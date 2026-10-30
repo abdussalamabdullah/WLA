@@ -14,7 +14,9 @@ import { boundedFetch } from "./fetch";
  * Legitimate uses are narrow:
  *   - the Stripe webhook creating an entitlement for a not-yet-signed-in user
  *   - granting a FREE mission, which has no session to act on either
- *   - gift redemption linking a gift record to a child profile
+ *   - gift purchase and redemption (D-140): recording a gift before Checkout,
+ *     activating it from the verified webhook, emailing its link, and turning a
+ *     token-and-address-confirmed claim into a child's entitlement
  *   - signing a Mission Kit file a child session was authorised for (D-64)
  *   - signing a Journal image a private preview link was authorised for
  *     (D-134, journal_preview_media_path decides; the route only signs)

@@ -3,9 +3,9 @@ import "server-only";
 /**
  * TRANSACTIONAL EMAIL — D-27.
  *
- * Scope is deliberately one message: a purchase/access confirmation sent after
+ * Scope is deliberately two messages: a purchase/access confirmation sent after
  * the verified webhook creates an entitlement (PRD §4 lists transactional
- * purchase/access email in MVP scope).
+ * purchase/access email in MVP scope), and the gift redemption link (D-140).
  *
  * NOT in scope, and not to be added here: marketing, digests, reminders,
  * re-engagement, or notifications of any kind — Architecture §22 defers
@@ -100,6 +100,74 @@ function renderMissionAccessText({
     "and there's a short note for you under For Parents.",
     "",
     missionUrl,
+    "",
+    "Within Lab Academy",
+  ].join("\n");
+}
+
+export type GiftEmail = {
+  /** The address the purchaser gave. Holds the only copy of the redeem link. */
+  to: string;
+  missionTitle: string;
+  redeemUrl: string;
+};
+
+/**
+ * Tell a recipient they have been given a mission, and how to redeem it.
+ *
+ * NEVER throws, for the same reason as above: it runs in the webhook after the
+ * gift is already paid. The link is a credential, so it appears only in the
+ * message body: nothing here logs the address, the URL or the provider's reply.
+ */
+export async function sendGiftEmail(
+  email: GiftEmail,
+): Promise<{ sent: boolean; reason?: string }> {
+  const apiKey = process.env.RESEND_API_KEY;
+  const from = process.env.EMAIL_FROM;
+
+  if (!apiKey || !from) {
+    console.info("[email] not configured; would send gift link", {
+      missionTitle: email.missionTitle,
+    });
+    return { sent: false, reason: "not_configured" };
+  }
+
+  try {
+    const response = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        from,
+        to: email.to,
+        subject: `You've been given ${email.missionTitle}`,
+        text: renderGiftText(email),
+      }),
+    });
+
+    if (!response.ok) {
+      console.error("[email] gift send failed", { status: response.status });
+      return { sent: false, reason: `http_${response.status}` };
+    }
+    return { sent: true };
+  } catch {
+    // Not the error itself: a network error can quote the request.
+    console.error("[email] gift send threw");
+    return { sent: false, reason: "exception" };
+  }
+}
+
+function renderGiftText({ missionTitle, redeemUrl }: GiftEmail): string {
+  return [
+    `Someone has given you a Within Lab Academy mission: ${missionTitle}.`,
+    "",
+    "Redeem your gift:",
+    redeemUrl,
+    "",
+    "You'll be asked to confirm this email address, then to sign in or create",
+    "an account and choose the child the mission is for.",
     "",
     "Within Lab Academy",
   ].join("\n");

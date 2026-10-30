@@ -245,6 +245,15 @@ easily over-engineered areas — mission state and mission content — are
 deliberately one JSON column and one generic table rather than the "dozens of
 tables" Tech Spec §13 warns against.
 
+### `mission_gifts` (migration `20261030120000`, D-140)
+
+1. **Requirement:** PRD §31, Brief §50, Tech Spec §41: the purchaser and the receiving family may be different people.
+2. **Must:** yes. The client brief of 2026-10-30 makes it one (D-32 deferred it until then).
+3. **Can an existing table carry it?** No. `checkout_intents.child_id` and `mission_entitlements.child_id` are NOT NULL, because both describe a child; a gift has no child until it is redeemed.
+4. **Child data?** Only `redeemed_child_id`, a reference that is set null if the profile is deleted. The recipient address is an adult's. No client role can read the table.
+
+Migration `20261030130000` adds `claim_hash` and `confirm_failures` to this table (D-142). No new table.
+
 ### Before adding any table, answer:
 
 1. Which numbered requirement does it serve?

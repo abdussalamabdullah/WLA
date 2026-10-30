@@ -132,21 +132,21 @@ the codebase — verified by search — so this requires no work.
 
 # 🕒 Deferred
 
-## OPEN-07 — Gift flow · D-32
+## OPEN-07 — Gift rules not yet decided · D-140
 
-Deferred unless gifting becomes an **explicit launch requirement**.
+Gifting is built (D-140). These business rules are **not decided, and nothing has been invented for them**:
 
-`/gift` and `/redeem` stay stubs. `entitlement_source` keeps its `gift` and
-`redeemed` values, unused. The webhook continues to log `unmatched` and return
-200 for a childless session, so a gift purchase cannot silently fail — it
-simply does not yet grant anything.
+- **Expiry:** a paid gift stays redeemable indefinitely.
+- **Refunds:** refunds aren't handled (D-20). A gift refunded in Stripe stays redeemable until someone acts; there is no admin action for it yet.
+- **Transfer or correction:** a mistyped recipient address can't be changed. There is no admin action for it yet.
+- **A mission unpublished after purchase:** the gift can still be redeemed, as an existing entitlement would still work.
+- **Who may redeem:** the link and the address prove the mailbox, so the account that redeems may use a different email from the gift's (D-140). Decide if the account's email must match.
+- **A site-wide limit on `/redeem` requests:** gifts are protected per link and per gift (D-142), but request volume isn't limited. This is a hosting configuration choice.
 
-**When built, it must reuse the entitlement model** (Tech Spec §41), not fork a
-second access architecture. The difficulty to design around is Brief §50: the
-purchaser and the receiving family may be different people, which the current
-Checkout flow does not accommodate.
+## OPEN-24 — The website's own accounts · D-141
 
-**Revisit trigger:** you designate gifting a launch requirement.
+The public website has its own `/auth`, `/account`, `/my-missions`, `/admin/gifts` and a legacy `gifts` table, on a different Supabase project from the Academy's. Gifting no longer uses them. **Decide** whether they should be retired in favour of the Academy's, or the projects unified.
+
 
 ---
 
@@ -295,7 +295,7 @@ can be published. `published` stays `false` until then.
 | 02  | Typefaces             | 🔴 D-33 — method set, needs Lovable access |
 | 03  | Mission Build Brief   | ⛔                                         |
 | 05  | Child age             | ✅ D-26                                    |
-| 07  | Gift flow             | 🕒 D-32                                    |
+| 07  | Gift rules            | 🕒 D-140                                   |
 | 08  | Transactional email   | ✅ D-27                                    |
 | 09  | Error monitoring      | ✅ D-28                                    |
 | 10  | Mission authoring     | ✅ D-29                                    |
@@ -307,8 +307,9 @@ can be published. `published` stays `false` until then.
 | 21  | Journal self-approval | ✅ D-130 — approval optional                |
 | 22  | Public Journal home   | ✅ D-131 — Lovable, via the WLA API         |
 | 23  | Medium source         | ⛔ needs the Medium export                  |
+| 24  | Website's own accounts | 🔴 needs you — see OPEN-24 above           |
 
-**13 resolved · 1 deferred · 2 need you (OPEN-14, OPEN-20) · 1 blocked on source material (OPEN-23).**
+**13 resolved · 1 deferred · 3 need you (OPEN-14, OPEN-20, OPEN-24) · 1 blocked on source material (OPEN-23).**
 
 ---
 
