@@ -1,6 +1,10 @@
 import { cookies } from "next/headers";
 import { ButtonLink } from "@/components/ui/button";
-import { ConfirmGiftEmailForm, RedeemGiftForm } from "@/components/commerce/redeem-forms";
+import {
+  ConfirmGiftEmailForm,
+  RedeemGiftForm,
+  RedeemWithCodeForm,
+} from "@/components/commerce/redeem-forms";
 import { listChildren } from "@/features/children/queries";
 import { getEntitledChildIds } from "@/features/commerce/queries";
 import { GIFT_CLAIM_COOKIE, GIFT_REDEEM_PATH } from "@/features/gifts/claim";
@@ -16,12 +20,13 @@ export const metadata = {
 };
 
 /**
- * REDEEM A GIFT (D-140). The one redemption page: the link in the gift email
- * and the website's "Redeem a Gift" both arrive here.
+ * REDEEM A GIFT (D-140, D-145). The one redemption page, with two ways in:
+ * the link in the gift email, or the website's "Redeem a Gift".
  *
- *   1. Confirm the address, which nothing is shown until.
+ *   1. Prove the mailbox, which nothing is shown until: the link and the address
+ *      together, or an address and the code emailed to it.
  *   2. Sign in or create an account: the same account flow as buying.
- *   3. Choose the child. The gift then becomes that child's entitlement.
+ *   3. Choose or add the child. The gift then becomes that child's entitlement.
  *
  * Nothing about a gift appears before step 2, and a wrong address learns
  * nothing about it.
@@ -40,6 +45,17 @@ export default async function RedeemPage({
       <div className="mx-auto w-full max-w-[34rem] py-[var(--space-2xl)]">
         {gift ? (
           <Claim missionId={gift.missionId} missionTitle={gift.missionTitle} />
+        ) : !token ? (
+          <>
+            <h1 className="text-[length:var(--text-h1)]">Redeem a gift.</h1>
+            <p className="wla-measure mt-[var(--space-m)] text-[var(--color-text-muted)]">
+              Enter the email address this gift was sent to. We&rsquo;ll email it a code, and you
+              can carry on here.
+            </p>
+            <div className="mt-[var(--space-xl)]">
+              <RedeemWithCodeForm />
+            </div>
+          </>
         ) : (
           <>
             <h1 className="text-[length:var(--text-h1)]">Confirm your email to access this gift.</h1>
@@ -47,7 +63,7 @@ export default async function RedeemPage({
               Enter the email address this gift was sent to, and you&rsquo;ll be able to access it.
             </p>
             <div className="mt-[var(--space-xl)]">
-              <ConfirmGiftEmailForm token={looksLikeGiftToken(token) ? token : token ? "invalid" : undefined} />
+              <ConfirmGiftEmailForm token={looksLikeGiftToken(token) ? token : "invalid"} />
             </div>
           </>
         )}

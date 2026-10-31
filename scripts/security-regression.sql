@@ -727,3 +727,97 @@ select chk('insights count code/cipher attempts per screen (the metric was alway
           where f->>'screen_key' = 'qa_code_screen' and (f->>'code_attempts')::int = 2));
 reset role;
 \echo ''
+\echo '=============== CHILD CODE ENCRYPTED COPY (D-143) ==============='
+reset role;
+delete from child_auth_attempts;
+insert into child_profiles (id,parent_id,display_name) values
+  ('bbbbbbbb-0000-0000-0000-000000000043','aaaaaaaa-0000-0000-0000-000000000002','CopyChild') on conflict do nothing;
+set role authenticated; set request.jwt.claim.sub = 'aaaaaaaa-0000-0000-0000-000000000002';
+select credential_id as cred1, code as copy_code1 from issue_child_access_code('bbbbbbbb-0000-0000-0000-000000000043') \gset
+select chk('a generated code has the XXXX-XXXX shape from the unambiguous alphabet',
+  :'copy_code1' ~ '^[ABCDEFGHJKMNPQRSTVWXYZ23456789]{4}-[ABCDEFGHJKMNPQRSTVWXYZ23456789]{4}$');
+select chk('before a copy is stored the parent sees it is not viewable',
+  (select not has_viewable_copy from child_access_credentials where id = :'cred1'));
+select chk_raises('a parent cannot select the ciphertext column',
+  $$select code_ciphertext from child_access_credentials$$, 'permission denied');
+select chk_raises('a parent cannot store a copy directly',
+  $$select store_child_code_copy(gen_random_uuid(), gen_random_uuid(), gen_random_uuid(), 'x')$$, 'permission denied');
+select chk_raises('a parent cannot read a copy directly',
+  $$select * from read_child_code_copy('bbbbbbbb-0000-0000-0000-000000000043','aaaaaaaa-0000-0000-0000-000000000002')$$, 'permission denied');
+select chk_raises('a client cannot call the generator itself', $$select gen_child_code()$$, 'permission denied');
+-- An administrator is an authenticated client too: nothing extra.
+set request.jwt.claim.sub = 'aaaaaaaa-0000-0000-0000-000000000001';
+select chk_raises('an admin cannot select the ciphertext column',
+  $$select code_ciphertext from child_access_credentials$$, 'permission denied');
+select chk_raises('an admin cannot read a copy',
+  $$select * from read_child_code_copy('bbbbbbbb-0000-0000-0000-000000000043','aaaaaaaa-0000-0000-0000-000000000002')$$, 'permission denied');
+select chk_raises('an admin cannot generate a code for a child',
+  $$select * from issue_child_access_code('bbbbbbbb-0000-0000-0000-000000000043')$$, 'not_your_child');
+set request.jwt.claim.sub = ''; set role anon;
+select chk_raises('anon cannot select the ciphertext column',
+  $$select code_ciphertext from child_access_credentials$$, 'permission denied');
+select chk_raises('anon cannot read a copy',
+  $$select * from read_child_code_copy('bbbbbbbb-0000-0000-0000-000000000043','aaaaaaaa-0000-0000-0000-000000000002')$$, 'permission denied');
+reset role;
+set role service_role;
+select chk('a copy is refused for the wrong parent',
+  not store_child_code_copy(:'cred1','bbbbbbbb-0000-0000-0000-000000000043','aaaaaaaa-0000-0000-0000-000000000003','sealed-1'));
+select chk('a copy is refused for the wrong child',
+  not store_child_code_copy(:'cred1','bbbbbbbb-0000-0000-0000-000000000001','aaaaaaaa-0000-0000-0000-000000000002','sealed-1'));
+select chk('a copy is stored for the owner',
+  store_child_code_copy(:'cred1','bbbbbbbb-0000-0000-0000-000000000043','aaaaaaaa-0000-0000-0000-000000000002','sealed-1'));
+select chk('a stored copy is never overwritten',
+  not store_child_code_copy(:'cred1','bbbbbbbb-0000-0000-0000-000000000043','aaaaaaaa-0000-0000-0000-000000000002','sealed-2'));
+select chk('another parent reads nothing',
+  not exists (select 1 from read_child_code_copy('bbbbbbbb-0000-0000-0000-000000000043','aaaaaaaa-0000-0000-0000-000000000003')));
+select chk('the owner reads the copy of this credential',
+  (select ciphertext = 'sealed-1' and credential_id = :'cred1' from read_child_code_copy('bbbbbbbb-0000-0000-0000-000000000043','aaaaaaaa-0000-0000-0000-000000000002')));
+reset role;
+select chk('a view is recorded, without the code', (select code_last_viewed_at is not null from child_access_credentials where id = :'cred1'));
+select chk('the plaintext is not in the copy, the hash or the lookup',
+  not exists (select 1 from child_access_credentials
+    where coalesce(code_ciphertext,'') || code_hash || code_lookup like '%' || replace(:'copy_code1','-','') || '%'));
+set request.jwt.claim.sub = ''; set role anon;
+select outcome as copy_o1, token as copy_tok from redeem_child_code(:'copy_code1') \gset
+select chk('the code signs in', :'copy_o1' = 'ok');
+reset role;
+set role authenticated; set request.jwt.claim.sub = 'aaaaaaaa-0000-0000-0000-000000000002';
+select credential_id as cred2, code as copy_code2 from issue_child_access_code('bbbbbbbb-0000-0000-0000-000000000043') \gset
+reset role;
+select chk('replacing removes the old copy along with the old code',
+  (select code_ciphertext is null and revoked_at is not null from child_access_credentials where id = :'cred1'));
+select chk('replacing revokes the child sessions',
+  not exists (select 1 from child_sessions where child_id = 'bbbbbbbb-0000-0000-0000-000000000043' and revoked_at is null));
+set role service_role;
+select chk('a late copy for a replaced credential is refused',
+  not store_child_code_copy(:'cred1','bbbbbbbb-0000-0000-0000-000000000043','aaaaaaaa-0000-0000-0000-000000000002','sealed-late'));
+reset role;
+set request.jwt.claim.sub = ''; set role anon;
+select outcome as copy_o2 from redeem_child_code(:'copy_code1') \gset
+select outcome as copy_o3 from redeem_child_code(:'copy_code2') \gset
+select chk('the old code no longer signs in', :'copy_o2' = 'invalid_code');
+select chk('the new code signs in, with no copy stored', :'copy_o3' = 'ok');
+reset role;
+select chk('2,000 generated codes all use only the alphabet and are all different',
+  (select count(distinct c) = 2000 and bool_and(c ~ '^[ABCDEFGHJKMNPQRSTVWXYZ23456789]{4}-[ABCDEFGHJKMNPQRSTVWXYZ23456789]{4}$')
+     from (select gen_child_code() c from generate_series(1,2000)) g));
+\echo ''
+\echo '=============== ADDING A CHILD IS SAFE TO RETRY (D-144) ==============='
+reset role;
+set role authenticated; set request.jwt.claim.sub = 'aaaaaaaa-0000-0000-0000-000000000002';
+insert into child_profiles (parent_id, display_name, creation_key)
+  values ('aaaaaaaa-0000-0000-0000-000000000002','Retry','44444444-0000-4000-8000-000000000001');
+select chk_raises('the same key for the same parent is refused by the database',
+  $$insert into child_profiles (parent_id, display_name, creation_key) values ('aaaaaaaa-0000-0000-0000-000000000002','Retry','44444444-0000-4000-8000-000000000001')$$,
+  'child_profiles_creation_key_idx');
+select chk('and one profile exists', (select count(*)=1 from child_profiles where creation_key='44444444-0000-4000-8000-000000000001'));
+select chk_raises('a parent cannot add a child to another family',
+  $$insert into child_profiles (parent_id, display_name) values ('aaaaaaaa-0000-0000-0000-000000000003','Sneaky')$$,
+  'row-level security');
+set request.jwt.claim.sub = 'aaaaaaaa-0000-0000-0000-000000000003';
+select chk_ok('another parent using the same key is unaffected',
+  $$insert into child_profiles (parent_id, display_name, creation_key) values ('aaaaaaaa-0000-0000-0000-000000000003','Theirs','44444444-0000-4000-8000-000000000001')$$);
+select chk('a parent cannot see another family''s child by its key',
+  (select count(*)=1 from child_profiles where creation_key='44444444-0000-4000-8000-000000000001'));
+reset role;
+\echo ''

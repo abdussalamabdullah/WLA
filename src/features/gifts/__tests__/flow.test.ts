@@ -10,6 +10,7 @@ const db = vi.hoisted(() => ({
   gifts: [] as Row[],
   rpc: vi.fn(),
   send: vi.fn(),
+  sendCode: vi.fn(),
   cookies: new Map<string, string>(),
   deleted: [] as unknown[],
   redirects: [] as string[],
@@ -20,7 +21,7 @@ const db = vi.hoisted(() => ({
   rpcDown: false,
 }));
 
-vi.mock("@/lib/email/send", () => ({ sendGiftEmail: db.send }));
+vi.mock("@/lib/email/send", () => ({ sendGiftEmail: db.send, sendGiftCodeEmail: db.sendCode }));
 vi.mock("@/lib/observability/logger", () => ({ logError: vi.fn(() => "ref"), logWarn: vi.fn() }));
 vi.mock("@/features/children/active-child", () => ({ setActiveChild: vi.fn(async () => {}) }));
 vi.mock("@/features/commerce/checkout", () => ({
@@ -83,8 +84,15 @@ vi.mock("@/lib/supabase/admin", () => ({
   }),
 }));
 
-import { fulfilPaidGift, emailLinksFor } from "../fulfil";
-import { confirmGiftEmailAction, giftMissionAction, redeemGiftAction } from "../actions";
+import { emailCodeFor, fulfilPaidGift, emailLinksFor } from "../fulfil";
+import {
+  confirmGiftCodeAction,
+  confirmGiftEmailAction,
+  giftMissionAction,
+  redeemGiftAction,
+  requestGiftCodeAction,
+} from "../actions";
+import { readClaimedGift } from "../redeem";
 import { purchaseGift } from "../checkout";
 import { hashGiftToken, newGiftToken } from "../token";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -120,6 +128,7 @@ beforeEach(() => {
   db.rpc.mockReset().mockImplementation(confirmRpc);
   db.rpcDown = false;
   db.send.mockReset().mockResolvedValue({ sent: true });
+  db.sendCode.mockReset().mockResolvedValue({ sent: true });
   db.cookies.clear();
   db.deleted = [];
   db.redirects = [];
@@ -383,5 +392,148 @@ describe("the gift toggle's action", () => {
       giftMissionAction("six-names", {}, form({ recipientEmail: "r@example.test" })),
     ).rejects.toThrow("NEXT_REDIRECT");
     expect(db.redirects).toEqual(["https://stripe.test/c"]);
+  });
+});
+
+describe("redeeming from the website with a code (D-145)", () => {
+  const CODE = "ABCD2345";
+  const issuing = (rows: unknown[]) =>
+    db.rpc.mockImplementation(async (name: string) => {
+      if (name === "issue_gift_code") return { data: rows, error: null };
+      if (name === "withdraw_gift_code") return { data: null, error: null };
+      return { data: null, error: null };
+    });
+  const issued = [{ gift_id: "g1", mission_id: "m1", code: "ABCD-2345" }];
+  const answering = (word: string) =>
+    db.rpc.mockImplementation(async (name: string, a: Record<string, string>) => {
+      if (name !== "confirm_gift_code") return { data: null, error: null };
+      if (word === "matched") db.gifts[0].claim_hash = a.p_claim_hash;
+      return { data: word, error: null };
+    });
+
+  it("asking gives the same answer whether or not a gift exists, and sends only after responding", async () => {
+    issuing(issued);
+    const yes = await requestGiftCodeAction({}, form({ email: "  R@Example.test " }));
+    const no = await requestGiftCodeAction({}, form({ email: "nobody@example.test" }));
+    expect(yes.notice).toBe(no.notice);
+    expect(yes.notice).toMatch(/^If a gift was sent/);
+    expect(db.rpc).not.toHaveBeenCalled();
+    expect(db.after).toHaveLength(2);
+    expect(db.cookies.size).toBe(0);
+  });
+
+  it("no gift, or too soon: the database returns nothing and no email goes", async () => {
+    issuing([]);
+    await emailCodeFor(admin(), "nobody@example.test");
+    expect(db.sendCode).not.toHaveBeenCalled();
+  });
+
+  it("a gift: the code goes only to that address, naming the mission", async () => {
+    issuing(issued);
+    await emailCodeFor(admin(), "r@example.test");
+    expect(db.sendCode).toHaveBeenCalledExactlyOnceWith({
+      to: "r@example.test",
+      missionTitle: "Six Names",
+      code: "ABCD-2345",
+    });
+  });
+
+  it("a failed send withdraws the code, so asking again can work", async () => {
+    issuing(issued);
+    db.sendCode.mockResolvedValue({ sent: false, reason: "http_500" });
+    await emailCodeFor(admin(), "r@example.test");
+    expect(db.rpc).toHaveBeenCalledWith("withdraw_gift_code", { p_gift_id: "g1", p_code: "ABCD-2345" });
+  });
+
+  it("a successful send keeps it", async () => {
+    issuing(issued);
+    await emailCodeFor(admin(), "r@example.test");
+    expect(db.rpc).not.toHaveBeenCalledWith("withdraw_gift_code", expect.anything());
+  });
+
+  it("a database failure while asking doesn't throw", async () => {
+    db.rpc.mockResolvedValue({ data: null, error: { message: "down" } });
+    await expect(emailCodeFor(admin(), "r@example.test")).resolves.toBeUndefined();
+    expect(db.sendCode).not.toHaveBeenCalled();
+  });
+
+  it("the right code gets the claim cookie, as the link does, and sends only the claim's hash", async () => {
+    db.gifts = [{ id: "g1", status: "paid" }];
+    answering("matched");
+    await expect(confirmGiftCodeAction({}, form({ email: "r@example.test", code: "abcd-2345" }))).rejects.toThrow("NEXT_REDIRECT");
+    expect(db.redirects).toEqual(["/redeem"]);
+    const claim = db.cookies.get("wla_gift_claim")!;
+    expect(claim).toBeTruthy();
+    expect(db.gifts[0].claim_hash).toBe(hashGiftToken(claim));
+    expect(db.rpc.mock.calls[0][1]).toMatchObject({ p_email: "r@example.test", p_code: CODE });
+  });
+
+  it("a wrong code, however the database got there, is one message and no cookie", async () => {
+    answering("invalid");
+    const wrong = await confirmGiftCodeAction({}, form({ email: "r@example.test", code: CODE }));
+    const noGift = await confirmGiftCodeAction({}, form({ email: "nobody@example.test", code: CODE }));
+    expect(wrong.error).toBe(noGift.error);
+    expect(wrong.error).toMatch(/isn't right, or it has expired/);
+    expect(db.cookies.size).toBe(0);
+  });
+
+  it("a wrong code and no gift take the same time, at least the floor", async () => {
+    answering("invalid");
+    const started = Date.now();
+    await confirmGiftCodeAction({}, form({ email: "nobody@example.test", code: CODE }));
+    expect(Date.now() - started).toBeGreaterThanOrEqual(390);
+  });
+
+  it("a malformed code isn't even sent", async () => {
+    const result = await confirmGiftCodeAction({}, form({ email: "r@example.test", code: "abc" }));
+    expect(result.fieldErrors?.code).toBeTruthy();
+    expect(db.rpc).not.toHaveBeenCalled();
+  });
+
+  it("a database failure isn't reported as a wrong code", async () => {
+    db.rpc.mockResolvedValue({ data: null, error: { message: "down" } });
+    const result = await confirmGiftCodeAction({}, form({ email: "r@example.test", code: CODE }));
+    expect(result.error).toMatch(/couldn't check/);
+  });
+
+  it("the address never goes in a URL, and the code never reaches a log or the page", async () => {
+    answering("invalid");
+    const logger = await import("@/lib/observability/logger");
+    const result = await confirmGiftCodeAction({}, form({ email: "r@example.test", code: CODE }));
+    expect(JSON.stringify(result)).not.toContain(CODE);
+    expect(db.redirects).toEqual([]);
+    expect(JSON.stringify(vi.mocked(logger.logWarn).mock.calls)).not.toContain(CODE);
+    expect(JSON.stringify(vi.mocked(logger.logError).mock.calls)).not.toContain(CODE);
+  });
+
+  it("the link still works alongside codes", async () => {
+    const { token, hash } = newGiftToken();
+    db.gifts = [{ id: "g1", status: "paid", recipient_email: "r@example.test", redeem_token_hash: hash }];
+    await expect(confirmGiftEmailAction({}, form({ email: "r@example.test", token }))).rejects.toThrow("NEXT_REDIRECT");
+    expect(db.cookies.get("wla_gift_claim")).toBeTruthy();
+  });
+
+  it("asking for a link instead keeps its own ten-minute limit", async () => {
+    db.gifts = [{ id: "g1", mission_id: "m1", recipient_email: "r@example.test", status: "paid", link_sent_at: new Date().toISOString() }];
+    await confirmGiftEmailAction({}, form({ email: "r@example.test" }));
+    await Promise.all(db.after.map((fn) => fn()));
+    expect(db.send).not.toHaveBeenCalled();
+  });
+});
+
+describe("a claim expires in the database as well as in its cookie", () => {
+  const claimed = (expires: Date | null) => {
+    const { token, hash } = newGiftToken();
+    db.gifts = [{ id: "g1", status: "paid", mission_id: "m1", claim_hash: hash, claim_expires_at: expires?.toISOString() ?? null }];
+    return token;
+  };
+
+  it("an unexpired claim reads", async () => {
+    const token = claimed(new Date(Date.now() + 60_000));
+    await expect(readClaimedGift(token)).resolves.toMatchObject({ missionTitle: "Six Names" });
+  });
+
+  it("an expired claim shows nothing, even with the cookie still held", async () => {
+    await expect(readClaimedGift(claimed(new Date(Date.now() - 1000)))).resolves.toBeNull();
   });
 });

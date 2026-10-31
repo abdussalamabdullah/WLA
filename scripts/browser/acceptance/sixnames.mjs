@@ -56,7 +56,7 @@ async function screenTitle() { return b.eval("(document.querySelector('main h2')
 async function codeFor(childId) {
   await uiLogin(b, q.email, q.password);
   await b.goto(`/account/children/${childId}`, 800);
-  await b.click(/^(create a code|make a new code)$/i, { selector: "button" });
+  await b.click(/^(create an access code|generate new access code)$/i, { selector: "button" });
   await b.waitText(/new code\. Write it down/i, 30000);
   const code = await b.eval("(document.body.innerText.match(/\\b[A-Z0-9]{4}-[A-Z0-9]{4}\\b/)||[])[0]");
   return code;

@@ -13,7 +13,7 @@ await uiLogin(P, q.email, q.password);
 for (let round = 1; round <= 3; round++) {
   await C.clearCookies();
   await P.goto(`/account/children/${kid.id}`, 800);
-  await P.click(/^(create a code|make a new code)$/i, { selector: "button" });
+  await P.click(/^(create an access code|generate new access code)$/i, { selector: "button" });
   await P.waitText(/new code\. Write it down/i, 30000);
   const code = await P.eval("(document.body.innerText.match(/\\b[A-Z0-9]{4}-[A-Z0-9]{4}\\b/)||[])[0]");
   await C.goto("/child/login", 400);

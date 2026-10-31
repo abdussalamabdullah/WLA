@@ -18,6 +18,8 @@ import { boundedFetch } from "./fetch";
  *     activating it from the verified webhook, emailing its link, and turning a
  *     token-and-address-confirmed claim into a child's entitlement
  *   - signing a Mission Kit file a child session was authorised for (D-64)
+ *   - storing and reading the encrypted copy of a child's code (D-143), after
+ *     requireOwnedChild; both functions re-assert the parent themselves
  *   - signing a Journal image a private preview link was authorised for
  *     (D-134, journal_preview_media_path decides; the route only signs)
  *   - the mission engine store (features/mission-engine/store.ts, D-80):

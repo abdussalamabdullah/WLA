@@ -41,6 +41,31 @@ describe("child access codes are never stored in plaintext (D-58)", () => {
     expect(grant![1]).not.toContain("code_lookup");
   });
 
+  it("the encrypted copy is outside every client grant (D-143)", () => {
+    const s = sql("supabase/migrations/20261030140000_child_code_encrypted_copy.sql");
+    const grants = [...s.matchAll(/grant select \(([^)]*)\)\s*on child_access_credentials/g)];
+    expect(grants.length).toBeGreaterThan(0);
+    for (const g of grants) expect(g[1]).not.toContain("code_ciphertext");
+    for (const fn of ["store_child_code_copy(uuid, uuid, uuid, text)", "read_child_code_copy(uuid, uuid)"]) {
+      expect(s).toContain(`revoke all on function ${fn} from public, anon, authenticated;`);
+      expect(s).toContain(`grant execute on function ${fn} to service_role;`);
+    }
+  });
+
+  it("no client code can reach the encryption key or the crypto module (D-143)", () => {
+    expect(read("src/features/child-auth/code-crypto.ts")).toContain('from "node:crypto"');
+    expect(read("src/features/child-auth/code-crypto.ts")).not.toContain("NEXT_PUBLIC");
+    expect(read("src/features/child-auth/issue-code.ts")).toContain('import "server-only"');
+    expect(read("src/components/child/child-access-panel.tsx")).not.toContain("code-crypto");
+  });
+
+  it("code generation uses cryptographic randomness (D-143)", () => {
+    const s = sql("supabase/migrations/20261030140000_child_code_encrypted_copy.sql");
+    const fn = s.slice(s.indexOf("create or replace function gen_child_code"), s.indexOf("issue_child_access_code"));
+    expect(fn).toContain("gen_random_bytes");
+    expect(fn).not.toContain("random()");
+  });
+
   it("the generated type agrees with the grant — no hash column is even expressible", () => {
     const types = read("src/types/database.ts");
     const row = types.slice(
@@ -49,6 +74,7 @@ describe("child access codes are never stored in plaintext (D-58)", () => {
     );
     expect(row).not.toContain("code_hash");
     expect(row).not.toContain("code_lookup");
+    expect(row).not.toContain("code_ciphertext");
   });
 
   it("only one code can be live per child, enforced by a unique index", () => {

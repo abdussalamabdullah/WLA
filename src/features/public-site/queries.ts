@@ -8,6 +8,8 @@ export type PublicMissionFacts = {
   duration: string | null;
   /** Formatted from the row's own currency; null for a free or unpriced row. */
   priceLabel: string | null;
+  /** `missions.cover_image` as stored; resolveMissionCover makes it an address. */
+  coverImage: string | null;
 };
 
 /**
@@ -27,7 +29,7 @@ export async function getPublicMissionFacts(
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("missions")
-    .select("duration, price_minor, currency, is_free")
+    .select("duration, price_minor, currency, is_free, cover_image")
     .eq("slug", slug)
     .eq("published", true)
     .maybeSingle();
@@ -43,5 +45,6 @@ export async function getPublicMissionFacts(
       !data.is_free && data.price_minor
         ? formatPrice(data.price_minor, data.currency)
         : null,
+    coverImage: data.cover_image,
   };
 }

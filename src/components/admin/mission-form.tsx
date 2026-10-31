@@ -1,11 +1,12 @@
 "use client";
 
-import { useActionState, useEffect } from "react";
+import { useActionState, useEffect, useState } from "react";
 import { Field, FormError, FormNotice, Input } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
 import { saveMissionAction } from "@/features/admin/actions";
 import { emptyAdminState, type AdminFormState } from "@/features/admin/schemas";
 import { cn } from "@/lib/utils";
+import { MissionCoverField } from "./mission-cover-field";
 import { useDirtyForm, useSubmitWithoutReset, UnsavedNote } from "./unsaved-changes";
 import type { MissionRow } from "@/types/database";
 
@@ -43,6 +44,8 @@ export function MissionForm({
   );
 
   const err = (name: string) => state.fieldErrors?.[name]?.[0];
+  // Saving mid-upload would save the old cover and strand the new one.
+  const [coverBusy, setCoverBusy] = useState(false);
   const { ref, dirty, saved } = useDirtyForm("details", "the mission details");
   const submit = useSubmitWithoutReset(action);
   useEffect(() => { if (state.ok) saved(); }, [state]); // eslint-disable-line react-hooks/exhaustive-deps -- once per action result
@@ -146,20 +149,17 @@ export function MissionForm({
               defaultValue={mission.duration ?? ""}
             />
           </Field>
-          <Field
-            label="Cover image"
-            htmlFor="cover_image"
-            hint="A path the Academy can serve, e.g. /missions/six-names.jpg"
-            error={err("cover_image")}
-          >
-            <Input
-              id="cover_image"
-              name="cover_image"
-              defaultValue={mission.cover_image ?? ""}
-            />
-          </Field>
         </div>
       </section>
+
+      <hr className="wla-rule" />
+
+      <MissionCoverField
+        missionId={mission.id}
+        savedValue={mission.cover_image}
+        error={err("cover_image")}
+        onBusyChange={setCoverBusy}
+      />
 
       <hr className="wla-rule" />
 
@@ -241,7 +241,7 @@ export function MissionForm({
       )}
 
       <div className="flex flex-wrap items-center gap-[var(--space-l)]">
-        <Button type="submit" size="large" isLoading={pending}>
+        <Button type="submit" size="large" isLoading={pending} disabled={coverBusy}>
           Save changes
         </Button>
         <UnsavedNote dirty={dirty} />

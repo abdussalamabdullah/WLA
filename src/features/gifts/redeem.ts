@@ -32,6 +32,25 @@ export async function confirmGiftEmail(token: string, email: string): Promise<Em
   return { outcome: "invalid" };
 }
 
+/**
+ * The code form's answer: a claim, or nothing else. Whether a gift exists, the
+ * code expired or the attempts ran out all look the same. Throws only if the
+ * database can't answer.
+ */
+export async function confirmGiftCode(
+  email: string,
+  code: string,
+): Promise<{ outcome: "matched"; claim: string } | { outcome: "invalid" }> {
+  const { token: claim, hash: claimHash } = newGiftToken();
+  const { data, error } = await createAdminClient().rpc("confirm_gift_code", {
+    p_email: normaliseGiftEmail(email),
+    p_code: code,
+    p_claim_hash: claimHash,
+  });
+  if (error) throw error;
+  return data === "matched" ? { outcome: "matched", claim } : { outcome: "invalid" };
+}
+
 export type ClaimedGift = { missionId: string; missionTitle: string; missionSlug: string };
 
 /** The gift a confirmed claim refers to, or null if it is no longer redeemable. */
@@ -39,10 +58,11 @@ export async function readClaimedGift(claim: string | undefined): Promise<Claime
   if (!looksLikeGiftToken(claim)) return null;
   const { data } = await createAdminClient()
     .from("mission_gifts")
-    .select("mission_id, status, missions(title, slug)")
+    .select("mission_id, status, claim_expires_at, missions(title, slug)")
     .eq("claim_hash", hashGiftToken(claim))
     .maybeSingle();
   if (!data || data.status !== "paid") return null;
+  if (!data.claim_expires_at || new Date(data.claim_expires_at).getTime() <= Date.now()) return null;
   const mission = data.missions as unknown as { title: string; slug: string } | null;
   if (!mission) return null;
   return { missionId: data.mission_id, missionTitle: mission.title, missionSlug: mission.slug };

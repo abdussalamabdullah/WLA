@@ -1,11 +1,14 @@
 import "server-only";
 
+import { devMailpitUrl, sendToMailpit } from "./dev-mailpit";
+
 /**
  * TRANSACTIONAL EMAIL — D-27.
  *
- * Scope is deliberately two messages: a purchase/access confirmation sent after
+ * Scope is deliberately three messages: a purchase/access confirmation sent after
  * the verified webhook creates an entitlement (PRD §4 lists transactional
- * purchase/access email in MVP scope), and the gift redemption link (D-140).
+ * purchase/access email in MVP scope), the gift redemption link (D-140), and the
+ * code a gift recipient asked for on the website (D-145).
  *
  * NOT in scope, and not to be added here: marketing, digests, reminders,
  * re-engagement, or notifications of any kind — Architecture §22 defers
@@ -47,6 +50,14 @@ export async function sendMissionAccessEmail(
   const from = process.env.EMAIL_FROM;
 
   if (!apiKey || !from) {
+    const mailpit = devMailpitUrl();
+    if (mailpit) {
+      return sendToMailpit(mailpit, {
+        to: email.to,
+        subject: `${email.childName} now has ${email.missionTitle}`,
+        text: renderMissionAccessText(email),
+      });
+    }
     // Configuration pending, not an error.
     console.info("[email] not configured; would send mission access", {
       missionTitle: email.missionTitle,
@@ -126,6 +137,14 @@ export async function sendGiftEmail(
   const from = process.env.EMAIL_FROM;
 
   if (!apiKey || !from) {
+    const mailpit = devMailpitUrl();
+    if (mailpit) {
+      return sendToMailpit(mailpit, {
+        to: email.to,
+        subject: `You've been given ${email.missionTitle}`,
+        text: renderGiftText(email),
+      });
+    }
     console.info("[email] not configured; would send gift link", {
       missionTitle: email.missionTitle,
     });
@@ -168,6 +187,70 @@ function renderGiftText({ missionTitle, redeemUrl }: GiftEmail): string {
     "",
     "You'll be asked to confirm this email address, then to sign in or create",
     "an account and choose the child the mission is for.",
+    "",
+    "Within Lab Academy",
+  ].join("\n");
+}
+
+export type GiftCodeEmail = {
+  /** The address that was typed, and only ever one a gift was sent to. */
+  to: string;
+  missionTitle: string;
+  code: string;
+};
+
+/**
+ * The code for "Redeem a Gift" on the website (D-145). Sent only when someone
+ * asked and a gift exists for that address. Never throws. The code is a credential,
+ * so it appears only in the message body: nothing here logs it or the address.
+ */
+export async function sendGiftCodeEmail(
+  email: GiftCodeEmail,
+): Promise<{ sent: boolean; reason?: string }> {
+  const apiKey = process.env.RESEND_API_KEY;
+  const from = process.env.EMAIL_FROM;
+  const subject = `Your code to redeem ${email.missionTitle}`;
+
+  if (!apiKey || !from) {
+    const mailpit = devMailpitUrl();
+    if (mailpit) return sendToMailpit(mailpit, { to: email.to, subject, text: renderGiftCodeText(email) });
+    console.info("[email] not configured; would send gift code", {
+      missionTitle: email.missionTitle,
+    });
+    return { sent: false, reason: "not_configured" };
+  }
+
+  try {
+    const response = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ from, to: email.to, subject, text: renderGiftCodeText(email) }),
+    });
+
+    if (!response.ok) {
+      console.error("[email] gift code send failed", { status: response.status });
+      return { sent: false, reason: `http_${response.status}` };
+    }
+    return { sent: true };
+  } catch {
+    // Not the error itself: a network error can quote the request.
+    console.error("[email] gift code send threw");
+    return { sent: false, reason: "exception" };
+  }
+}
+
+function renderGiftCodeText({ missionTitle, code }: GiftCodeEmail): string {
+  return [
+    `Here is your code to redeem the Within Lab Academy mission ${missionTitle}:`,
+    "",
+    code,
+    "",
+    "Enter it on the Redeem a Gift page. It works once and lasts 15 minutes.",
+    "",
+    "If you didn't ask for this, you can ignore this email.",
     "",
     "Within Lab Academy",
   ].join("\n");

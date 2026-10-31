@@ -3,26 +3,31 @@
 import { revalidatePath } from "next/cache";
 import { requireOwnedChild } from "@/lib/permissions";
 import { logWarn } from "@/lib/observability/logger";
-import { issueChildAccessCode } from "./issue-code";
+import { REPLACE_TO_VIEW } from "./copy";
+import { issueChildAccessCode, revealChildAccessCode } from "./issue-code";
 
 /**
- * Parent-side management of a child's access code — brief §4, §5.
+ * Parent-side management of a child's access code — brief §4, §5, D-143.
  *
- * REVEAL MEANS "SEE WHAT WAS JUST MADE", NOT "READ IT BACK".
+ * Sign-in verifies a bcrypt hash and a keyed lookup digest. A separate encrypted
+ * copy lets the parent see the active code again; a code made before that copy
+ * existed can only be replaced.
  *
- * Only a bcrypt hash and a keyed lookup digest are stored, so there is nothing
- * to read back. A parent who loses the code makes a new one. That is a
- * deliberate cost: the alternative is storing something recoverable, which
- * would make the credential table worth stealing.
- *
- * The code is returned once, in the action result, and is never written to a
- * log, a URL, a revalidated cache entry or the database in plaintext.
+ * A code travels only in an action result, never in a log, a URL, a revalidated
+ * cache entry or the database in plaintext. It is not in the page's HTML either:
+ * the page knows only whether "Show access code" can work.
  */
 
 export type ChildCodeState = {
   code?: string;
   error?: string;
   revoked?: boolean;
+  /** This code can be shown again from the profile. */
+  viewable?: boolean;
+  /** The code on screen is a new one, just made. */
+  replaced?: boolean;
+  /** The active code has no copy to show. */
+  notViewable?: boolean;
 };
 
 export async function generateChildCodeAction(
@@ -30,6 +35,25 @@ export async function generateChildCodeAction(
   formData: FormData,
 ): Promise<ChildCodeState> {
   const childId = String(formData.get("childId") ?? "");
+
+  // Replacing ends the child's sessions, so it needs the explicit confirmation.
+  let hadCode = false;
+  try {
+    const { supabase } = await requireOwnedChild(childId);
+    const { data, error } = await supabase
+      .from("child_access_credentials")
+      .select("id")
+      .eq("child_id", childId)
+      .is("revoked_at", null)
+      .maybeSingle();
+    if (error) throw error;
+    hadCode = Boolean(data);
+  } catch {
+    return { error: "That child profile does not belong to this account." };
+  }
+  if (hadCode && formData.get("confirmReplace") !== "yes") {
+    return { error: "Please confirm that you want to replace this code." };
+  }
 
   // The family boundary is asserted inside, and again by the RPC.
   const issued = await issueChildAccessCode(childId);
@@ -43,7 +67,28 @@ export async function generateChildCodeAction(
   }
 
   revalidatePath(`/account/children/${childId}`);
-  return { code: issued.code };
+  return { code: issued.code, viewable: issued.viewable, replaced: hadCode };
+}
+
+export async function revealChildCodeAction(
+  _prev: ChildCodeState,
+  formData: FormData,
+): Promise<ChildCodeState> {
+  const revealed = await revealChildAccessCode(String(formData.get("childId") ?? ""));
+  if ("code" in revealed) return { code: revealed.code, viewable: true };
+  switch (revealed.error) {
+    case "not_owned":
+      return { error: "That child profile does not belong to this account." };
+    case "no_copy":
+      return { error: REPLACE_TO_VIEW, notViewable: true };
+    case "unreadable":
+      return {
+        error: `We can't show this code right now. The code itself still works. ${REPLACE_TO_VIEW}`,
+        notViewable: true,
+      };
+    default:
+      return { error: "We couldn't show the code just now. Please try again." };
+  }
 }
 
 export async function revokeChildCodeAction(

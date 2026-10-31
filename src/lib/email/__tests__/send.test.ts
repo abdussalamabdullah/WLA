@@ -1,7 +1,8 @@
-import { describe, expect, it, vi, afterEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { sendGiftEmail, sendMissionAccessEmail } from "../send";
+import { sendGiftCodeEmail, sendGiftEmail, sendMissionAccessEmail } from "../send";
+import { devMailpitUrl } from "../dev-mailpit";
 
 const repo = join(__dirname, "../../../..");
 const webhook = readFileSync(
@@ -118,11 +119,11 @@ describe("email is wired after the entitlement, never before", () => {
     for (const forbidden of ["notification", "digest", "reminder", "campaign"]) {
       expect(code).not.toContain(forbidden);
     }
-    // Exactly the two transactional messages, by name: the access confirmation
-    // (D-27) and the gift link (D-140). No message catalogue.
+    // Exactly the three transactional messages, by name: the access confirmation
+    // (D-27), the gift link (D-140) and the gift code (D-145). No message catalogue.
     const exported = [...send.matchAll(/^export async function (\w+)/gm)].map((m) => m[1]);
-    expect(exported.sort()).toEqual(["sendGiftEmail", "sendMissionAccessEmail"]);
-    expect(send.match(/^export (async )?function/gm)).toHaveLength(2);
+    expect(exported.sort()).toEqual(["sendGiftCodeEmail", "sendGiftEmail", "sendMissionAccessEmail"]);
+    expect(send.match(/^export (async )?function/gm)).toHaveLength(3);
   });
 });
 
@@ -162,5 +163,65 @@ describe("the gift email (D-140)", () => {
     await expect(sendGiftEmail(GIFT)).resolves.toEqual({ sent: false, reason: "exception" });
     expect(logged.join()).not.toContain("SECRET_TOKEN");
     expect(logged.join()).not.toContain("recipient@example.com");
+  });
+});
+
+describe("the gift code email (D-145)", () => {
+  const CODE_MAIL = { to: "r@example.test", missionTitle: "Six Names", code: "ABCD-2345" };
+  beforeEach(() => {
+    vi.stubEnv("NODE_ENV", "test");
+    vi.stubEnv("WLA_DEV_MAILPIT_URL", "");
+  });
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+  });
+
+  it("carries the code only in the body, and logs neither it nor the address", async () => {
+    vi.stubEnv("RESEND_API_KEY", "re_test");
+    vi.stubEnv("EMAIL_FROM", "a@b.test");
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true });
+    vi.stubGlobal("fetch", fetchMock);
+    const logs = [vi.spyOn(console, "info"), vi.spyOn(console, "error")];
+    await expect(sendGiftCodeEmail(CODE_MAIL)).resolves.toEqual({ sent: true });
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(body.text).toContain("ABCD-2345");
+    expect(body.subject).not.toContain("ABCD-2345");
+    expect(body.text).toMatch(/15 minutes/);
+    for (const log of logs) expect(JSON.stringify(log.mock.calls)).not.toMatch(/ABCD-2345|r@example/);
+    logs.forEach((l) => l.mockRestore());
+  });
+
+  it("a failed send says so and doesn't throw", async () => {
+    vi.stubEnv("RESEND_API_KEY", "re_test");
+    vi.stubEnv("EMAIL_FROM", "a@b.test");
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 500 }));
+    await expect(sendGiftCodeEmail(CODE_MAIL)).resolves.toEqual({ sent: false, reason: "http_500" });
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("network")));
+    await expect(sendGiftCodeEmail(CODE_MAIL)).resolves.toEqual({ sent: false, reason: "exception" });
+  });
+
+  it("without configuration it sends nothing", async () => {
+    vi.stubEnv("RESEND_API_KEY", "");
+    vi.stubEnv("EMAIL_FROM", "");
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(sendGiftCodeEmail(CODE_MAIL)).resolves.toEqual({ sent: false, reason: "not_configured" });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("local Mailpit delivery can't reach production (D-145)", () => {
+  const LOCAL = "http://127.0.0.1:55324";
+  it("works only in development with a loopback address", () => {
+    expect(devMailpitUrl({ NODE_ENV: "development", WLA_DEV_MAILPIT_URL: LOCAL })).toBe(LOCAL);
+    expect(devMailpitUrl({ NODE_ENV: "production", WLA_DEV_MAILPIT_URL: LOCAL })).toBeNull();
+    expect(devMailpitUrl({ NODE_ENV: "test", WLA_DEV_MAILPIT_URL: LOCAL })).toBeNull();
+    expect(devMailpitUrl({ NODE_ENV: "development" })).toBeNull();
+  });
+  it("refuses any other host, so mail can't be redirected", () => {
+    for (const url of ["https://evil.example", "http://127.0.0.1.evil.example", "not a url"]) {
+      expect(devMailpitUrl({ NODE_ENV: "development", WLA_DEV_MAILPIT_URL: url })).toBeNull();
+    }
   });
 });

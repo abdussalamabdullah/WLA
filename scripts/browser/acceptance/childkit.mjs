@@ -6,7 +6,7 @@ await P.goto("/account/children", 500);
 const adaHref = await P.eval("([...document.querySelectorAll('a')].find(a=>/Edit/.test(a.innerText) && a.closest('li')?.innerText.includes('Ada'))||{}).getAttribute?.('href')");
 await P.goto(adaHref, 600);
 const hadCode = /A code is active/.test(await P.text());
-await P.click(/^(create a code|make a new code)$/i, { selector: "button" }); await P.waitText(/new code\. Write it down/i, 30000);
+await P.click(/^(create an access code|generate new access code)$/i, { selector: "button" }); await P.waitText(/new code\. Write it down/i, 30000);
 const code = await P.eval("(document.body.innerText.match(/\\b[A-Z0-9]{4}-[A-Z0-9]{4}\\b/)||[])[0]");
 await C.goto("/child/login", 300); await C.fill("input[name=code]", code);
 await C.click(/continue/i, { selector: "button[type=submit]" }); await C.waitUrl(/\/academy/, 40000);

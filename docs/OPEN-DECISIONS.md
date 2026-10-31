@@ -141,7 +141,8 @@ Gifting is built (D-140). These business rules are **not decided, and nothing ha
 - **Transfer or correction:** a mistyped recipient address can't be changed. There is no admin action for it yet.
 - **A mission unpublished after purchase:** the gift can still be redeemed, as an existing entitlement would still work.
 - **Who may redeem:** the link and the address prove the mailbox, so the account that redeems may use a different email from the gift's (D-140). Decide if the account's email must match.
-- **A site-wide limit on `/redeem` requests:** gifts are protected per link and per gift (D-142), but request volume isn't limited. This is a hosting configuration choice.
+- **A site-wide limit on `/redeem` requests:** gifts are protected per link, per code and per gift (D-142, D-145), but request volume isn't limited. Anyone can make a gift recipient receive up to 30 code emails an hour by typing their address. Set a limit at the hosting edge before launch.
+- **Several gifts to one address:** they are handled one at a time, oldest first (D-145). A recipient isn't told a second gift is waiting until they redeem again.
 
 ## OPEN-24 — The website's own accounts · D-141
 
@@ -330,3 +331,11 @@ three Postgres functions, storage policies, Stripe signature verification,
 webhook delivery, retry and duplicate handling, concurrency, and the end-to-end
 payment flow. **None of these may be described as runtime-verified until tested
 against live or test Supabase and Stripe.**
+
+## OPEN-25 — Covers on the Academy's public pages · D-146, D-109
+
+Covers now display on the Academy's public pages, but those pages still list only the temporary hard-coded catalogue (D-109), which has Six Names alone. A new mission shows on the public website and in My Missions, not on Academy public pages. Decide whether those pages stay, or the website alone is the public catalogue.
+
+## OPEN-26 — Descriptions for uploaded covers · D-146
+
+A mission cover has no description field, so an uploaded cover has empty alt text unless it is written into `SUPPLIED_COVER`. The title always sits beside the image, so this is permitted (`covers.ts`), but Six Names' photograph is the only one described. Decide whether administrators should write one.

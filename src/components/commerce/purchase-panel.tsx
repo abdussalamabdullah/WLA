@@ -50,11 +50,11 @@ export function PurchasePanel({ startAsGift, ...purchase }: PanelProps) {
         </label>
       )}
 
-      {asGift ? (
-        <GiftForm missionSlug={purchase.missionSlug} priceLabel={purchase.priceLabel} />
-      ) : (
+      {asGift && <GiftForm missionSlug={purchase.missionSlug} priceLabel={purchase.priceLabel} />}
+      {/* Kept mounted: a child just added, and their code, survive the toggle. */}
+      <div hidden={asGift}>
         <PurchaseForm {...purchase} />
-      )}
+      </div>
     </div>
   );
 }

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isStorableCover } from "@/features/missions/covers";
 
 /**
  * THE EDITABLE CONTENT BOUNDARY — CMS-01, PRD §28, Tech Spec §39.
@@ -64,7 +65,12 @@ export const missionCatalogueSchema = z
       .max(1_000_00)
       .nullable(),
     currency: z.string().trim().length(3).toUpperCase(),
-    cover_image: z.string().trim().max(400).optional().or(z.literal("")),
+    cover_image: z
+      .string()
+      .trim()
+      .max(400)
+      .refine((v) => v === "" || isStorableCover(v), "Choose an image with the button above.")
+      .optional(),
     is_free: z.boolean(),
     published: z.boolean(),
   })

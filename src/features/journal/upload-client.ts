@@ -101,6 +101,9 @@ export function uploadToStorage(opts: {
   contentType: string;
   onProgress?: (fraction: number) => void;
   signal?: AbortSignal;
+  /** Journal media by default. Mission covers use their own bucket (D-146). */
+  bucket?: string;
+  describeFailure?: (status: number, body: string) => string;
 }): Promise<void> {
   if (!(IMAGE_MIME_TYPES as readonly string[]).includes(opts.contentType)) {
     return Promise.reject(new UploadError("Use a PNG, JPEG, WebP or GIF image."));
@@ -108,7 +111,7 @@ export function uploadToStorage(opts: {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     const encoded = opts.path.split("/").map(encodeURIComponent).join("/");
-    xhr.open("POST", `${opts.supabaseUrl.replace(/\/+$/, "")}/storage/v1/object/journal-media/${encoded}`);
+    xhr.open("POST", `${opts.supabaseUrl.replace(/\/+$/, "")}/storage/v1/object/${opts.bucket ?? "journal-media"}/${encoded}`);
     xhr.setRequestHeader("Authorization", `Bearer ${opts.accessToken}`);
     xhr.setRequestHeader("apikey", opts.anonKey);
     xhr.setRequestHeader("x-upsert", "false");
@@ -119,7 +122,7 @@ export function uploadToStorage(opts: {
     };
     xhr.onload = () => {
       if (xhr.status >= 200 && xhr.status < 300) return resolve();
-      reject(new UploadError(uploadFailureMessage(xhr.status, xhr.responseText)));
+      reject(new UploadError((opts.describeFailure ?? uploadFailureMessage)(xhr.status, xhr.responseText)));
     };
     xhr.onerror = () => reject(new UploadError("The upload was interrupted. Check your connection and try again."));
     xhr.onabort = () => reject(new UploadError("Upload cancelled."));

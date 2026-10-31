@@ -1,6 +1,6 @@
 import "server-only";
 
-import { sendGiftEmail } from "@/lib/email/send";
+import { sendGiftCodeEmail, sendGiftEmail } from "@/lib/email/send";
 import { logError, logWarn } from "@/lib/observability/logger";
 import type { createAdminClient } from "@/lib/supabase/admin";
 import { hashGiftToken, newGiftToken } from "./token";
@@ -187,5 +187,42 @@ export async function emailLinksFor(admin: Admin, email: string): Promise<void> 
       .eq("id", gift.id)
       .eq("status", "paid");
     if (rotateError) logError("gift_token_rotate_failed", rotateError, { giftId: gift.id });
+  }
+}
+
+/**
+ * "Redeem a Gift" from the website: email a code to that address if a gift waits
+ * for it (D-145). The database chooses the oldest paid gift, applies the
+ * two-minute limit, and makes the code. No row means nothing to send, and the
+ * visitor has already had the same answer either way.
+ *
+ * A send that fails withdraws the code and gives the limit back, so asking again
+ * can work straight away. Never throws: this runs after the response.
+ */
+export async function emailCodeFor(admin: Admin, email: string): Promise<void> {
+  try {
+    const { data, error } = await admin.rpc("issue_gift_code", { p_email: email });
+    if (error) {
+      logError("gift_code_issue_failed", error);
+      return;
+    }
+    const issued = data?.[0];
+    if (!issued) return;
+
+    const title = await missionTitle(admin, issued.mission_id);
+    const delivery = title
+      ? await sendGiftCodeEmail({ to: email, missionTitle: title, code: issued.code })
+      : { sent: false, reason: "not_composed" };
+
+    if (!delivery.sent) {
+      logWarn("gift_code_not_sent", { giftId: issued.gift_id, reason: delivery.reason ?? "unknown" });
+      const { error: withdrawError } = await admin.rpc("withdraw_gift_code", {
+        p_gift_id: issued.gift_id,
+        p_code: issued.code,
+      });
+      if (withdrawError) logError("gift_code_withdraw_failed", withdrawError, { giftId: issued.gift_id });
+    }
+  } catch (error) {
+    logError("gift_code_failed", error);
   }
 }

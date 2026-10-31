@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
+import { z } from "zod";
 import { requireParent, requireOwnedChild } from "@/lib/permissions";
 import { childProfileSchema } from "./schemas";
 import {
@@ -10,7 +11,10 @@ import {
   getActiveChildId,
 } from "./active-child";
 import { fieldErrorsFrom, type FormState } from "@/features/auth/schemas";
-import { issueChildAccessCode } from "@/features/child-auth/issue-code";
+import {
+  issueChildAccessCode,
+  revealChildAccessCode,
+} from "@/features/child-auth/issue-code";
 import { safeNextOrNull } from "@/lib/safe-next";
 import { logError } from "@/lib/observability/logger";
 
@@ -60,6 +64,10 @@ export type CreateChildState = FormState & {
     code?: string;
     /** A code was asked for but could not be made; the profile still exists. */
     codeFailed?: boolean;
+    /** The code can be shown again from the profile (D-143). */
+    viewable?: boolean;
+    /** This was a retry of an addition that had already worked (D-144). */
+    alreadyAdded?: boolean;
   };
   /** Where to carry on to — e.g. back to a purchase. Already validated. */
   next?: string;
@@ -80,6 +88,11 @@ export async function createChildAction(
 
   const { supabase, user } = await requireParent();
 
+  // One key per attempt, made by the form. Not authority over anything: it is
+  // unique only within this parent, and a malformed one is simply ignored.
+  const key = z.string().uuid().safeParse(formData.get("creationKey"));
+  const creationKey = key.success ? key.data : null;
+
   const { data: child, error } = await supabase
     .from("child_profiles")
     .insert({
@@ -87,9 +100,40 @@ export async function createChildAction(
       display_name: parsed.data.displayName,
       birth_year:
         parsed.data.birthYear === "" ? null : (parsed.data.birthYear ?? null),
+      creation_key: creationKey,
     })
     .select("id, display_name")
     .single();
+
+  /*
+   * The same attempt arriving twice (D-144): answer with the profile that
+   * exists. A retry NEVER makes a code, because that would revoke one the first
+   * request may have just handed over. It can only show the one that exists.
+   */
+  if (error?.code === "23505" && creationKey) {
+    const { data: existing } = await supabase
+      .from("child_profiles")
+      .select("id, display_name")
+      .eq("parent_id", user.id)
+      .eq("creation_key", creationKey)
+      .maybeSingle();
+    if (existing) {
+      const revealed =
+        formData.get("accessCode") === "on"
+          ? await revealChildAccessCode(existing.id)
+          : null;
+      return {
+        created: {
+          childId: existing.id,
+          name: existing.display_name,
+          code: revealed && "code" in revealed ? revealed.code : undefined,
+          viewable: Boolean(revealed && "code" in revealed),
+          alreadyAdded: true,
+        },
+        next: safeNextOrNull(formData.get("next")?.toString()) ?? undefined,
+      };
+    }
+  }
 
   if (error || !child) {
     return { error: "We couldn't add that profile. Please try again." };
@@ -106,17 +150,25 @@ export async function createChildAction(
    */
   let code: string | undefined;
   let codeFailed = false;
+  let viewable = false;
   if (formData.get("accessCode") === "on") {
     const issued = await issueChildAccessCode(child.id);
-    if ("code" in issued) code = issued.code;
-    else codeFailed = true;
+    if ("code" in issued) {
+      code = issued.code;
+      viewable = issued.viewable;
+    } else {
+      codeFailed = true;
+    }
   }
 
   revalidatePath("/account", "layout");
   revalidatePath("/academy", "layout");
+  // The two journeys that can add a child without leaving (D-144).
+  revalidatePath("/purchase", "layout");
+  revalidatePath("/redeem");
 
   return {
-    created: { childId: child.id, name: child.display_name, code, codeFailed },
+    created: { childId: child.id, name: child.display_name, code, codeFailed, viewable },
     next: safeNextOrNull(formData.get("next")?.toString()) ?? undefined,
   };
 }

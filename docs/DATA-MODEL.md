@@ -262,3 +262,17 @@ Migration `20261030130000` adds `claim_hash` and `confirm_failures` to this tabl
 4. Does it store child data that Brief §46 says not to collect?
 
 If 2 is "deferred", stop.
+
+### No new tables for D-143 to D-146
+
+Each of these extends an existing table, answering "can an existing table carry it?" with yes. None collects new child data (Brief §46): `creation_key` is a random value, and the access code is the same code in encrypted form.
+
+| Migration | Table | Columns | Why |
+|---|---|---|---|
+| `20261030140000` | `child_access_credentials` | `code_ciphertext`, `code_last_viewed_at`, `has_viewable_copy` | A parent can view the active code (D-143). `code_ciphertext` is outside the client grant. |
+| `20261030150000` | `child_profiles` | `creation_key` | Adding a child is safe to retry (D-144). |
+| `20261030160000` | `mission_gifts` | `code_hash`, `code_expires_at`, `code_failures`, `code_sent_at`, `claim_expires_at` | Redeeming from the website with a code, and claims that expire (D-145). |
+| `20261030170000` | `storage.buckets` | the `mission-covers` bucket and its policies | Mission covers (D-146). `missions.cover_image` already existed. |
+
+`app_secrets` gains the row `gift_code_pepper`.
+

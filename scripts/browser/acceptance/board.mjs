@@ -85,7 +85,7 @@ for (let i = 0; i < 60 && !(await P.eval("!!document.querySelector('main textare
 await P.fill("main textarea, main input:not([type=hidden])", `I'm ${kid.display_name}. I tried the stepping stones first, then went round (ref ${stamp}q). Email me at robin@example.com`);
 await P.click(/save and continue|continue/i, { selector: "main button" }); await P.waitUrl(/\/complete/, 40000);
 await P.goto(`/account/children/${kid.id}`, 800);
-await P.click(/^(create a code|make a new code)$/i, { selector: "button" }); await P.waitText(/new code\. Write it down/i, 30000);
+await P.click(/^(create an access code|generate new access code)$/i, { selector: "button" }); await P.waitText(/new code\. Write it down/i, 30000);
 const code = await P.eval("(document.body.innerText.match(/\\b[A-Z0-9]{4}-[A-Z0-9]{4}\\b/)||[])[0]");
 await C.clearCookies(); await C.goto("/child/login", 500); await C.fill("input[name=code]", code);
 await C.click(/continue/i, { selector: "button[type=submit]" }); await C.waitUrl(/\/academy/, 40000);

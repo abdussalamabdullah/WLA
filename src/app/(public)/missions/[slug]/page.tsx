@@ -47,7 +47,7 @@ export default async function MissionDetailPage({
   const cover = resolveMissionCover({
     slug: mission.slug,
     title: mission.title,
-    cover_image: null,
+    cover_image: facts?.coverImage ?? null,
   });
   const priceLabel = facts?.priceLabel ?? null;
 
