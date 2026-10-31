@@ -78,6 +78,7 @@ export default async function MissionsPage() {
                 key={mission.slug}
                 mission={mission}
                 duration={facts[i]?.duration ?? null}
+                coverImage={facts[i]?.coverImage ?? null}
               />
             ))}
           </ul>

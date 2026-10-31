@@ -1,7 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { cn } from "@/lib/utils";
-import { resolveMissionCover } from "@/features/missions/covers";
+import { coverSrc, isCoverObjectFor, isStorableCover, resolveMissionCover } from "@/features/missions/covers";
 import { join } from "node:path";
 
 const repo = join(__dirname, "../../../..");
@@ -795,6 +795,45 @@ describe("the collection card follows the approved anatomy", () => {
     expect(unknown?.alt).toBe("");
   });
 
+  it("builds a bucket cover's address from this environment's settings (D-146)", () => {
+    const value = "mission-covers/11111111-2222-4333-8444-555555555555/abc123.jpg";
+    vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://project.supabase.co/");
+    expect(coverSrc(value)).toBe(`https://project.supabase.co/storage/v1/object/public/${value}`);
+    vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "http://127.0.0.1:55321");
+    expect(coverSrc(value)).toBe(`http://127.0.0.1:55321/storage/v1/object/public/${value}`);
+    vi.unstubAllEnvs();
+    expect(coverSrc("/missions/six-names.jpg")).toBe("/missions/six-names.jpg");
+  });
+
+  it("anything it can't serve stays out of next/image, which would throw (D-146)", () => {
+    for (const bad of ["six-names.jpg", "https://evil.example/x.jpg", "//evil.example/x.jpg", "mission-covers/../x.jpg", "mission-covers/x.svg"]) {
+      expect(coverSrc(bad)).toBeNull();
+      expect(isStorableCover(bad)).toBe(false);
+    }
+    expect(resolveMissionCover({ slug: "six-names", title: "Six Names", cover_image: "six-names.jpg" })?.src).toBe("/missions/six-names.jpg");
+    expect(resolveMissionCover({ slug: "other", title: "Other", cover_image: "https://evil.example/x.jpg" })).toBeNull();
+  });
+
+  it("a cover file must be in the mission's own folder to be uploaded (D-146)", () => {
+    const id = "11111111-2222-4333-8444-555555555555";
+    expect(isCoverObjectFor(id, `${id}/abc.png`)).toBe(true);
+    expect(isCoverObjectFor(id, `${id}/abc.gif`)).toBe(false);
+    expect(isCoverObjectFor(id, `${id}/abc.svg`)).toBe(false);
+    expect(isCoverObjectFor(id, `22222222-2222-4333-8444-555555555555/abc.png`)).toBe(false);
+    expect(isCoverObjectFor(id, `${id}/../abc.png`)).toBe(false);
+  });
+
+  it("Academy public pages use the mission's cover, not a hard-coded null (D-146)", () => {
+    expect(code("src/app/(public)/missions/[slug]/page.tsx")).toContain("cover_image: facts?.coverImage ?? null");
+    expect(code("src/components/public-site/public-site.tsx")).toContain("cover_image: coverImage");
+  });
+
+  it("next/image allows the cover bucket only, and local addresses only in dev (D-146)", () => {
+    const config = code("next.config.ts");
+    expect(config).toContain('pathname: "/storage/v1/object/public/mission-covers/**"');
+    expect(config).toMatch(/process\.env\.NODE_ENV === "development" \? \{ dangerouslyAllowLocalIP: true \}/);
+  });
+
   it("does not invent artwork for missions that have none", () => {
     /*
      * The client's standing instruction: if an asset does not exist, say so
@@ -962,7 +1001,7 @@ describe("a child can find their own way in (D-58)", () => {
     const revealed = code("src/components/child/revealed-code.tsx");
     expect(revealed).toMatch(/<Link href="\/child\/login"/);
     expect(revealed).not.toMatch(/<strong>\/child\/login<\/strong>/);
-    expect(code("src/components/child/child-access-panel.tsx")).toMatch(/<RevealedCode /);
+    expect(code("src/components/child/child-access-panel.tsx")).toMatch(/<RevealedCode\b/);
     expect(code("src/components/profile/child-form.tsx")).toMatch(/<RevealedCode/);
   });
 });

@@ -1,5 +1,7 @@
 "use server";
 
+import { tidyCovers } from "./cover-store";
+import { coverObjectName, isBucketCover, isCoverObjectFor } from "@/features/missions/covers";
 import { revalidatePath } from "next/cache";
 import { requireAdmin, AccessError } from "@/lib/permissions";
 import { logError, logInfo } from "@/lib/observability/logger";
@@ -55,6 +57,27 @@ export async function saveMissionAction(
     }
 
     const v = parsed.data;
+
+    // What the cover was, to tidy up after, and where a new one may come from.
+    const { data: before } = await supabase
+      .from("missions")
+      .select("id, cover_image")
+      .eq("slug", slug)
+      .maybeSingle();
+    const newCover = v.cover_image || null;
+    const coverChanged = newCover !== (before?.cover_image ?? null);
+    if (
+      coverChanged &&
+      isBucketCover(newCover) &&
+      !(before && isCoverObjectFor(before.id, coverObjectName(newCover)))
+    ) {
+      return {
+        ok: false,
+        message: "Some fields need attention.",
+        fieldErrors: { cover_image: ["That image doesn't belong to this mission. Choose it again."] },
+      };
+    }
+
     const { error } = await supabase
       .from("missions")
       .update({
@@ -67,7 +90,7 @@ export async function saveMissionAction(
         delivery_type: v.delivery_type,
         price_minor: v.price_minor,
         currency: v.currency,
-        cover_image: v.cover_image || null,
+        cover_image: newCover,
         is_free: v.is_free,
         published: v.published,
       })
@@ -81,11 +104,15 @@ export async function saveMissionAction(
     // Identifiers only — never the edited content itself.
     logInfo("admin_mission_saved", { slug, published: v.published });
 
+    // Only now is a replaced file unused. A failure here costs nothing but disk.
+    if (before) await tidyCovers(supabase, before.id, coverChanged ? before.cover_image : null);
+
     revalidatePath("/admin");
     revalidatePath(`/admin/missions/${slug}`);
     revalidatePath(`/missions/${slug}`);
     revalidatePath("/missions");
     revalidatePath(`/academy/missions/${slug}`);
+    revalidatePath("/academy/my-missions");
 
     return { ok: true, message: "Saved." };
   } catch (error) {

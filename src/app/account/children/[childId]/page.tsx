@@ -23,17 +23,17 @@ export default async function EditChildPage({
   }
 
   /*
-   * Whether a code exists, and when it was last used.
+   * Whether a code exists, when it was last used, and whether it can be shown.
    *
-   * `code_hash` and `code_lookup` are absent from both the column grant and
-   * the generated type, so this select cannot accidentally widen into the
-   * secret material — it would not compile, and would not be permitted if it
-   * did.
+   * `code_hash`, `code_lookup` and `code_ciphertext` are absent from both the
+   * column grant and the generated type, so this select cannot accidentally
+   * widen into the secret material — it would not compile, and would not be
+   * permitted if it did.
    */
   const { supabase } = await requireOwnedChild(childId);
   const { data: credential } = await supabase
     .from("child_access_credentials")
-    .select("id, created_at, last_used_at, revoked_at")
+    .select("id, created_at, last_used_at, revoked_at, has_viewable_copy")
     .eq("child_id", childId)
     .is("revoked_at", null)
     .maybeSingle();
@@ -51,6 +51,7 @@ export default async function EditChildPage({
           childName={child.display_name}
           access={{
             hasCode: Boolean(credential),
+            viewable: Boolean(credential?.has_viewable_copy),
             createdAt: credential?.created_at ?? null,
             lastUsedAt: credential?.last_used_at ?? null,
           }}

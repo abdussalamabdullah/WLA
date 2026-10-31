@@ -18,7 +18,7 @@ const P = await launch({ port: 9595 }), C = await launch({ port: 9596 });
 await P.viewport(1512, 950); await C.viewport(390, 844, true);
 await uiLogin(P, q.email, q.password);
 await P.goto(`/account/children/${kid.id}`, 800);
-await P.click(/^(create a code|make a new code)$/i, { selector: "button" });
+await P.click(/^(create an access code|generate new access code)$/i, { selector: "button" });
 await P.waitText(/new code\. Write it down/i, 30000);
 const code = await P.eval("(document.body.innerText.match(/\\b[A-Z0-9]{4}-[A-Z0-9]{4}\\b/)||[])[0]");
 await C.goto("/child/login", 400);

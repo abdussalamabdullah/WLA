@@ -48,6 +48,11 @@ describe("the purchase journey survives sign-in", () => {
     expect(location(r)).toMatch(/\/login\?next=%2Fpurchase%2Fmars-bridge$/);
   });
 
+  it("keeps the query string, so a gift purchase comes back as a gift", async () => {
+    const r = await updateSession(req("/purchase/six-names?gift=1"));
+    expect(location(r)).toContain(`next=${encodeURIComponent("/purchase/six-names?gift=1")}`);
+  });
+
   it("an already signed-in parent on /login?next= goes on to it, not to My Missions", async () => {
     userResult = { data: { user: { id: "p" } }, error: null };
     const r = await updateSession(req("/login?next=%2Fpurchase%2Fmars-bridge"));

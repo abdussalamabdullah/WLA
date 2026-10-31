@@ -132,21 +132,22 @@ the codebase — verified by search — so this requires no work.
 
 # 🕒 Deferred
 
-## OPEN-07 — Gift flow · D-32
+## OPEN-07 — Gift rules not yet decided · D-140
 
-Deferred unless gifting becomes an **explicit launch requirement**.
+Gifting is built (D-140). These business rules are **not decided, and nothing has been invented for them**:
 
-`/gift` and `/redeem` stay stubs. `entitlement_source` keeps its `gift` and
-`redeemed` values, unused. The webhook continues to log `unmatched` and return
-200 for a childless session, so a gift purchase cannot silently fail — it
-simply does not yet grant anything.
+- **Expiry:** a paid gift stays redeemable indefinitely.
+- **Refunds:** refunds aren't handled (D-20). A gift refunded in Stripe stays redeemable until someone acts; there is no admin action for it yet.
+- **Transfer or correction:** a mistyped recipient address can't be changed. There is no admin action for it yet.
+- **A mission unpublished after purchase:** the gift can still be redeemed, as an existing entitlement would still work.
+- **Who may redeem:** the link and the address prove the mailbox, so the account that redeems may use a different email from the gift's (D-140). Decide if the account's email must match.
+- **A site-wide limit on `/redeem` requests:** gifts are protected per link, per code and per gift (D-142, D-145), but request volume isn't limited. Anyone can make a gift recipient receive up to 30 code emails an hour by typing their address. Set a limit at the hosting edge before launch.
+- **Several gifts to one address:** they are handled one at a time, oldest first (D-145). A recipient isn't told a second gift is waiting until they redeem again.
 
-**When built, it must reuse the entitlement model** (Tech Spec §41), not fork a
-second access architecture. The difficulty to design around is Brief §50: the
-purchaser and the receiving family may be different people, which the current
-Checkout flow does not accommodate.
+## OPEN-24 — The website's own accounts · D-141
 
-**Revisit trigger:** you designate gifting a launch requirement.
+The public website has its own `/auth`, `/account`, `/my-missions`, `/admin/gifts` and a legacy `gifts` table, on a different Supabase project from the Academy's. Gifting no longer uses them. **Decide** whether they should be retired in favour of the Academy's, or the projects unified.
+
 
 ---
 
@@ -295,7 +296,7 @@ can be published. `published` stays `false` until then.
 | 02  | Typefaces             | 🔴 D-33 — method set, needs Lovable access |
 | 03  | Mission Build Brief   | ⛔                                         |
 | 05  | Child age             | ✅ D-26                                    |
-| 07  | Gift flow             | 🕒 D-32                                    |
+| 07  | Gift rules            | 🕒 D-140                                   |
 | 08  | Transactional email   | ✅ D-27                                    |
 | 09  | Error monitoring      | ✅ D-28                                    |
 | 10  | Mission authoring     | ✅ D-29                                    |
@@ -307,8 +308,9 @@ can be published. `published` stays `false` until then.
 | 21  | Journal self-approval | ✅ D-130 — approval optional                |
 | 22  | Public Journal home   | ✅ D-131 — Lovable, via the WLA API         |
 | 23  | Medium source         | ⛔ needs the Medium export                  |
+| 24  | Website's own accounts | 🔴 needs you — see OPEN-24 above           |
 
-**13 resolved · 1 deferred · 2 need you (OPEN-14, OPEN-20) · 1 blocked on source material (OPEN-23).**
+**13 resolved · 1 deferred · 3 need you (OPEN-14, OPEN-20, OPEN-24) · 1 blocked on source material (OPEN-23).**
 
 ---
 
@@ -329,3 +331,11 @@ three Postgres functions, storage policies, Stripe signature verification,
 webhook delivery, retry and duplicate handling, concurrency, and the end-to-end
 payment flow. **None of these may be described as runtime-verified until tested
 against live or test Supabase and Stripe.**
+
+## OPEN-25 — Covers on the Academy's public pages · D-146, D-109
+
+Covers now display on the Academy's public pages, but those pages still list only the temporary hard-coded catalogue (D-109), which has Six Names alone. A new mission shows on the public website and in My Missions, not on Academy public pages. Decide whether those pages stay, or the website alone is the public catalogue.
+
+## OPEN-26 — Descriptions for uploaded covers · D-146
+
+A mission cover has no description field, so an uploaded cover has empty alt text unless it is written into `SUPPLIED_COVER`. The title always sits beside the image, so this is permitted (`covers.ts`), but Six Names' photograph is the only one described. Decide whether administrators should write one.

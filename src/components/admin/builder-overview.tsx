@@ -1,3 +1,4 @@
+import { coverSrc } from "@/features/missions/covers";
 import Link from "next/link";
 import type { SectionId, SectionStatus } from "@/features/admin/builder-readiness";
 import { SECTIONS } from "@/features/admin/builder-readiness";
@@ -66,6 +67,7 @@ export function DetailsSummary({
   priceMinor: number | null; currency: string; isFree: boolean; catalogueVisible: boolean;
   ages: string; lab: string;
 }) {
+  const cover = coverSrc(coverImage);
   const rows: [string, string][] = [
     ["Title", title],
     ["Lab · ages", `${lab} · ${ages}`],
@@ -97,6 +99,11 @@ export function DetailsSummary({
           </div>
         ))}
       </dl>
+      {cover && (
+        // A plain img: an admin preview of a thumbnail, needing no optimisation.
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={cover} alt="" className="mt-[var(--space-s)] h-24 w-36 rounded-[var(--radius-card)] object-cover" />
+      )}
     </section>
   );
 }

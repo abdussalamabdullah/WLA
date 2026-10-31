@@ -13,7 +13,7 @@ const tryCode = async (code) => {
 };
 const newCode = async () => {
   await P.goto(`/account/children/${kid.id}`, 600);
-  await P.click(/^(create a code|make a new code)$/i, { selector: "button" });
+  await P.click(/^(create an access code|generate new access code)$/i, { selector: "button" });
   await P.waitText(/new code\. Write it down/i, 30000);
   return P.eval("(document.body.innerText.match(/\\b[A-Z0-9]{4}-[A-Z0-9]{4}\\b/)||[])[0]");
 };

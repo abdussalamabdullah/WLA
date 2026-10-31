@@ -11,6 +11,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const inserted: Record<string, unknown>[] = [];
 let insertResult: { data: unknown; error: unknown };
 const issue = vi.fn();
+const reveal = vi.fn();
+let existing: unknown = null;
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("next/navigation", () => ({
@@ -27,6 +29,7 @@ vi.mock("@/lib/permissions", () => ({
           inserted.push(row);
           return { select: () => ({ single: async () => insertResult }) };
         },
+        select: () => ({ eq: () => ({ eq: () => ({ maybeSingle: async () => ({ data: existing }) }) }) }),
       }),
     },
   }),
@@ -34,6 +37,7 @@ vi.mock("@/lib/permissions", () => ({
 }));
 vi.mock("@/features/child-auth/issue-code", () => ({
   issueChildAccessCode: (id: string) => issue(id),
+  revealChildAccessCode: (id: string) => reveal(id),
 }));
 vi.mock("@/features/children/active-child", () => ({
   setActiveChild: vi.fn(),
@@ -54,6 +58,8 @@ function form(fields: Record<string, string>) {
 beforeEach(() => {
   inserted.length = 0;
   issue.mockReset();
+  reveal.mockReset();
+  existing = null;
   insertResult = { data: { id: "child-9", display_name: "Amina" }, error: null };
 });
 
@@ -107,5 +113,53 @@ describe("adding a child with an access code", () => {
     expect(bad.next).toBeUndefined();
     const bs = await createChildAction({}, form({ displayName: "Amina", next: "/\\evil.example" }));
     expect(bs.next).toBeUndefined();
+  });
+});
+
+describe("adding a child is safe to retry (D-144)", () => {
+  const KEY = "11111111-2222-4333-8444-555555555555";
+  const duplicate = () => {
+    insertResult = { data: null, error: { code: "23505" } };
+    existing = { id: "child-9", display_name: "Amina" };
+  };
+
+  it("records the attempt's key, and the parent comes only from the session", async () => {
+    issue.mockResolvedValue({ code: "ABCD-2345", viewable: true });
+    await createChildAction({}, form({ displayName: "Amina", creationKey: KEY, parent_id: "someone-else" }));
+    expect(inserted[0]).toMatchObject({ parent_id: "parent-1", creation_key: KEY });
+  });
+
+  it("a malformed key is ignored rather than trusted", async () => {
+    await createChildAction({}, form({ displayName: "Amina", creationKey: "nope" }));
+    expect(inserted[0].creation_key).toBeNull();
+  });
+
+  it("a retry answers with the profile that exists and generates no code", async () => {
+    duplicate();
+    reveal.mockResolvedValue({ code: "ABCD-2345" });
+    const result = await createChildAction({}, form({ displayName: "Amina", creationKey: KEY, accessCode: "on" }));
+    expect(issue).not.toHaveBeenCalled();
+    expect(result.created).toMatchObject({ childId: "child-9", alreadyAdded: true, code: "ABCD-2345", viewable: true });
+  });
+
+  it("a retry with no viewable code still generates none", async () => {
+    duplicate();
+    reveal.mockResolvedValue({ error: "no_copy" });
+    const result = await createChildAction({}, form({ displayName: "Amina", creationKey: KEY, accessCode: "on" }));
+    expect(issue).not.toHaveBeenCalled();
+    expect(result.created?.code).toBeUndefined();
+    expect(result.created?.alreadyAdded).toBe(true);
+  });
+
+  it("a duplicate with no key is an ordinary failure", async () => {
+    insertResult = { data: null, error: { code: "23505" } };
+    const result = await createChildAction({}, form({ displayName: "Amina" }));
+    expect(result.error).toBeTruthy();
+  });
+
+  it("passes on whether the new code can be viewed again", async () => {
+    issue.mockResolvedValue({ code: "ABCD-2345", viewable: false });
+    const result = await createChildAction({}, form({ displayName: "Amina", accessCode: "on" }));
+    expect(result.created).toMatchObject({ code: "ABCD-2345", viewable: false });
   });
 });

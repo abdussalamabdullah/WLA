@@ -17,6 +17,8 @@ const eslintConfig = defineConfig([
   },
   // Override default ignores of eslint-config-next.
   globalIgnores([
+    // The public website: its own app, with its own lint config.
+    "wla-main/**",
     // Default ignores of eslint-config-next:
     ".next/**",
     "out/**",

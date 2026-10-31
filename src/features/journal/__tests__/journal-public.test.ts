@@ -151,7 +151,7 @@ describe("private preview links", () => {
 describe("uploads go to private storage with the author's own session (D-135)", () => {
   it("the browser upload targets the private journal-media bucket and never upserts", () => {
     const src = code("src/features/journal/upload-client.ts");
-    expect(src).toMatch(/\/storage\/v1\/object\/journal-media\//);
+    expect(src).toMatch(/\/storage\/v1\/object\/\$\{opts\.bucket \?\? "journal-media"\}\//);
     expect(src).toMatch(/"x-upsert", "false"/);
     expect(src).not.toMatch(/SERVICE_ROLE|supabase\/admin|service_role/);
   });

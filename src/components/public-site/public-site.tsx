@@ -84,14 +84,16 @@ export function LabLine({
 export function PublicMissionCard({
   mission,
   duration,
+  coverImage = null,
 }: {
   mission: PublicMissionEntry;
   duration: string | null;
+  coverImage?: string | null;
 }) {
   const cover = resolveMissionCover({
     slug: mission.slug,
     title: mission.title,
-    cover_image: null,
+    cover_image: coverImage,
   });
   const tagline = LAB_TAGLINE[mission.lab];
   const headingId = `mission-${mission.slug}`;

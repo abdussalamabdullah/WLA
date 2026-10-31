@@ -17,7 +17,7 @@ if (WHO === "child") {
   await uiLogin(b, q.email, q.password);
   await b.goto(`/account/children/${kid.id}`, 600);
   PAGES = [`/account/children/${kid.id}`];
-  await b.click(/^(create a code|make a new code)$/i, { selector: "button" }); await b.waitText(/new code\. Write it down/i, 30000);
+  await b.click(/^(create an access code|generate new access code)$/i, { selector: "button" }); await b.waitText(/new code\. Write it down/i, 30000);
   const code = await b.eval("(document.body.innerText.match(/\\b[A-Z0-9]{4}-[A-Z0-9]{4}\\b/)||[])[0]");
   // audit the parent's child page (code panel) before switching to the child
   for (const [w, h, mob] of [[390, 844, true], [834, 1112, false], [1512, 950, false]]) {

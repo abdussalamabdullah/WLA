@@ -3,6 +3,7 @@ import type Stripe from "stripe";
 import { stripeEnv } from "@/lib/env";
 import { stripe } from "@/features/commerce/checkout";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { fulfilPaidGift } from "@/features/gifts/fulfil";
 import { sendMissionAccessEmail } from "@/lib/email/send";
 import { logError, logWarn } from "@/lib/observability/logger";
 
@@ -132,10 +133,50 @@ export async function POST(request: Request) {
   }
 
   if (!intent) {
-    // A gift purchase has no child yet — it creates a gift record instead,
-    // redeemed later (Tech Spec §41). Not yet implemented: gift flow.
-    // OPS-01. A gift purchase legitimately has no intent yet, so this is a
-    // warning rather than an error — but it must still be visible.
+    // A gift has no child yet, so no intent: it has its own record (D-140).
+    const { data: gift, error: giftError } = await admin
+      .from("mission_gifts")
+      .select("id, mission_id, recipient_email, amount_minor, currency, status, link_sent_at")
+      .eq("stripe_session_id", session.id)
+      .maybeSingle();
+
+    if (giftError) {
+      logError("stripe_gift_lookup_failed", giftError, { sessionId: session.id });
+      if (!duplicate) await releaseClaim(admin, event);
+      return NextResponse.json({ error: "Lookup failed" }, { status: 500 });
+    }
+
+    if (gift) {
+      if (
+        session.amount_total !== gift.amount_minor ||
+        session.currency?.toUpperCase() !== gift.currency.toUpperCase()
+      ) {
+        logError("stripe_amount_mismatch", new Error("amount or currency mismatch"), {
+          sessionId: session.id,
+          expected: `${gift.amount_minor} ${gift.currency}`,
+          received: `${session.amount_total} ${session.currency}`,
+        });
+        return NextResponse.json({ received: true, mismatch: true });
+      }
+
+      try {
+        await fulfilPaidGift(
+          admin,
+          gift,
+          typeof session.payment_intent === "string" ? session.payment_intent : null,
+        );
+      } catch (error) {
+        logError("stripe_gift_fulfil_failed", error, { sessionId: session.id });
+        if (!duplicate) await releaseClaim(admin, event);
+        return NextResponse.json({ error: "Gift failed" }, { status: 500 });
+      }
+
+      return duplicate
+        ? NextResponse.json({ received: true, duplicate: true })
+        : NextResponse.json({ received: true });
+    }
+
+    // OPS-01. Neither a purchase nor a gift: nothing to grant, but visible.
     logWarn("stripe_no_checkout_intent", { sessionId: session.id });
     return NextResponse.json({ received: true, unmatched: true });
   }

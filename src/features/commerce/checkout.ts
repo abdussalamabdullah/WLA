@@ -207,6 +207,25 @@ async function grantFreeEntitlement(
   }
 }
 
+/** What a mission costs on a receipt. Amount and currency come from the row. */
+export function missionLineItem(
+  mission: Pick<MissionRow, "title" | "description" | "currency" | "price_minor">,
+): Stripe.Checkout.SessionCreateParams.LineItem {
+  return {
+    quantity: 1,
+    price_data: {
+      currency: mission.currency.toLowerCase(), // GBP, from the mission
+      unit_amount: mission.price_minor ?? undefined,
+      product_data: {
+        name: mission.title,
+        // No child name — the receipt is the parent's, and Stripe is a
+        // third party (Brief §46).
+        description: mission.description ?? undefined,
+      },
+    },
+  };
+}
+
 /**
  * Create a Stripe Checkout session. Internal — reached only via
  * `acquireMission`, which has already run steps 1–4.
@@ -253,21 +272,7 @@ async function createCheckoutSession({
       // event the webhook does not handle — money taken, nothing granted.
       // Wallets that pay by card (Apple Pay, Google Pay) are part of `card`.
       payment_method_types: ["card"],
-      line_items: [
-        {
-          quantity: 1,
-          price_data: {
-            currency: mission.currency.toLowerCase(), // GBP, from the mission
-            unit_amount: mission.price_minor,
-            product_data: {
-              name: mission.title,
-              // No child name — the receipt is the parent's, and Stripe is a
-              // third party (Brief §46).
-              description: mission.description ?? undefined,
-            },
-          },
-        },
-      ],
+      line_items: [missionLineItem(mission)],
       customer_email: user.email,
       // My Missions reads `purchase=success` to say the mission WILL appear
       // once confirmed. It was `complete`, which nothing read, so the parent

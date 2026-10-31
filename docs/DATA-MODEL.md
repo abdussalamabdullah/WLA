@@ -245,6 +245,15 @@ easily over-engineered areas — mission state and mission content — are
 deliberately one JSON column and one generic table rather than the "dozens of
 tables" Tech Spec §13 warns against.
 
+### `mission_gifts` (migration `20261030120000`, D-140)
+
+1. **Requirement:** PRD §31, Brief §50, Tech Spec §41: the purchaser and the receiving family may be different people.
+2. **Must:** yes. The client brief of 2026-10-30 makes it one (D-32 deferred it until then).
+3. **Can an existing table carry it?** No. `checkout_intents.child_id` and `mission_entitlements.child_id` are NOT NULL, because both describe a child; a gift has no child until it is redeemed.
+4. **Child data?** Only `redeemed_child_id`, a reference that is set null if the profile is deleted. The recipient address is an adult's. No client role can read the table.
+
+Migration `20261030130000` adds `claim_hash` and `confirm_failures` to this table (D-142). No new table.
+
 ### Before adding any table, answer:
 
 1. Which numbered requirement does it serve?
@@ -253,3 +262,17 @@ tables" Tech Spec §13 warns against.
 4. Does it store child data that Brief §46 says not to collect?
 
 If 2 is "deferred", stop.
+
+### No new tables for D-143 to D-146
+
+Each of these extends an existing table, answering "can an existing table carry it?" with yes. None collects new child data (Brief §46): `creation_key` is a random value, and the access code is the same code in encrypted form.
+
+| Migration | Table | Columns | Why |
+|---|---|---|---|
+| `20261030140000` | `child_access_credentials` | `code_ciphertext`, `code_last_viewed_at`, `has_viewable_copy` | A parent can view the active code (D-143). `code_ciphertext` is outside the client grant. |
+| `20261030150000` | `child_profiles` | `creation_key` | Adding a child is safe to retry (D-144). |
+| `20261030160000` | `mission_gifts` | `code_hash`, `code_expires_at`, `code_failures`, `code_sent_at`, `claim_expires_at` | Redeeming from the website with a code, and claims that expire (D-145). |
+| `20261030170000` | `storage.buckets` | the `mission-covers` bucket and its policies | Mission covers (D-146). `missions.cover_image` already existed. |
+
+`app_secrets` gains the row `gift_code_pepper`.
+

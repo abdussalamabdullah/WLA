@@ -58,6 +58,8 @@ export type ChildProfileRow = {
   parent_id: string;
   display_name: string;
   birth_year: number | null;
+  /** Makes adding a child safe to retry (D-144). */
+  creation_key: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -83,6 +85,35 @@ export type MissionRow = {
   published: boolean;
   created_at: string;
   updated_at: string;
+};
+
+export type GiftStatus = "pending" | "paid" | "redeemed";
+
+/** D-140. Service role only: no client role can read this table. */
+export type MissionGiftRow = {
+  id: string;
+  mission_id: string;
+  purchaser_id: string | null;
+  recipient_email: string;
+  stripe_session_id: string;
+  stripe_payment_intent_id: string | null;
+  amount_minor: number;
+  currency: string;
+  status: GiftStatus;
+  redeem_token_hash: string | null;
+  claim_hash: string | null;
+  claim_expires_at: string | null;
+  confirm_failures: number;
+  code_hash: string | null;
+  code_expires_at: string | null;
+  code_failures: number;
+  code_sent_at: string | null;
+  link_sent_at: string | null;
+  paid_at: string | null;
+  redeemed_at: string | null;
+  redeemed_by: string | null;
+  redeemed_child_id: string | null;
+  created_at: string;
 };
 
 export type MissionScreenRow = {
@@ -267,6 +298,9 @@ export type ChildAccessCredentialRow = {
   last_used_at: string | null;
   expires_at: string | null;
   revoked_at: string | null;
+  /** Whether "Show access code" can work. The ciphertext itself is never readable by a client. */
+  has_viewable_copy: boolean;
+  code_last_viewed_at: string | null;
 };
 
 export type ChildSessionRow = {
@@ -587,6 +621,10 @@ export type Database = {
         Update: Partial<StripeEventRow>;
         Relationships: [];
       };
+      mission_gifts: Table<
+        MissionGiftRow,
+        "mission_id" | "recipient_email" | "stripe_session_id" | "amount_minor" | "currency"
+      >;
       checkout_intents: Table<
         CheckoutIntentRow,
         | "stripe_session_id"
@@ -990,6 +1028,33 @@ export type Database = {
           access_code_status: string; code_last_used_at: string | null;
         }[];
       };
+      confirm_gift_email: {
+        Args: { p_token_hash: string; p_email: string; p_claim_hash: string };
+        Returns: string;
+      };
+      issue_gift_code: {
+        Args: { p_email: string };
+        Returns: { gift_id: string; mission_id: string; code: string }[];
+      };
+      withdraw_gift_code: { Args: { p_gift_id: string; p_code: string }; Returns: undefined };
+      confirm_gift_code: {
+        Args: { p_email: string; p_code: string; p_claim_hash: string };
+        Returns: string;
+      };
+      redeem_mission_gift: {
+        Args: { p_claim_hash: string; p_child_id: string; p_parent_id: string };
+        Returns: string;
+      };
+      admin_gifts: {
+        Args: { p_limit?: number };
+        Returns: {
+          id: string; created_at: string; mission_title: string;
+          purchaser_email: string | null; recipient_email: string;
+          amount_minor: number; currency: string; status: GiftStatus;
+          paid_at: string | null; redeemed_at: string | null;
+          redeemed_by_email: string | null; redeemed_child_name: string | null;
+        }[];
+      };
       admin_orders: {
         Args: { p_limit?: number };
         Returns: {
@@ -1119,6 +1184,18 @@ export type Database = {
 
       // --- child access (D-58) ---
       generate_child_access_code: { Args: { p_child_id: string }; Returns: string };
+      issue_child_access_code: {
+        Args: { p_child_id: string };
+        Returns: { credential_id: string; code: string }[];
+      };
+      store_child_code_copy: {
+        Args: { p_credential_id: string; p_child_id: string; p_parent_id: string; p_ciphertext: string };
+        Returns: boolean;
+      };
+      read_child_code_copy: {
+        Args: { p_child_id: string; p_parent_id: string };
+        Returns: { credential_id: string; ciphertext: string }[];
+      };
       revoke_child_access_code: { Args: { p_child_id: string }; Returns: undefined };
       redeem_child_code: {
         Args: { p_code: string };
